@@ -2,6 +2,7 @@ name: Build & Test
 
 on:
   push:
+    branches: [main, "claude/**"]
   pull_request:
   workflow_dispatch:
 
@@ -65,8 +66,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify --renderer github-actions
 
-      # Demo: tap through every screen while recording the simulator.
-      - name: Record demo tour
+      # Demo tour: taps through every screen and saves a screenshot of each.
+      - name: Run demo tour
         if: matrix.variant == 'full'
         run: |
           set -o pipefail
@@ -75,29 +76,16 @@ jobs:
           xcrun simctl status_bar "$SIMULATOR_ID" override \
             --time "$(TZ=Europe/London date +%H:%M)" --batteryState charged --batteryLevel 100 \
             --wifiBars 3 --cellularBars 4 || true
-          # Build first so the recording doesn't include minutes of compiling.
-          xcodebuild build-for-testing \
-            -project Niyat.xcodeproj \
-            -scheme Niyat \
-            -destination "id=$SIMULATOR_ID" \
-            -skipPackagePluginValidation \
-            CODE_SIGNING_ALLOWED=NO \
-            | xcbeautify --renderer github-actions
-          xcrun simctl io "$SIMULATOR_ID" recordVideo --codec=h264 --force demo/demo.mp4 &
-          RECORDER=$!
-          sleep 3
-          xcodebuild test-without-building \
+          xcodebuild test \
             -project Niyat.xcodeproj \
             -scheme Niyat \
             -destination "id=$SIMULATOR_ID" \
             -only-testing:NiyatUITests \
             -parallel-testing-enabled NO \
             -resultBundlePath demo/tour.xcresult \
+            -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
-            | xcbeautify --renderer github-actions || STATUS=$?
-          sleep 2
-          kill -INT $RECORDER; wait $RECORDER || true
-          exit ${STATUS:-0}
+            | xcbeautify --renderer github-actions
 
       - name: Export demo screenshots
         if: always() && matrix.variant == 'full'
@@ -122,19 +110,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: demo
-          path: |
-            demo/demo.mp4
-            demo/screenshots
+          path: demo/screenshots
 
       # Also keep the latest demo on a separate branch (no shared history with
       # the code) so screenshots can be linked from the README.
       - name: Publish demo to the demo-media branch
-        if: matrix.variant == 'full' && github.event_name == 'push'
+        if: matrix.variant == 'full' && github.event_name == 'push' && !startsWith(github.ref_name, 'dependabot/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p demo/publish
-          cp demo/demo.mp4 demo/publish/
           cp -R demo/screenshots demo/publish/
           cd demo/publish
           git init -q -b demo-media
