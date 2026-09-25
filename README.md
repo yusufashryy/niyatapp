@@ -35,6 +35,7 @@ Built with Apple's **Liquid Glass** design on iOS 26 and 27: a dark, high-contra
 | 🕌 **Prayer times** | Calculated on-device for anywhere in the world (works offline). 12 calculation methods, Hanafi/Standard Asr, high-latitude rules, per-prayer minute adjustments. Picks a sensible method for your country automatically. |
 | 🔔 **Adhan notifications** | Per-prayer on/off, optional "X minutes before" reminder, *Jumu'ah* on Fridays. |
 | 📖 **Quran** | Full Arabic text (Uthmani script, Amiri Quran font) with English translation, fully offline. Search, bookmarks, "continue reading", adjustable text size. |
+| 🎧 **Recitation** | 19 reciters (Alafasy, Abdul Basit, Sudais, Shuraim, Husary, Minshawi, Muaiqly and more) plus English and Urdu translation audio. Play a surah or start from any verse. The reader follows along and highlights the verse. Repeat a verse, and control it from the Lock Screen. Streams from the Islamic Network CDN. |
 | 🧭 **Qibla compass** | Line the Kaaba up with the marker. Uses true north and your live GPS position, never spins when passing north, and shows compass accuracy. Verified against 20 cities in the tests. |
 | 📱 **Widgets** | Next Prayer (Home Screen and all three Lock Screen styles), Prayer Times (medium/large), Verse of the Day, and an interactive Tasbih counter you can tap right on the Home Screen. |
 | 🔒 **Prayer Lock** | Blocks the apps you choose (Instagram, TikTok, games…) at each adhan until you've had time to pray, with an "I've prayed" button to unlock early. Also does on-demand focus sessions. *Needs a paid Apple Developer account, see below.* |
@@ -147,3 +148,4 @@ The app's code is under the [MIT License](LICENSE). Bundled content keeps its ow
 - English translation: Talal Itani, [ClearQuran.com](https://clearquran.com), CC BY-ND 4.0
 - Fonts: [Amiri Quran](https://github.com/aliftype/amiri) and [Aref Ruqaa](https://github.com/alif-type/aref-ruqaa), SIL Open Font License 1.1
 - Prayer times: [Adhan](https://github.com/batoulapps/adhan-swift), MIT
+- Recitation audio: streamed from [Islamic Network](https://islamic.network), free for non-commercial use; copyright remains with each reciter
