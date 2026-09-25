@@ -1,0 +1,16 @@
+// Shared build settings for every target.
+//
+// Don't edit these to set up signing — copy Config/Local.xcconfig.example to
+// Config/Local.xcconfig and put your own values there (it's git-ignored).
+
+// Bundle IDs must be unique across all Apple accounts, so change this to
+// something that's yours (e.g. com.yourname) in Local.xcconfig.
+BUNDLE_ID_PREFIX = io.github.salahapp
+
+// Shared storage between the app and its widgets/extensions.
+APP_GROUP_ID = group.$(BUNDLE_ID_PREFIX).salah
+
+// Your Apple team ID. Set it in Local.xcconfig.
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"

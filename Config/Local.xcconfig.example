@@ -1,0 +1,9 @@
+// Copy this file to Config/Local.xcconfig and fill it in.
+// Local.xcconfig is git-ignored, so your team ID stays out of the repo.
+
+// Find it in Xcode > Settings > Accounts > (your Apple ID) > team, or at
+// https://developer.apple.com/account under "Membership details".
+DEVELOPMENT_TEAM = ABCDE12345
+
+// Anything unique that you own, in reverse-domain style.
+BUNDLE_ID_PREFIX = com.yourname
