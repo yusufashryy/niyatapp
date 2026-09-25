@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @State private var notificationsAuthorized = true
     @AppStorage(Haptics.settingKey) private var hapticsEnabled = true
+    @State private var testMessage: String?
 
     var body: some View {
         @Bindable var model = model
@@ -93,6 +94,25 @@ struct SettingsView: View {
                         Text("\(minutes) min").tag(minutes)
                     }
                 }
+                Button {
+                    Task {
+                        let sent = await NotificationScheduler.sendTest(location: model.location, next: model.nextPrayer(after: .now))
+                        testMessage = sent ? "Sent! It arrives in 5 seconds. Lock your phone to see it like a real adhan alert."
+                                           : "Notifications are off. Turn them on in the iPhone Settings app › Notifications › Niyat."
+                    }
+                } label: {
+                    Label("Send a test notification", systemImage: "bell.and.waves.left.and.right.fill")
+                }
+                if let testMessage {
+                    Text(testMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                NavigationLink {
+                    ScheduledAlertsView()
+                } label: {
+                    Label("Scheduled alerts", systemImage: "list.bullet.clipboard.fill")
+                }
             } header: {
                 Text("Adhan notifications")
             } footer: {
@@ -173,5 +193,37 @@ private struct AdjustmentsView: View {
         .niyatBackground()
         .navigationTitle("Adjustments")
         .onChange(of: model.prayerSettings) { model.settingsChanged() }
+    }
+}
+
+/// Lists the adhan alerts iOS currently has queued, so you can check they're set.
+private struct ScheduledAlertsView: View {
+    @State private var alerts: [NotificationScheduler.ScheduledAlert] = []
+    @State private var loaded = false
+
+    var body: some View {
+        List {
+            if loaded, alerts.isEmpty {
+                ContentUnavailableView("No alerts scheduled", systemImage: "bell.slash",
+                                       description: Text("Allow notifications and turn on at least one prayer."))
+            }
+            ForEach(alerts) { alert in
+                HStack {
+                    Text(alert.title)
+                    Spacer()
+                    Text(alert.date.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .niyatBackground()
+        .navigationTitle("\(alerts.count) scheduled")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            alerts = await NotificationScheduler.scheduledAlerts()
+            loaded = true
+        }
     }
 }

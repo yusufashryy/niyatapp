@@ -45,9 +45,11 @@ struct QiblaView: View {
             VStack(spacing: 24) {
                 instruction(turn: turn, aligned: aligned, qibla: qibla)
                     .padding(.top, 8)
+                    .zIndex(1)
 
                 QiblaDial(qibla: qibla, continuousHeading: compass.continuousHeading, turn: turn, aligned: aligned)
                     .frame(width: 310, height: 310)
+                    .padding(.top, 20)
                     .haptic(.success, trigger: aligned) { _, now in now }
                     .haptic(.selection, trigger: tickBucket(turn))
 
@@ -199,11 +201,12 @@ private struct QiblaDial: View {
     var body: some View {
         let heading = continuousHeading ?? 0
         ZStack {
-            // Glow when aligned.
+            // Glow when aligned, kept inside the dial so it never covers the text around it.
             Circle()
                 .fill(RadialGradient(colors: [Palette.highlight.opacity(aligned ? 0.35 : 0), .clear],
-                                     center: .center, startRadius: 10, endRadius: 190))
-                .scaleEffect(aligned ? 1.15 : 0.8)
+                                     center: .center, startRadius: 10, endRadius: radius))
+                .frame(width: radius * 2, height: radius * 2)
+                .allowsHitTesting(false)
 
             // Rotating face: ticks and N/E/S/W.
             ZStack {
@@ -287,7 +290,7 @@ private struct KaabaMarker: View {
         }
         .frame(width: 30, height: 32)
         .shadow(color: highlighted ? Palette.highlight : .black.opacity(0.5), radius: highlighted ? 14 : 4)
-        .scaleEffect(highlighted ? 1.25 : 1)
+        .scaleEffect(highlighted ? 1.15 : 1)
         .accessibilityLabel("Kaaba")
     }
 }

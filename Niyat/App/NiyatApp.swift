@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct NiyatApp: App {
@@ -9,6 +10,7 @@ struct NiyatApp: App {
         DemoMode.prepareIfRequested()
         #endif
         _model = State(initialValue: AppModel())
+        UNUserNotificationCenter.current().delegate = NotificationPresenter.shared
     }
 
     var body: some Scene {
