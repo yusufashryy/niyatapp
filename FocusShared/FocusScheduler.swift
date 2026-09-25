@@ -55,7 +55,7 @@ enum FocusStore {
 }
 
 extension ManagedSettingsStore.Name {
-    static let prayerLock = Self("niyati.prayerLock")
+    static let prayerLock = Self("niyat.prayerLock")
 }
 
 /// Schedules Screen Time "activities" that start at each prayer time. When one

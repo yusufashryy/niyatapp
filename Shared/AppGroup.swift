@@ -4,7 +4,7 @@ import Foundation
 enum AppGroup {
     /// Comes from Info.plist, which gets it from `APP_GROUP_ID` in Config/Base.xcconfig.
     static let identifier: String =
-        Bundle.main.object(forInfoDictionaryKey: "NiyatiAppGroup") as? String ?? "group.io.github.niyatiapp.niyati"
+        Bundle.main.object(forInfoDictionaryKey: "NiyatAppGroup") as? String ?? "group.io.github.niyatapp.niyat"
 
     /// Falls back to the app's own defaults if the App Group isn't set up
     /// (widgets then just show placeholder data).

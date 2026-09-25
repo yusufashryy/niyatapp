@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-QURAN = ROOT / "Niyati/Resources/Quran"
+QURAN = ROOT / "Niyat/Resources/Quran"
 OUT = ROOT / "Shared/DailyVerses.swift"
 
 CANDIDATES = [

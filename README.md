@@ -1,6 +1,32 @@
-# Niyati · نيتي
+<p align="center">
+  <img src="Niyat/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="120" alt="Niyat app icon">
+</p>
 
-*Niyati* means "my intention". A free, open-source iOS app to help Muslims stay on top of their deen. No ads, no subscriptions, no accounts, no tracking. Everything runs on your phone.
+<h1 align="center">Niyat · نيّة</h1>
+
+<p align="center">
+  <b>A free, open-source iOS companion for your deen.</b><br>
+  Prayer times, adhan alerts, Quran, Qibla, widgets and Prayer Lock.<br>
+  No ads. No subscriptions. No accounts. No tracking.
+</p>
+
+<p align="center">
+  <a href="https://github.com/yusufashryy/niyatapp/actions/workflows/build.yml"><img src="https://github.com/yusufashryy/niyatapp/actions/workflows/build.yml/badge.svg" alt="Build"></a>
+  <img src="https://img.shields.io/badge/iOS-26%2B-black?logo=apple" alt="iOS 26+">
+  <img src="https://img.shields.io/badge/Swift-SwiftUI-F05138?logo=swift&logoColor=white" alt="SwiftUI">
+  <img src="https://img.shields.io/badge/license-MIT-3ae0a3" alt="MIT">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/today.png" width="200" alt="Today">
+  <img src="docs/screenshots/quran.png" width="200" alt="Quran">
+  <img src="docs/screenshots/qibla.png" width="200" alt="Qibla">
+  <img src="docs/screenshots/tasbih.png" width="200" alt="Tasbih">
+</p>
+
+*Niyat* (نيّة) means intention. Actions are judged by their intentions.
+
+Built with Apple's **Liquid Glass** design on iOS 26 and 27: a dark, high-contrast interface with glass controls floating over a deep emerald glow.
 
 ## Features
 
@@ -22,7 +48,7 @@ iOS apps can only be built on a **Mac** with **Xcode** installed. There's no way
 
 ### 1. One-time setup
 
-1. Install **Xcode** from the Mac App Store (it's free and large, so give it a while).
+1. Install **Xcode 26 or newer** (Xcode 27 recommended) from the Mac App Store. It's free and large, so give it a while.
 2. Open Xcode once, accept the licence, and let it install the iOS components.
 3. Install [Homebrew](https://brew.sh) if you don't have it, then in Terminal run:
    ```sh
@@ -34,8 +60,8 @@ iOS apps can only be built on a **Mac** with **Xcode** installed. There's no way
 ### 2. Get the code and set up signing
 
 ```sh
-git clone https://github.com/yusufashryy/niyatiapp.git
-cd niyatiapp
+git clone https://github.com/yusufashryy/niyatapp.git
+cd niyatapp
 cp Config/Local.xcconfig.example Config/Local.xcconfig
 open -e Config/Local.xcconfig
 ```
@@ -65,24 +91,24 @@ Whenever you pull new changes or edit `project.yml`, run `make` (or `make full`)
 
 ## How it's built
 
-- **Swift + SwiftUI**, iOS 17+. Native Swift is the only way to build iOS widgets and use Screen Time.
+- **Swift + SwiftUI**, iOS 26+ (runs on iPhone 11 and newer), built with the iOS 27 SDK. Uses Liquid Glass (`glassEffect`, glass buttons, the shrinking tab bar). Native Swift is the only way to build iOS widgets and use Screen Time.
 - **[Adhan](https://github.com/batoulapps/adhan-swift)** for the astronomical prayer time calculations (a well-tested library used by many prayer apps).
 - **WidgetKit** for widgets, **App Intents** for the tappable tasbih widget.
 - **FamilyControls / ManagedSettings / DeviceActivity** (Apple's Screen Time API) for Prayer Lock.
 - Settings live in a shared **App Group** so the widgets and extensions can read them.
 
 ```
-Niyati/             The app
+Niyat/             The app
   App/              Entry point, tab bar, AppModel (app-wide state)
   Features/         One folder per screen: Today, Quran, Qibla, Focus, Tasbih, Settings, Onboarding
   Services/         Location, notifications, background refresh, prayer tracker
   Resources/        Quran data, font, icons
 Shared/             Code used by the app AND the widgets (prayer calculation, settings, models)
-NiyatiWidgets/      Home Screen & Lock Screen widgets
+NiyatWidgets/      Home Screen & Lock Screen widgets
 FocusShared/        Prayer Lock scheduling (Screen Time), shared with the extensions below
 FocusMonitor/       Background extension that locks/unlocks apps at prayer times
 FocusShield/        The "It's time for Dhuhr" screen shown over locked apps
-NiyatiTests/        Unit tests
+NiyatTests/        Unit tests
 project.yml         Project definition (XcodeGen). full-features.yml adds Prayer Lock.
 ```
 
@@ -90,9 +116,9 @@ If you know Luau: a SwiftUI `View` is like a component whose `body` describes th
 
 ### Tests
 
-Every push is built and tested on a Mac by GitHub Actions (`.github/workflows/build.yml`), in both the free and paid variants. Locally: press ⌘U in Xcode.
+Every push is built and tested by GitHub Actions on macOS 27 with Xcode 27 (`.github/workflows/build.yml`), in both the free and paid variants. The latest demo video and screenshots are on the [`demo-media`](https://github.com/yusufashryy/niyatapp/tree/demo-media) branch. Locally: press ⌘U in Xcode.
 
-The `full` build also runs `NiyatiUITests/DemoTour.swift`, which taps through every screen in a simulator and uploads a screen recording and screenshots as a build artifact named **demo**.
+The `full` build also runs `NiyatUITests/DemoTour.swift`, which taps through every screen in a simulator and uploads a screen recording and screenshots as a build artifact named **demo**.
 
 ## Known limitations
 
@@ -109,7 +135,7 @@ The `full` build also runs `NiyatiUITests/DemoTour.swift`, which taps through ev
 - Ramadan mode (suhoor/iftar times and countdown)
 - Apple Watch app
 
-Contributions are welcome!
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Credits & licences
 
