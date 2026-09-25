@@ -5,10 +5,10 @@
 
 // Bundle IDs must be unique across all Apple accounts, so change this to
 // something that's yours (e.g. com.yourname) in Local.xcconfig.
-BUNDLE_ID_PREFIX = io.github.salahapp
+BUNDLE_ID_PREFIX = io.github.niyatiapp
 
 // Shared storage between the app and its widgets/extensions.
-APP_GROUP_ID = group.$(BUNDLE_ID_PREFIX).salah
+APP_GROUP_ID = group.$(BUNDLE_ID_PREFIX).niyati
 
 // Your Apple team ID. Set it in Local.xcconfig.
 DEVELOPMENT_TEAM =

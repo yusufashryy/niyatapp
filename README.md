@@ -1,6 +1,6 @@
-# Salah
+# Niyati · نيتي
 
-A free, open-source iOS app to help Muslims stay on top of their deen. No ads, no subscriptions, no accounts, no tracking. Everything runs on your phone.
+*Niyati* means "my intention". A free, open-source iOS app to help Muslims stay on top of their deen. No ads, no subscriptions, no accounts, no tracking. Everything runs on your phone.
 
 ## Features
 
@@ -34,8 +34,8 @@ iOS apps can only be built on a **Mac** with **Xcode** installed. There's no way
 ### 2. Get the code and set up signing
 
 ```sh
-git clone https://github.com/yusufashryy/salahapp.git
-cd salahapp
+git clone https://github.com/yusufashryy/niyatiapp.git
+cd niyatiapp
 cp Config/Local.xcconfig.example Config/Local.xcconfig
 open -e Config/Local.xcconfig
 ```
@@ -72,17 +72,17 @@ Whenever you pull new changes or edit `project.yml`, run `make` (or `make full`)
 - Settings live in a shared **App Group** so the widgets and extensions can read them.
 
 ```
-Salah/              The app
+Niyati/             The app
   App/              Entry point, tab bar, AppModel (app-wide state)
   Features/         One folder per screen: Today, Quran, Qibla, Focus, Tasbih, Settings, Onboarding
   Services/         Location, notifications, background refresh, prayer tracker
   Resources/        Quran data, font, icons
 Shared/             Code used by the app AND the widgets (prayer calculation, settings, models)
-SalahWidgets/       Home Screen & Lock Screen widgets
+NiyatiWidgets/      Home Screen & Lock Screen widgets
 FocusShared/        Prayer Lock scheduling (Screen Time), shared with the extensions below
 FocusMonitor/       Background extension that locks/unlocks apps at prayer times
 FocusShield/        The "It's time for Dhuhr" screen shown over locked apps
-SalahTests/         Unit tests
+NiyatiTests/        Unit tests
 project.yml         Project definition (XcodeGen). full-features.yml adds Prayer Lock.
 ```
 
@@ -90,7 +90,9 @@ If you know Luau: a SwiftUI `View` is like a component whose `body` describes th
 
 ### Tests
 
-Every push is built and tested on a Mac by GitHub Actions (`.github/workflows/build.yml`), in both the free and paid variants. Locally: `make && xcodebuild test -scheme Salah -destination 'platform=iOS Simulator,name=iPhone 16'` (or press ⌘U in Xcode).
+Every push is built and tested on a Mac by GitHub Actions (`.github/workflows/build.yml`), in both the free and paid variants. Locally: press ⌘U in Xcode.
+
+The `full` build also runs `NiyatiUITests/DemoTour.swift`, which taps through every screen in a simulator and uploads a screen recording and screenshots as a build artifact named **demo**.
 
 ## Known limitations
 

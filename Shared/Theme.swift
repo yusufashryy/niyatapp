@@ -1,14 +1,14 @@
 import SwiftUI
 
 extension Color {
-    static let salahGreen = Color(red: 0.047, green: 0.353, blue: 0.294)
-    static let salahDeepGreen = Color(red: 0.020, green: 0.184, blue: 0.157)
-    static let salahGold = Color(red: 0.851, green: 0.690, blue: 0.345)
+    static let niyatiGreen = Color(red: 0.047, green: 0.353, blue: 0.294)
+    static let niyatiDeepGreen = Color(red: 0.020, green: 0.184, blue: 0.157)
+    static let niyatiGold = Color(red: 0.851, green: 0.690, blue: 0.345)
 }
 
 extension ShapeStyle where Self == LinearGradient {
-    static var salahBackground: LinearGradient {
-        LinearGradient(colors: [.salahGreen, .salahDeepGreen], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static var niyatiBackground: LinearGradient {
+        LinearGradient(colors: [.niyatiGreen, .niyatiDeepGreen], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 }
 
