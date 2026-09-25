@@ -38,10 +38,8 @@ final class DemoTour: XCTestCase {
             if late.exists {
                 late.tap()
                 pause()
-                app.staticTexts["Sleep"].firstMatch.tap()
-                pause()
                 snapshot("04b Check-in - reason")
-                app.staticTexts["Save"].firstMatch.tap()
+                app.staticTexts["Sleep"].firstMatch.tap()
                 pause()
             }
         }
