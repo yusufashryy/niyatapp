@@ -1,10 +1,10 @@
-# XcodeGen project definition. Don't edit Niyati.xcodeproj by hand —
+# XcodeGen project definition. Don't edit Niyat.xcodeproj by hand —
 # edit this file and run `make` (see README.md).
-name: Niyati
+name: Niyat
 
 options:
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "26.0"
   createIntermediateGroups: true
   groupSortPosition: top
 
@@ -29,22 +29,22 @@ packages:
 # its own file and is only switched on by `make full`.
 include:
   - path: full-features.yml
-    enable: ${NIYATI_FULL}
+    enable: ${NIYAT_FULL}
 
 targets:
-  Niyati:
+  Niyat:
     type: application
     platform: iOS
     sources:
-      - path: Niyati
+      - path: Niyat
       - path: Shared
     dependencies:
       - package: Adhan
-      - target: NiyatiWidgets
+      - target: NiyatWidgets
     info:
-      path: Niyati/Support/Info.plist
+      path: Niyat/Support/Info.plist
       properties:
-        CFBundleDisplayName: Niyati
+        CFBundleDisplayName: Niyat
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen:
@@ -53,73 +53,73 @@ targets:
         UIAppFonts: [AmiriQuran-Regular.ttf]
         UIBackgroundModes: [fetch]
         BGTaskSchedulerPermittedIdentifiers: [$(PRODUCT_BUNDLE_IDENTIFIER).refresh]
-        NSLocationWhenInUseUsageDescription: Niyati uses your location to calculate accurate prayer times and the Qibla direction. Your location never leaves your phone.
+        NSLocationWhenInUseUsageDescription: Niyat uses your location to calculate accurate prayer times and the Qibla direction. Your location never leaves your phone.
         ITSAppUsesNonExemptEncryption: false
-        NiyatiAppGroup: $(APP_GROUP_ID)
+        NiyatAppGroup: $(APP_GROUP_ID)
     entitlements:
-      path: Niyati/Support/Niyati.entitlements
+      path: Niyat/Support/Niyat.entitlements
       properties:
         com.apple.security.application-groups: [$(APP_GROUP_ID)]
     scheme:
-      testTargets: [NiyatiTests, NiyatiUITests]
+      testTargets: [NiyatTests, NiyatUITests]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).Niyati
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).Niyat
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
 
-  NiyatiWidgets:
+  NiyatWidgets:
     type: app-extension
     platform: iOS
     sources:
-      - path: NiyatiWidgets
+      - path: NiyatWidgets
       - path: Shared
-      - path: Niyati/Resources/Fonts/AmiriQuran-Regular.ttf
+      - path: Niyat/Resources/Fonts/AmiriQuran-Regular.ttf
         buildPhase: resources
     dependencies:
       - package: Adhan
       - sdk: WidgetKit.framework
       - sdk: SwiftUI.framework
     info:
-      path: NiyatiWidgets/Support/Info.plist
+      path: NiyatWidgets/Support/Info.plist
       properties:
-        CFBundleDisplayName: Niyati Widgets
+        CFBundleDisplayName: Niyat Widgets
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UIAppFonts: [AmiriQuran-Regular.ttf]
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
-        NiyatiAppGroup: $(APP_GROUP_ID)
+        NiyatAppGroup: $(APP_GROUP_ID)
     entitlements:
-      path: NiyatiWidgets/Support/NiyatiWidgets.entitlements
+      path: NiyatWidgets/Support/NiyatWidgets.entitlements
       properties:
         com.apple.security.application-groups: [$(APP_GROUP_ID)]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).Niyati.Widgets
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).Niyat.Widgets
 
-  NiyatiTests:
+  NiyatTests:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - path: NiyatiTests
+      - path: NiyatTests
     dependencies:
-      - target: Niyati
+      - target: Niyat
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).NiyatiTests
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).NiyatTests
         GENERATE_INFOPLIST_FILE: YES
 
   # Demo tour: taps through every screen (see README > Tests).
-  NiyatiUITests:
+  NiyatUITests:
     type: bundle.ui-testing
     platform: iOS
     sources:
-      - path: NiyatiUITests
+      - path: NiyatUITests
     dependencies:
-      - target: Niyati
+      - target: Niyat
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).NiyatiUITests
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).NiyatUITests
         GENERATE_INFOPLIST_FILE: YES
-        TEST_TARGET_NAME: Niyati
+        TEST_TARGET_NAME: Niyat

@@ -1,5 +1,6 @@
 import ManagedSettings
 import ManagedSettingsUI
+import SwiftUI
 import UIKit
 
 /// The screen shown when you open a locked app during prayer time.
@@ -30,19 +31,19 @@ final class ShieldConfigurationExtension: ShieldConfigurationDataSource {
 
         var subtitle = "“The prayer is obligatory for believers at specific times.” (Quran 4:103)"
         if let until = FocusStore.lockedUntil {
-            subtitle += "\n\nUnlocks at \(until.shortTime). Prayed already? Open Niyati and tap “I've prayed”."
+            subtitle += "\n\nUnlocks at \(until.shortTime). Prayed already? Open Niyat and tap “I've prayed”."
         }
 
-        let green = UIColor(red: 0.047, green: 0.353, blue: 0.294, alpha: 1)
-        let gold = UIColor(red: 0.851, green: 0.690, blue: 0.345, alpha: 1)
+        let background = UIColor(Palette.deepEmerald)
+        let gold = UIColor(Palette.gold)
 
         return ShieldConfiguration(
             backgroundBlurStyle: .systemUltraThinMaterialDark,
-            backgroundColor: green,
+            backgroundColor: background,
             icon: UIImage(systemName: "moon.stars.fill")?.withTintColor(gold, renderingMode: .alwaysOriginal),
             title: ShieldConfiguration.Label(text: title, color: .white),
             subtitle: ShieldConfiguration.Label(text: subtitle, color: UIColor.white.withAlphaComponent(0.85)),
-            primaryButtonLabel: ShieldConfiguration.Label(text: "OK", color: green),
+            primaryButtonLabel: ShieldConfiguration.Label(text: "OK", color: .black),
             primaryButtonBackgroundColor: gold,
             secondaryButtonLabel: nil
         )

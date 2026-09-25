@@ -15,7 +15,7 @@ concurrency:
 jobs:
   build:
     name: ${{ matrix.variant }}
-    runs-on: macos-15
+    runs-on: xcode-27  # macOS 27 + Xcode 27 (iOS 27 SDK and simulator)
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -35,7 +35,7 @@ jobs:
 
       - name: Check Prayer Lock targets are ${{ matrix.variant == 'full' && 'included' || 'left out' }}
         run: |
-          if grep -q "FocusMonitor" Niyati.xcodeproj/project.pbxproj; then has=yes; else has=no; fi
+          if grep -q "FocusMonitor" Niyat.xcodeproj/project.pbxproj; then has=yes; else has=no; fi
           echo "Prayer Lock targets present: $has"
           [ "$has" = "${{ matrix.variant == 'full' && 'yes' || 'no' }}" ]
 
@@ -57,10 +57,10 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test \
-            -project Niyati.xcodeproj \
-            -scheme Niyati \
+            -project Niyat.xcodeproj \
+            -scheme Niyat \
             -destination "id=$SIMULATOR_ID" \
-            -only-testing:NiyatiTests \
+            -only-testing:NiyatTests \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify --renderer github-actions
@@ -77,8 +77,8 @@ jobs:
             --wifiBars 3 --cellularBars 4 || true
           # Build first so the recording doesn't include minutes of compiling.
           xcodebuild build-for-testing \
-            -project Niyati.xcodeproj \
-            -scheme Niyati \
+            -project Niyat.xcodeproj \
+            -scheme Niyat \
             -destination "id=$SIMULATOR_ID" \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
@@ -87,10 +87,10 @@ jobs:
           RECORDER=$!
           sleep 3
           xcodebuild test-without-building \
-            -project Niyati.xcodeproj \
-            -scheme Niyati \
+            -project Niyat.xcodeproj \
+            -scheme Niyat \
             -destination "id=$SIMULATOR_ID" \
-            -only-testing:NiyatiUITests \
+            -only-testing:NiyatUITests \
             -parallel-testing-enabled NO \
             -resultBundlePath demo/tour.xcresult \
             CODE_SIGNING_ALLOWED=NO \
