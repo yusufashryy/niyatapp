@@ -5,5 +5,5 @@
 - Screen Time code lives in `FocusShared/` and app code that uses it must be wrapped in `#if SCREEN_TIME`.
 - Quran text/translation JSON must stay byte-for-byte unmodified (licence). Regenerate `Shared/DailyVerses.swift` with `make verses`.
 - No Mac in the dev container: CI (`.github/workflows/build.yml`, macOS runner) is the compiler. Push and read the Actions logs to verify.
-- Design: dark-only, `Palette` colours and `niyatBackground()` from `Shared/Theme.swift`; `glassPanel` for floating/hero elements, `surface` for content rows.
+- Design: dark-only. Colours come from the user's theme via `Palette` (`Shared/Theme.swift`, `Shared/ThemeStore.swift`); never hard-code accent colours. `niyatBackground()` behind screens, `glassPanel` for floating/hero elements, `surface` for content rows. Ornaments (`EightPointStar`, `IslamicPattern`, `Rosette`, `PrayerSky`) in `Shared/Ornaments.swift`. Interactions (`.haptic`, `.pressable`, `.appearAnimation`, `.scrollFade`) in `Niyat/App/Interaction.swift`; use `.haptic` rather than `.sensoryFeedback` so the Settings toggle works.
 - The owner is new to iOS (background: Roblox/Luau). Keep explanations beginner-friendly.

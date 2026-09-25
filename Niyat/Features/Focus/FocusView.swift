@@ -172,9 +172,9 @@ private struct FocusIntroSection: View {
             HStack(spacing: 14) {
                 Image(systemName: "lock.shield.fill")
                     .font(.system(size: 30, weight: .semibold))
-                    .foregroundStyle(Palette.gold)
+                    .foregroundStyle(Palette.highlight)
                     .frame(width: 64, height: 64)
-                    .glassEffect(.regular.tint(Palette.deepEmerald.opacity(0.5)), in: .circle)
+                    .glassEffect(.regular.tint(Palette.glow.opacity(0.5)), in: .circle)
                 Text("Put the phone down when it's time to pray. Prayer Lock blocks distracting apps at each adhan.")
                     .font(.subheadline)
             }

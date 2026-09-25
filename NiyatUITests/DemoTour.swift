@@ -81,6 +81,17 @@ final class DemoTour: XCTestCase {
         app.staticTexts["Settings"].firstMatch.tap()
         pause(1.5)
         snapshot("12 Settings")
+        app.staticTexts["Theme"].firstMatch.tap()
+        pause(1.5)
+        snapshot("15 Theme")
+        let desert = app.buttons["Desert theme"]
+        if desert.waitForExistence(timeout: 2) {
+            desert.tap()
+            pause(1.5)
+            snapshot("16 Theme - Desert")
+        }
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        pause()
         app.swipeUp()
         pause()
         snapshot("13 Settings - notifications")

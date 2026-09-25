@@ -7,17 +7,35 @@ struct MoreView: View {
                 VStack(spacing: 12) {
                     GlassEffectContainer(spacing: 12) {
                         HStack(spacing: 12) {
-                            tile("Tasbih", systemImage: "circle.hexagongrid.fill", tint: Palette.emerald) { TasbihView() }
-                            tile("Widgets", systemImage: "square.grid.2x2.fill", tint: Palette.gold) { WidgetGuideView() }
+                            tile("Tasbih", systemImage: "circle.hexagongrid.fill", tint: Palette.accent) { TasbihView() }
+                            tile("Themes", systemImage: "paintpalette.fill", tint: Palette.highlight) { ThemePickerView() }
                         }
                     }
+                    .appearAnimation(0)
 
                     VStack(spacing: 0) {
                         row("Settings", systemImage: "gearshape.fill") { SettingsView() }
                         Divider().overlay(Palette.hairline).padding(.leading, 56)
+                        row("Add widgets", systemImage: "square.grid.2x2.fill") { WidgetGuideView() }
+                        Divider().overlay(Palette.hairline).padding(.leading, 56)
                         row("About & credits", systemImage: "info.circle.fill") { AboutView() }
                     }
                     .surface(cornerRadius: 22)
+                    .appearAnimation(1)
+
+                    VStack(spacing: 10) {
+                        Text("إِنَّمَا ٱلْأَعْمَالُ بِٱلنِّيَّاتِ")
+                            .font(.calligraphy(size: 30))
+                            .foregroundStyle(Palette.highlight)
+                        Text("“Actions are judged by their intentions.”")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        OrnamentDivider()
+                            .frame(width: 160)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 24)
+                    .appearAnimation(2)
                 }
                 .padding(16)
             }
@@ -39,9 +57,16 @@ struct MoreView: View {
             }
             .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
             .padding(18)
+            .background(alignment: .bottomTrailing) {
+                EightPointStar()
+                    .stroke(tint.opacity(0.25), lineWidth: 1.5)
+                    .frame(width: 70, height: 70)
+                    .offset(x: 18, y: 18)
+            }
+            .clipShape(.rect(cornerRadius: 26))
             .glassPanel(cornerRadius: 26, interactive: true)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
     }
 
     private func row<Destination: View>(_ title: String, systemImage: String,
@@ -49,7 +74,7 @@ struct MoreView: View {
         NavigationLink(destination: destination) {
             HStack(spacing: 14) {
                 Image(systemName: systemImage)
-                    .foregroundStyle(Palette.emerald)
+                    .foregroundStyle(Palette.accent)
                     .frame(width: 28)
                 Text(title).foregroundStyle(.white)
                 Spacer()
@@ -61,7 +86,7 @@ struct MoreView: View {
             .padding(.vertical, 16)
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
     }
 }
 
@@ -94,7 +119,7 @@ private struct WidgetGuideView: View {
                         .font(.footnote.weight(.heavy))
                         .foregroundStyle(.black)
                         .frame(width: 26, height: 26)
-                        .background(Palette.emerald, in: .circle)
+                        .background(Palette.accent, in: .circle)
                     Text(text)
                 }
             }
@@ -110,8 +135,12 @@ struct AboutView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Niyat").font(.display(34, weight: .heavy))
-                    Text("نيّة · intention").font(.headline).foregroundStyle(Palette.emerald)
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Niyat").font(.display(34, weight: .heavy))
+                        Spacer()
+                        Text("نيّة").font(.calligraphy(size: 40)).foregroundStyle(Palette.highlight)
+                    }
+                    Text("intention").font(.headline).foregroundStyle(Palette.accent)
                     Text("A free, open-source companion for your deen. No ads, no subscriptions, no accounts and no tracking. Everything runs on your phone.")
                         .foregroundStyle(.secondary)
                     Link(destination: URL(string: "https://github.com/yusufashryy/niyatapp")!) {
@@ -123,7 +152,7 @@ struct AboutView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(20)
-                .glassPanel(cornerRadius: 28, tint: Palette.deepEmerald.opacity(0.35))
+                .glassPanel(cornerRadius: 28, tint: Palette.glow.opacity(0.35))
 
                 Text("Credits").sectionLabelStyle().padding(.top, 6)
                 VStack(alignment: .leading, spacing: 14) {
@@ -131,6 +160,7 @@ struct AboutView: View {
                     credit("English translation", "Translation by Talal Itani, ClearQuran.com. CC BY-ND 4.0.")
                     credit("Surah information", "Tanzil Project metadata. CC BY 3.0.")
                     credit("Quran font", "Amiri Quran by Khaled Hosny and the Amiri Quran Project Authors. SIL Open Font License 1.1.")
+                    credit("Calligraphy font", "Aref Ruqaa by the Aref Ruqaa Project Authors. SIL Open Font License 1.1.")
                     credit("Prayer time calculation", "Adhan by Batoul Apps. MIT License.")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -25,6 +25,7 @@ struct SurahReaderView: View {
                             store.toggleBookmark(verse)
                         }
                         .id(verse.number)
+                        .scrollFade()
                         .onAppear { store.markRead(surah: surahID, verse: verse.number) }
                     }
                 }
@@ -63,17 +64,27 @@ private struct SurahHeader: View {
         VStack(spacing: 8) {
             Text(surah.name)
                 .font(.quran(size: 44))
-                .foregroundStyle(Palette.gold)
+                .foregroundStyle(Palette.highlight)
+                .background {
+                    Rosette(color: Palette.highlight.opacity(0.18))
+                        .frame(width: 170, height: 170)
+                }
             Text(surah.transliteration)
                 .font(.title2.weight(.bold))
             Text("\(surah.translation) · \(surah.revelationPlace) · \(surah.totalVerses) verses")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            OrnamentDivider()
+                .frame(width: 180)
+                .padding(.top, 6)
         }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 26)
-        .glassPanel(cornerRadius: 30, tint: Palette.deepEmerald.opacity(0.35))
+        .background { IslamicPattern(tile: 48, lineWidth: 0.6, color: Palette.accent.opacity(0.08)) }
+        .clipShape(.rect(cornerRadius: 30))
+        .glassPanel(cornerRadius: 30, tint: Palette.glow.opacity(0.35))
+        .appearAnimation(0)
     }
 }
 
@@ -89,16 +100,19 @@ private struct VerseCard: View {
             HStack {
                 Text("\(verse.surah):\(verse.number)")
                     .font(.caption.weight(.bold).monospacedDigit())
-                    .foregroundStyle(Palette.emerald)
+                    .foregroundStyle(Palette.accent)
                     .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(Palette.emerald.opacity(0.14), in: .capsule)
+                    .background(Palette.accent.opacity(0.14), in: .capsule)
                 Spacer()
                 Button(action: onToggleBookmark) {
                     Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
-                        .foregroundStyle(isBookmarked ? Palette.gold : Color.secondary)
+                        .foregroundStyle(isBookmarked ? Palette.highlight : Color.secondary)
                         .contentTransition(.symbolEffect(.replace))
+                        .symbolEffect(.bounce, value: isBookmarked)
+                        .frame(width: 32, height: 32)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
+                .haptic(.impact(weight: .medium), trigger: isBookmarked)
                 .accessibilityLabel(isBookmarked ? "Remove bookmark" : "Bookmark")
             }
 

@@ -45,7 +45,8 @@ struct SurahListView: View {
                     NavigationLink(value: ReaderDestination(surah: surah.id, verse: lastRead.verse)) {
                         ContinueReadingCard(surah: surah, verse: lastRead.verse)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
+                    .appearAnimation(0)
                 }
 
                 if searchText.isEmpty, !store.bookmarks.isEmpty {
@@ -62,7 +63,7 @@ struct SurahListView: View {
                                                 .padding(.vertical, 10)
                                                 .glassEffect(.regular.interactive(), in: .capsule)
                                         }
-                                        .buttonStyle(.plain)
+                                        .buttonStyle(.pressable)
                                         .contextMenu {
                                             Button("Remove bookmark", systemImage: "bookmark.slash", role: .destructive) {
                                                 if let index = store.bookmarks.firstIndex(of: bookmark) {
@@ -80,11 +81,14 @@ struct SurahListView: View {
 
                 Text("Surahs").sectionLabelStyle().padding(.top, 8)
 
-                ForEach(filteredSurahs) { surah in
+                ForEach(Array(filteredSurahs.enumerated()), id: \.element.id) { index, surah in
                     NavigationLink(value: ReaderDestination(surah: surah.id, verse: nil)) {
                         SurahRow(surah: surah)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
+                    .scrollFade()
+                    // Only the first screenful animates in, so scrolling stays calm.
+                    .appearAnimation(index, enabled: index < 12 && searchText.isEmpty)
                 }
             }
             .padding(.horizontal, 16)
@@ -106,11 +110,11 @@ private struct ContinueReadingCard: View {
         HStack(spacing: 16) {
             Image(systemName: "book.pages.fill")
                 .font(.title2)
-                .foregroundStyle(Palette.gold)
+                .foregroundStyle(Palette.highlight)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Continue reading")
                     .sectionLabelStyle()
-                    .foregroundStyle(Palette.emerald)
+                    .foregroundStyle(Palette.accent)
                 Text(surah.transliteration)
                     .font(.title3.weight(.bold))
                 Text("Verse \(verse) of \(surah.totalVerses)")
@@ -120,10 +124,16 @@ private struct ContinueReadingCard: View {
             Spacer()
             Text(surah.name)
                 .font(.quran(size: 28))
-                .foregroundStyle(Palette.gold)
+                .foregroundStyle(Palette.highlight)
         }
         .padding(18)
-        .glassPanel(cornerRadius: 26, tint: Palette.deepEmerald.opacity(0.4), interactive: true)
+        .background(alignment: .trailing) {
+            Rosette(color: Palette.highlight.opacity(0.15))
+                .frame(width: 150, height: 150)
+                .offset(x: 50)
+        }
+        .clipShape(.rect(cornerRadius: 26))
+        .glassPanel(cornerRadius: 26, tint: Palette.glow.opacity(0.4), interactive: true)
     }
 }
 
@@ -134,13 +144,11 @@ private struct SurahRow: View {
         HStack(spacing: 14) {
             Text("\(surah.id)")
                 .font(.footnote.weight(.bold).monospacedDigit())
-                .foregroundStyle(Palette.emerald)
-                .frame(width: 38, height: 38)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10)
-                        .strokeBorder(Palette.emerald.opacity(0.5), lineWidth: 1.5)
-                        .rotationEffect(.degrees(45))
-                        .padding(5)
+                .foregroundStyle(Palette.accent)
+                .frame(width: 42, height: 42)
+                .background {
+                    EightPointStar()
+                        .stroke(Palette.accent.opacity(0.6), lineWidth: 1.5)
                 }
 
             VStack(alignment: .leading, spacing: 2) {
