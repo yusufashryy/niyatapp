@@ -35,10 +35,12 @@ Built with Apple's **Liquid Glass** design on iOS 26 and 27: a dark, high-contra
 | 🕌 **Prayer times** | Calculated on-device for anywhere in the world (works offline). 12 calculation methods, Hanafi/Standard Asr, high-latitude rules, per-prayer minute adjustments. Picks a sensible method for your country automatically. |
 | 🔔 **Adhan notifications** | Per-prayer on/off, optional "X minutes before" reminder, *Jumu'ah* on Fridays. |
 | 📖 **Quran** | Full Arabic text (Uthmani script, Amiri Quran font) with English translation, fully offline. Search, bookmarks, "continue reading", adjustable text size. |
-| 🧭 **Qibla compass** | Live compass with haptic feedback when you're facing the Qibla, plus distance to Makkah. |
+| 🧭 **Qibla compass** | Line the Kaaba up with the marker. Uses true north and your live GPS position, never spins when passing north, and shows compass accuracy. Verified against 20 cities in the tests. |
 | 📱 **Widgets** | Next Prayer (Home Screen and all three Lock Screen styles), Prayer Times (medium/large), Verse of the Day, and an interactive Tasbih counter you can tap right on the Home Screen. |
 | 🔒 **Prayer Lock** | Blocks the apps you choose (Instagram, TikTok, games…) at each adhan until you've had time to pray, with an "I've prayed" button to unlock early. Also does on-demand focus sessions. *Needs a paid Apple Developer account, see below.* |
-| ✅ **Prayer tracker** | Tick off each prayer and build a streak. |
+| 🕰️ **Prayer dial** | Today is a 24-hour dial: the day's prayers around the ring, the daylight arc, and the sun or moon moving in real time. The screen's sky follows the time of day. |
+| ✅ **Check-ins** | After each prayer's time begins: one tap for "on time", or mark it late, missed or excused with a reason (sleep, work, school…). |
+| 📅 **Journey** | A calendar of your consistency, on-time rate, which prayer is hardest for you, and why prayers get late or missed. Tap any day to catch up or fix it. |
 | 📿 **Tasbih** | Dhikr counter with targets (33/99/100…) and haptics. |
 | 🌙 **Hijri date** | With ±2 day adjustment to match local moon sighting. |
 | 🎨 **Themes** | Six colour themes (Midnight, Emerald, Desert, Amethyst, Maghrib, Onyx) or pick your own colours. Widgets follow your theme. |
@@ -92,7 +94,7 @@ To get the latest changes: `make update`, then press Run in Xcode. Tip: in Xcode
 ```
 Niyat/             The app
   App/              Entry point, tab bar, AppModel (app-wide state)
-  Features/         One folder per screen: Today, Quran, Qibla, Focus, Tasbih, Settings, Onboarding
+  Features/         One folder per screen: Today, Quran, Qibla, Journey, Focus, Tasbih, Settings, Onboarding
   Services/         Location, notifications, background refresh, prayer tracker
   Resources/        Quran data, font, icons
 Shared/             Code used by the app AND the widgets (prayer calculation, settings, models)
@@ -111,6 +113,14 @@ If you know Luau: a SwiftUI `View` is like a component whose `body` describes th
 Every push is built and tested by GitHub Actions on macOS 27 with Xcode 27 (`.github/workflows/build.yml`), in both the free and paid variants. The latest screenshots are on the [`demo-media`](https://github.com/yusufashryy/niyatapp/tree/demo-media) branch. Locally: press ⌘U in Xcode.
 
 The `full` build also runs `NiyatUITests/DemoTour.swift`, which taps through every screen in a simulator and saves a screenshot of each (build artifact **demo**, also published to the `demo-media` branch).
+
+## Accuracy
+
+Getting these right matters more than anything else, so they're checked by automated tests on every build:
+
+- **Quran text.** The bundled files must match the published SHA-256 checksums exactly (the app also re-checks this on launch and shows it in About). Every surah must have the standard Hafs verse count (6,236 in total), checked against a separately written list. The Bismillah is shown as a header above each surah (except Al-Fatiha, where it is verse 1, and At-Tawbah, which has none) rather than inside verse 1.
+- **Qibla.** The app's bearing is checked against an independent great-circle calculation for 20 cities and a grid across the whole globe, and against published values (e.g. New York 58.48°, London 118.99°, Auckland 261.20°). On the phone, the compass uses true north (corrected for magnetic declination) and your live GPS position.
+- **Prayer times.** Calculated with the well-tested [Adhan](https://github.com/batoulapps/adhan-swift) library. Tests cover ordering, Hanafi Asr, adjustments and high latitudes.
 
 ## Known limitations
 

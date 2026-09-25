@@ -18,6 +18,14 @@ struct SurahReaderView: View {
                     if let surah {
                         SurahHeader(surah: surah)
                             .padding(.bottom, 6)
+                        if surah.hasBismillahHeader, !store.bismillah.isEmpty {
+                            Text(store.bismillah)
+                                .font(.quran(size: 28))
+                                .foregroundStyle(Palette.highlight)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .appearAnimation(1)
+                        }
                     }
                     ForEach(store.verses(for: surahID)) { verse in
                         VerseCard(verse: verse, arabicSize: arabicSize, showTranslation: showTranslation,

@@ -53,7 +53,7 @@ struct RootView: View {
 }
 
 enum AppTab: Hashable {
-    case today, quran, qibla, focus, more
+    case today, quran, qibla, journey, more
 }
 
 struct MainTabView: View {
@@ -65,7 +65,7 @@ struct MainTabView: View {
             Tab("Today", systemImage: "sun.horizon.fill", value: .today) { TodayView() }
             Tab("Quran", systemImage: "book.closed.fill", value: .quran) { SurahListView() }
             Tab("Qibla", systemImage: "location.north.circle.fill", value: .qibla) { QiblaView() }
-            Tab("Focus", systemImage: "lock.shield.fill", value: .focus) { FocusView() }
+            Tab("Journey", systemImage: "calendar", value: .journey) { JourneyView() }
             Tab("More", systemImage: "circle.grid.2x2.fill", value: .more) { MoreView() }
         }
         .tabBarMinimizeBehavior(.onScrollDown)

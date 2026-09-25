@@ -8,13 +8,15 @@ struct MoreView: View {
                     GlassEffectContainer(spacing: 12) {
                         HStack(spacing: 12) {
                             tile("Tasbih", systemImage: "circle.hexagongrid.fill", tint: Palette.accent) { TasbihView() }
-                            tile("Themes", systemImage: "paintpalette.fill", tint: Palette.highlight) { ThemePickerView() }
+                            tile("Prayer Lock", systemImage: "lock.shield.fill", tint: Palette.highlight) { FocusView() }
                         }
                     }
                     .appearAnimation(0)
 
                     VStack(spacing: 0) {
                         row("Settings", systemImage: "gearshape.fill") { SettingsView() }
+                        Divider().overlay(Palette.hairline).padding(.leading, 56)
+                        row("Themes", systemImage: "paintpalette.fill") { ThemePickerView() }
                         Divider().overlay(Palette.hairline).padding(.leading, 56)
                         row("Add widgets", systemImage: "square.grid.2x2.fill") { WidgetGuideView() }
                         Divider().overlay(Palette.hairline).padding(.leading, 56)
@@ -154,6 +156,8 @@ struct AboutView: View {
                 .padding(20)
                 .glassPanel(cornerRadius: 28, tint: Palette.glow.opacity(0.35))
 
+                QuranIntegrityRow()
+
                 Text("Credits").sectionLabelStyle().padding(.top, 6)
                 VStack(alignment: .leading, spacing: 14) {
                     credit("Quran text", "Tanzil Project (tanzil.net), Uthmani text. CC BY 3.0, used verbatim.")
@@ -184,6 +188,54 @@ struct AboutView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.subheadline.weight(.semibold))
             Text(detail).font(.footnote).foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Shows whether the bundled Quran files match their published checksums.
+private struct QuranIntegrityRow: View {
+    @State private var store = QuranStore.shared
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundStyle(color)
+                .frame(width: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.headline)
+                Text("Tanzil Uthmani text and ClearQuran translation, checked byte-for-byte against their published SHA-256 checksums. 114 surahs, 6,236 verses.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .surface(cornerRadius: 22)
+        .task { await store.load() }
+    }
+
+    private var title: String {
+        switch store.isVerified {
+        case true?: "Quran text verified"
+        case false?: "Quran text failed verification"
+        case nil: "Checking Quran text…"
+        }
+    }
+
+    private var icon: String {
+        switch store.isVerified {
+        case true?: "checkmark.seal.fill"
+        case false?: "exclamationmark.octagon.fill"
+        case nil: "hourglass"
+        }
+    }
+
+    private var color: Color {
+        switch store.isVerified {
+        case true?: Palette.accent
+        case false?: .red
+        case nil: .secondary
         }
     }
 }

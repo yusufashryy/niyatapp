@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Observation
 
@@ -15,11 +16,17 @@ struct Surah: Identifiable, Hashable, Decodable {
     }
 
     var revelationPlace: String { type == "meccan" ? "Meccan" : "Medinan" }
+
+    /// Every surah opens with the Bismillah as a header, except Al-Fatiha (where it
+    /// is verse 1) and At-Tawbah (which has none).
+    var hasBismillahHeader: Bool { id != 1 && id != 9 }
 }
 
 struct Verse: Identifiable, Hashable {
     let surah: Int
     let number: Int
+    /// The verse as shown in a mushaf. For verse 1 of most surahs the bundled
+    /// Tanzil text starts with the Bismillah; we show that as a header instead.
     let arabic: String
     let translation: String
 
@@ -43,6 +50,10 @@ final class QuranStore {
     private(set) var surahs: [Surah] = []
     private(set) var isLoaded = false
     private(set) var loadError: String?
+    /// The Bismillah exactly as written in the bundled text (Al-Fatiha 1:1).
+    private(set) var bismillah = ""
+    /// nil while checking; true if the bundled files match the published checksums.
+    private(set) var isVerified: Bool?
     private var versesBySurah: [Int: [Verse]] = [:]
 
     private(set) var lastRead: VerseReference?
@@ -99,7 +110,9 @@ final class QuranStore {
             let loaded = try await Task.detached(priority: .userInitiated) { try Self.readBundle() }.value
             surahs = loaded.surahs
             versesBySurah = loaded.verses
+            bismillah = loaded.bismillah
             isLoaded = true
+            isVerified = await Task.detached(priority: .utility) { Self.verifyChecksums() }.value
         } catch {
             loadError = "Couldn't load the Quran text: \(error.localizedDescription)"
         }
@@ -117,7 +130,41 @@ final class QuranStore {
 
     private enum BundleError: Error { case missing(String) }
 
-    private nonisolated static func readBundle() throws -> (surahs: [Surah], verses: [Int: [Verse]]) {
+    /// SHA-256 of the bundled files, as published with the source data
+    /// (risan/quran-json, from Tanzil and ClearQuran). If a file is changed or
+    /// corrupted in any way, the hash won't match.
+    static let expectedChecksums: [String: String] = [
+        "quran-uthmani": "adaebb377c60eba1bab6ef652959c7a0b4ccb4d0ca42145945c14ecdbeb4b761",
+        "translation-en-clearquran": "2e5d4d9fc7ee9cad5ed3fc0691d8e398c6f943a9ab7fe49ac515961abf5250ed",
+        "chapters": "5b18adae945fcb6f9fbb865dd7dc596f89a63607a4e6617ca9e37f7f10d3386b",
+    ]
+
+    nonisolated static func verifyChecksums() -> Bool {
+        expectedChecksums.allSatisfy { name, expected in
+            guard let url = Bundle.main.url(forResource: name, withExtension: "json"),
+                  let data = try? Data(contentsOf: url) else { return false }
+            let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+            return digest == expected
+        }
+    }
+
+    /// Returns verse 1 without the leading Bismillah (its 4 words), or nil if it
+    /// doesn't start with one. Two surahs spell the first word with a shadda,
+    /// so shaddas are ignored when comparing.
+    nonisolated static func removingBismillah(from text: String, bismillah: String) -> String? {
+        let words = text.split(separator: " ", omittingEmptySubsequences: false)
+        let bismillahWords = bismillah.split(separator: " ")
+        guard words.count > bismillahWords.count else { return nil }
+        func normalized(_ word: Substring) -> String {
+            String(String.UnicodeScalarView(word.unicodeScalars.filter { $0.value != 0x0651 }))
+        }
+        for (word, expected) in zip(words, bismillahWords) where normalized(word) != normalized(expected) {
+            return nil
+        }
+        return words.dropFirst(bismillahWords.count).joined(separator: " ")
+    }
+
+    private nonisolated static func readBundle() throws -> (surahs: [Surah], verses: [Int: [Verse]], bismillah: String) {
         func data(_ name: String) throws -> Data {
             guard let url = Bundle.main.url(forResource: name, withExtension: "json") else {
                 throw BundleError.missing(name)
@@ -129,15 +176,21 @@ final class QuranStore {
         let arabic = try decoder.decode([String: [RawVerse]].self, from: data("quran-uthmani"))
         let english = try decoder.decode([String: [RawVerse]].self, from: data("translation-en-clearquran"))
 
+        let bismillah = arabic["1"]?.first?.text ?? ""
         var verses: [Int: [Verse]] = [:]
         for chapter in chapters {
             let arabicVerses = arabic[String(chapter.id)] ?? []
             let englishVerses = english[String(chapter.id)] ?? []
             verses[chapter.id] = arabicVerses.enumerated().map { index, verse in
-                Verse(surah: chapter.id, number: verse.verse, arabic: verse.text,
-                      translation: englishVerses.indices.contains(index) ? englishVerses[index].text : "")
+                var text = verse.text
+                if chapter.hasBismillahHeader, verse.verse == 1,
+                   let stripped = removingBismillah(from: text, bismillah: bismillah) {
+                    text = stripped
+                }
+                return Verse(surah: chapter.id, number: verse.verse, arabic: text,
+                             translation: englishVerses.indices.contains(index) ? englishVerses[index].text : "")
             }
         }
-        return (chapters, verses)
+        return (chapters, verses, bismillah)
     }
 }
