@@ -36,34 +36,67 @@ extension Date {
     var shortTime: String { formatted(date: .omitted, time: .shortened) }
 }
 
-/// Slowly drifting glow in the theme's colours, with faint arabesque
-/// patterns at the edges. The Liquid Glass elements on top pick up its colour.
+/// Slowly drifting glow in the theme's colours, with faint arabesque patterns
+/// at the edges, a turning rosette and calligraphy floating in the background.
+/// The Liquid Glass elements on top pick up its colour.
 struct AmbientBackground: View {
     var showsPattern = true
+    var showsCalligraphy = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Dhikr phrases that float in the background, with where each one drifts.
+    private static let phrases: [(text: String, x: CGFloat, y: CGFloat, size: CGFloat, phase: Double)] = [
+        ("سُبْحَانَ ٱللَّٰهِ", 0.30, 0.16, 64, 0),
+        ("ٱلْحَمْدُ لِلَّٰهِ", 0.72, 0.42, 58, 1.7),
+        ("ٱللَّٰهُ أَكْبَرُ", 0.28, 0.68, 62, 3.1),
+        ("لَا إِلَٰهَ إِلَّا ٱللَّٰهُ", 0.66, 0.90, 52, 4.4),
+    ]
+
     var body: some View {
-        ZStack {
-            TimelineView(.animation(minimumInterval: 1 / 20, paused: reduceMotion)) { context in
-                let t = Float(context.date.timeIntervalSinceReferenceDate)
-                let drift = reduceMotion ? 0 : sin(t / 7) * 0.08
-                let drift2 = reduceMotion ? 0 : cos(t / 9) * 0.08
-                MeshGradient(
-                    width: 3, height: 3,
-                    points: [
-                        [0, 0], [0.5, 0], [1, 0],
-                        [0, 0.5], [0.5 + drift, 0.45 + drift2], [1, 0.5],
-                        [0, 1], [0.5, 1], [1, 1],
-                    ],
-                    colors: [
-                        Palette.glow, Palette.base, Palette.glow2,
-                        Palette.base, Palette.glow.opacity(0.55), Palette.base,
-                        Palette.glow2, Palette.base, Palette.glow.opacity(0.7),
-                    ]
-                )
+        TimelineView(.animation(minimumInterval: 1 / 20, paused: reduceMotion)) { context in
+            let time = reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate
+            let t = Float(time)
+            let drift = sin(t / 7) * 0.08
+            let drift2 = cos(t / 9) * 0.08
+            GeometryReader { geo in
+                ZStack {
+                    MeshGradient(
+                        width: 3, height: 3,
+                        points: [
+                            [0, 0], [0.5, 0], [1, 0],
+                            [0, 0.5], [0.5 + drift, 0.45 + drift2], [1, 0.5],
+                            [0, 1], [0.5, 1], [1, 1],
+                        ],
+                        colors: [
+                            Palette.glow, Palette.base, Palette.glow2,
+                            Palette.base, Palette.glow.opacity(0.55), Palette.base,
+                            Palette.glow2, Palette.base, Palette.glow.opacity(0.7),
+                        ]
+                    )
+
+                    if showsCalligraphy {
+                        Rosette(color: Palette.highlight.opacity(0.06), lineWidth: 1)
+                            .frame(width: geo.size.width * 1.3, height: geo.size.width * 1.3)
+                            .rotationEffect(.degrees(time.truncatingRemainder(dividingBy: 360) * 2))
+                            .position(x: geo.size.width * 0.5, y: geo.size.height * 0.45)
+
+                        ForEach(Array(Self.phrases.enumerated()), id: \.offset) { _, phrase in
+                            let dx = CGFloat(sin(time / 11 + phrase.phase)) * 18
+                            let dy = CGFloat(cos(time / 13 + phrase.phase)) * 14
+                            Text(phrase.text)
+                                .font(.calligraphy(size: phrase.size))
+                                .foregroundStyle(Palette.highlight.opacity(0.07))
+                                .fixedSize()
+                                .rotationEffect(.degrees(sin(time / 17 + phrase.phase) * 4))
+                                .position(x: geo.size.width * phrase.x + dx, y: geo.size.height * phrase.y + dy)
+                        }
+                    }
+                }
             }
+        }
+        .overlay {
             if showsPattern {
-                IslamicPattern(tile: 78, lineWidth: 0.8, color: Palette.accent.opacity(0.10))
+                IslamicPattern(tile: 78, lineWidth: 0.8, color: Palette.accent.opacity(0.09))
                     .mask {
                         LinearGradient(stops: [
                             .init(color: .black, location: 0),
@@ -76,6 +109,7 @@ struct AmbientBackground: View {
         }
         .background(Palette.base)
         .ignoresSafeArea()
+        .accessibilityHidden(true)
     }
 }
 

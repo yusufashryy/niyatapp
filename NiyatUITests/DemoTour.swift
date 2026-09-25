@@ -28,14 +28,32 @@ final class DemoTour: XCTestCase {
         pause(2.5)
         snapshot("03 Today")
 
-        let asr = app.buttons["Mark Asr as prayed"]
-        if asr.waitForExistence(timeout: 2) {
-            asr.tap()
+        // Check in the earliest prayer through the full sheet (late, with a reason).
+        let checkIn = app.buttons["Check in Fajr"]
+        if checkIn.waitForExistence(timeout: 2), checkIn.isEnabled {
+            checkIn.tap()
+            pause(1.5)
+            snapshot("04a Check-in")
+            let late = app.staticTexts["Late"].firstMatch
+            if late.exists {
+                late.tap()
+                pause()
+                app.staticTexts["Sleep"].firstMatch.tap()
+                pause()
+                snapshot("04b Check-in - reason")
+                app.staticTexts["Save"].firstMatch.tap()
+                pause()
+            }
+        }
+        // And the one-tap prompt for the next pending prayer.
+        let onTime = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Prayed' AND label ENDSWITH 'on time'")).firstMatch
+        if onTime.waitForExistence(timeout: 2) {
+            onTime.tap()
             pause()
         }
         app.swipeUp()
         pause()
-        snapshot("04 Today - tracker and streak")
+        snapshot("04 Today - times and streak")
         app.swipeDown()
 
         // Quran
@@ -54,15 +72,24 @@ final class DemoTour: XCTestCase {
         pause(2)
         snapshot("08 Qibla")
 
-        // Prayer Lock
-        openTab("Focus")
+        // Journey
+        openTab("Journey")
         pause(2)
-        snapshot("09 Prayer Lock")
+        snapshot("09 Journey")
+        app.swipeUp()
+        pause()
+        snapshot("09b Journey - stats")
+        app.swipeDown()
 
         // Tasbih
         openTab("More")
         pause()
         snapshot("10 More")
+        app.staticTexts["Prayer Lock"].firstMatch.tap()
+        pause(1.5)
+        snapshot("10b Prayer Lock")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        pause()
         app.staticTexts["Tasbih"].firstMatch.tap()
         pause()
         let counter = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Count'")).firstMatch

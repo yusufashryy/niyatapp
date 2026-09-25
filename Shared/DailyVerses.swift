@@ -119,7 +119,7 @@ struct DailyVerse: Hashable {
                    arabic: "إِلَّا ٱلَّذِينَ ءَامَنُوا۟ وَعَمِلُوا۟ ٱلصَّٰلِحَٰتِ وَتَوَاصَوْا۟ بِٱلْحَقِّ وَتَوَاصَوْا۟ بِٱلصَّبْرِ",
                    english: "Except those who believe, and do good works, and encourage truth, and recommend patience."),
         DailyVerse(surah: 112, ayah: 1, surahName: "Al-Ikhlaas",
-                   arabic: "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ قُلْ هُوَ ٱللَّهُ أَحَدٌ",
+                   arabic: "قُلْ هُوَ ٱللَّهُ أَحَدٌ",
                    english: "Say, “He is Allah, the One."),
     ]
 }

@@ -10,14 +10,14 @@ final class AppModel {
     var prayerSettings: PrayerSettings
     var notificationSettings: NotificationSettings
     var hijriAdjustment: Int
-    private(set) var prayedLog: Set<String>
+    private(set) var records: [String: PrayerRecord]
 
     init() {
         location = SettingsStore.location
         prayerSettings = SettingsStore.prayerSettings
         notificationSettings = SettingsStore.notificationSettings
         hijriAdjustment = SettingsStore.hijriAdjustment
-        prayedLog = PrayerLog.load()
+        records = PrayerLog.load()
     }
 
     // MARK: Prayer times
@@ -72,19 +72,36 @@ final class AppModel {
         #endif
     }
 
-    // MARK: Prayer tracker
+    // MARK: Prayer journal
+
+    func record(for prayer: PrayerName, on day: Date) -> PrayerRecord? {
+        records[PrayerLog.key(prayer, on: day)]
+    }
+
+    /// Saves how a prayer went. Pass nil to clear it.
+    func setRecord(_ record: PrayerRecord?, for prayer: PrayerName, on day: Date) {
+        records[PrayerLog.key(prayer, on: day)] = record
+        PrayerLog.save(records)
+    }
 
     func isPrayed(_ prayer: PrayerName, on day: Date) -> Bool {
-        prayedLog.contains(PrayerLog.key(prayer, on: day))
+        record(for: prayer, on: day)?.status.countsAsPrayed ?? false
     }
 
-    func togglePrayed(_ prayer: PrayerName, on day: Date) {
-        let key = PrayerLog.key(prayer, on: day)
-        if prayedLog.contains(key) { prayedLog.remove(key) } else { prayedLog.insert(key) }
-        PrayerLog.save(prayedLog)
+    /// How many of the five prayers were performed on a day (0...5).
+    func prayedCount(on day: Date) -> Int {
+        PrayerName.obligatory.filter { isPrayed($0, on: day) }.count
     }
 
-    /// Consecutive days (up to today) with all five prayers ticked off.
+    /// The earliest prayer today whose time has come but that hasn't been logged yet.
+    func pendingCheckIn(at now: Date) -> PrayerTime? {
+        guard let schedule = schedule(for: now) else { return nil }
+        return schedule.times.first { time in
+            time.name.isObligatory && time.date <= now && record(for: time.name, on: schedule.day) == nil
+        }
+    }
+
+    /// Consecutive days (up to today) where every prayer was logged and none missed.
     /// Today counts once it's complete, but an unfinished today doesn't break the streak.
     func streak(asOf date: Date = .now) -> Int {
         let calendar = Calendar.current
@@ -98,12 +115,11 @@ final class AppModel {
         return count
     }
 
-    /// How many of the five prayers were ticked off on a day (0...5).
-    func prayedCount(on day: Date) -> Int {
-        PrayerName.obligatory.filter { isPrayed($0, on: day) }.count
+    func isComplete(_ day: Date) -> Bool {
+        PrayerName.obligatory.allSatisfy { record(for: $0, on: day)?.status.keepsStreak ?? false }
     }
 
-    private func isComplete(_ day: Date) -> Bool {
-        PrayerName.obligatory.allSatisfy { isPrayed($0, on: day) }
+    func stats(for days: [Date]) -> PrayerStats {
+        PrayerStats(records: records, days: days)
     }
 }

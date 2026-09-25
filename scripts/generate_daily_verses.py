@@ -31,9 +31,16 @@ def main() -> None:
     arabic = json.loads((QURAN / "quran-uthmani.json").read_text("utf-8"))
     english = json.loads((QURAN / "translation-en-clearquran.json").read_text("utf-8"))
     chapters = {c["id"]: c for c in json.loads((QURAN / "chapters.json").read_text("utf-8"))["chapters"]}
+    bismillah = arabic["1"][0]["text"].split(" ")
     lines = []
     for surah, ayah in CANDIDATES:
-        ar = arabic[str(surah)][ayah - 1]
+        ar = dict(arabic[str(surah)][ayah - 1])
+        # Verse 1 of most surahs starts with the Bismillah in this text; the app
+        # shows it as a header, so leave it out here (same rule as QuranStore).
+        if ayah == 1 and surah not in (1, 9):
+            words = ar["text"].split(" ")
+            if [w.replace("\u0651", "") for w in words[:4]] == [w.replace("\u0651", "") for w in bismillah]:
+                ar["text"] = " ".join(words[4:])
         en = english[str(surah)][ayah - 1]
         assert ar["verse"] == ayah and en["verse"] == ayah
         if len(en["text"]) > MAX_ENGLISH:

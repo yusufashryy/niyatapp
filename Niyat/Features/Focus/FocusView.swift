@@ -14,7 +14,7 @@ struct FocusView: View {
     @State private var manualMinutes = 30
 
     var body: some View {
-        NavigationStack {
+        Group {
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 Form {
                     FocusIntroSection()
@@ -147,7 +147,7 @@ struct FocusView: View {
 /// Shown when the app is built without Screen Time (free Apple account).
 struct FocusView: View {
     var body: some View {
-        NavigationStack {
+        Group {
             Form {
                 FocusIntroSection()
                 Section {

@@ -27,17 +27,31 @@ enum DemoMode {
         SettingsStore.notificationSettings = NotificationSettings()
         UserDefaults.standard.set(true, forKey: "hasOnboarded")
 
-        // Six full days plus this morning's prayers, for a streak.
+        // Five weeks of check-ins so the Journey calendar has something to show:
+        // mostly on time, a few late or missed Fajrs, and a six-day streak.
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: .now)
-        var log: Set<String> = []
-        for offset in 1...6 {
+        var records: [String: PrayerRecord] = [:]
+        for offset in 1...35 {
             guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { continue }
-            for prayer in PrayerName.obligatory { log.insert(PrayerLog.key(prayer, on: day)) }
+            for prayer in PrayerName.obligatory {
+                var record = PrayerRecord(status: .onTime)
+                if offset > 6 {
+                    switch (prayer, offset % 5) {
+                    case (.fajr, 0): record = PrayerRecord(status: .missed, reason: .sleep)
+                    case (.fajr, 2): record = PrayerRecord(status: .late, reason: .sleep)
+                    case (.asr, 3): record = PrayerRecord(status: .late, reason: .work)
+                    case (.isha, 4) where offset % 3 == 0: record = PrayerRecord(status: .missed, reason: .forgot)
+                    case (.dhuhr, 1) where offset % 2 == 0: record = PrayerRecord(status: .late, reason: .school)
+                    default: break
+                    }
+                }
+                records[PrayerLog.key(prayer, on: day)] = record
+            }
         }
-        log.insert(PrayerLog.key(.fajr, on: today))
-        log.insert(PrayerLog.key(.dhuhr, on: today))
-        PrayerLog.save(log)
+        records[PrayerLog.key(.fajr, on: today)] = PrayerRecord(status: .onTime)
+        records[PrayerLog.key(.dhuhr, on: today)] = PrayerRecord(status: .late, reason: .work)
+        PrayerLog.save(records)
 
         TasbihCounter.count = 21
         TasbihCounter.lifetimeCount = 1_254
