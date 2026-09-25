@@ -48,9 +48,7 @@ struct QiblaView: View {
                 }
                 .rotationEffect(.degrees(relative))
 
-                Image(systemName: "building.columns.fill")
-                    .font(.title)
-                    .foregroundStyle(isAligned ? Color.niyatiGold : .secondary)
+                KaabaIcon(highlighted: isAligned)
             }
             .frame(width: 300, height: 300)
             .animation(.easeOut(duration: 0.25), value: heading)
@@ -122,5 +120,24 @@ private struct CompassDial: View {
                     .rotationEffect(.degrees(Double(index) * 90))
             }
         }
+    }
+}
+
+/// A small drawing of the Kaaba: a black cube with its gold band (the Kiswah).
+private struct KaabaIcon: View {
+    let highlighted: Bool
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.black)
+            Rectangle()
+                .fill(Color.niyatiGold)
+                .frame(height: 4)
+                .padding(.top, 8)
+        }
+        .frame(width: 30, height: 32)
+        .shadow(color: highlighted ? Color.niyatiGold.opacity(0.8) : .clear, radius: 8)
+        .accessibilityLabel("Kaaba")
     }
 }

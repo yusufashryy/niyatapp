@@ -75,17 +75,24 @@ jobs:
           xcrun simctl status_bar "$SIMULATOR_ID" override \
             --time "$(TZ=Europe/London date +%H:%M)" --batteryState charged --batteryLevel 100 \
             --wifiBars 3 --cellularBars 4 || true
+          # Build first so the recording doesn't include minutes of compiling.
+          xcodebuild build-for-testing \
+            -project Niyati.xcodeproj \
+            -scheme Niyati \
+            -destination "id=$SIMULATOR_ID" \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify --renderer github-actions
           xcrun simctl io "$SIMULATOR_ID" recordVideo --codec=h264 --force demo/demo.mp4 &
           RECORDER=$!
           sleep 3
-          xcodebuild test \
+          xcodebuild test-without-building \
             -project Niyati.xcodeproj \
             -scheme Niyati \
             -destination "id=$SIMULATOR_ID" \
             -only-testing:NiyatiUITests \
             -parallel-testing-enabled NO \
             -resultBundlePath demo/tour.xcresult \
-            -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify --renderer github-actions || STATUS=$?
           sleep 2

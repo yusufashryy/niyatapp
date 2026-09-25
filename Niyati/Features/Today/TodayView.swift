@@ -48,7 +48,7 @@ struct TodayView: View {
                 StreakCard(streak: model.streak(asOf: now))
 
                 if let location = model.location {
-                    Text("\(model.prayerSettings.method.title) · Asr: \(model.prayerSettings.madhab == .hanafi ? "Hanafi" : "Standard") · \(location.name)")
+                    Text("\(model.prayerSettings.method.title) · Asr: \(model.prayerSettings.madhab.title) · \(location.name)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -72,11 +72,10 @@ struct TodayView: View {
                 Text("Next: \(next.name.displayName(on: next.date))")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(Color.niyatiGold)
-                Text(next.date, style: .timer)
+                Text(next.date.shortTime)
                     .font(.system(size: 48, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                Text("at \(next.date.shortTime)")
+                (Text("in ") + Text(next.date, style: .timer))
+                    .font(.title3.monospacedDigit())
                     .foregroundStyle(.white.opacity(0.85))
             }
 
@@ -112,24 +111,27 @@ private struct PrayerRow: View {
                 .foregroundStyle(isCurrent || isNext ? Color.niyatiGold : Color.niyatiGreen)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(time.name.displayName(on: time.date))
-                    .font(.body.weight(isCurrent ? .bold : .regular))
+                HStack(spacing: 6) {
+                    Text(time.name.displayName(on: time.date))
+                        .font(.body.weight(isCurrent ? .bold : .regular))
+                    if isNext {
+                        Text("NEXT")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.niyatiGold.opacity(0.25), in: .capsule)
+                    }
+                }
                 Text(time.name.arabicName)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Spacer()
-
-            if isNext {
-                Text("NEXT")
-                    .font(.caption2.bold())
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Color.niyatiGold.opacity(0.25), in: .capsule)
-            }
+            Spacer(minLength: 4)
 
             Text(time.date.shortTime)
                 .font(.body.monospacedDigit().weight(isCurrent ? .bold : .regular))
+                .lineLimit(1)
+                .fixedSize()
 
             notificationButton
 

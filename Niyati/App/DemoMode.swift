@@ -40,6 +40,7 @@ enum DemoMode {
         PrayerLog.save(log)
 
         TasbihCounter.count = 21
+        TasbihCounter.lifetimeCount = 1_254
         TasbihCounter.target = 33
         TasbihCounter.dhikr = .subhanAllah
     }
