@@ -1,6 +1,15 @@
 # Generates Niyat.xcodeproj from project.yml. Needs XcodeGen: `brew install xcodegen`.
 
-.PHONY: project full open verses clean
+.PHONY: setup project full open update verses clean
+
+# First time: finds your team ID, writes Config/Local.xcconfig, opens Xcode.
+setup:
+	./scripts/setup.sh
+
+# Get the latest changes and rebuild the project.
+update:
+	git pull
+	$(MAKE) project
 
 # Free Apple ID: everything except Prayer Lock.
 project:

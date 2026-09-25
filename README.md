@@ -57,27 +57,17 @@ iOS apps can only be built on a **Mac** with **Xcode** installed. There's no way
    XcodeGen builds the Xcode project from `project.yml`, so the repo never has to store Xcode's messy project files.
 4. In Xcode › Settings › Accounts, sign in with your Apple ID.
 
-### 2. Get the code and set up signing
+### 2. Get the code and set it up
 
 ```sh
 git clone https://github.com/yusufashryy/niyatapp.git
 cd niyatapp
-cp Config/Local.xcconfig.example Config/Local.xcconfig
-open -e Config/Local.xcconfig
+make setup
 ```
 
-In `Local.xcconfig` set:
-- `DEVELOPMENT_TEAM`: your team ID. In Xcode › Settings › Accounts, select your Apple ID. The team ID is the 10-character code shown for your team (for a free account, "(Personal Team)").
-- `BUNDLE_ID_PREFIX`: something unique to you, e.g. `com.yourname`. App IDs are global across all Apple accounts, so the default one will already be taken.
+`make setup` finds your Apple team ID, asks for an app ID prefix (the suggestion is fine), writes `Config/Local.xcconfig` and opens the project in Xcode. If you have a paid developer account, run `make full` afterwards to add Prayer Lock.
 
-### 3. Build
-
-```sh
-make          # free Apple ID: everything except Prayer Lock
-# or
-make full     # paid developer account: adds Prayer Lock + Time Sensitive alerts
-make open
-```
+### 3. Run it on your iPhone
 
 In Xcode, plug in your iPhone (or pick it from the device list at the top), then press **▶ Run**. The first time, your iPhone will ask you to:
 - turn on **Developer Mode** (Settings › Privacy & Security › Developer Mode), and
@@ -87,7 +77,7 @@ In Xcode, plug in your iPhone (or pick it from the device list at the top), then
 > - **Free Apple ID**: everything except Prayer Lock works. Apple makes free-account apps expire after **7 days**, so you'll need to press Run again from Xcode once a week.
 > - **Paid Apple Developer Program ($99/year)**: apps last a year, you get Prayer Lock (Apple only gives the Screen Time permission to paid accounts), and you could publish to the App Store for everyone.
 
-Whenever you pull new changes or edit `project.yml`, run `make` (or `make full`) again.
+To get the latest changes: `make update`, then press Run in Xcode. Tip: in Xcode › Window › Devices and Simulators, select your iPhone and tick **Connect via network** so you don't need the cable.
 
 ## How it's built
 
