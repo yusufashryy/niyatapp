@@ -1,0 +1,60 @@
+name: Build & Test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.variant }}
+    runs-on: macos-15
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # basic = free Apple ID build, full = with Prayer Lock (Screen Time)
+        variant: [basic, full]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: make ${{ matrix.variant == 'full' && 'full' || 'project' }}
+
+      - name: Check Prayer Lock targets are ${{ matrix.variant == 'full' && 'included' || 'left out' }}
+        run: |
+          if grep -q "FocusMonitor" Salah.xcodeproj/project.pbxproj; then has=yes; else has=no; fi
+          echo "Prayer Lock targets present: $has"
+          [ "$has" = "${{ matrix.variant == 'full' && 'yes' || 'no' }}" ]
+
+      - name: Pick an iPhone simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          for runtime in sorted(devices, reverse=True):
+              if "iOS" in runtime:
+                  for d in devices[runtime]:
+                      if d["name"].startswith("iPhone"):
+                          print(d["udid"]); sys.exit()
+          ')
+          echo "Using simulator $UDID"
+          echo "SIMULATOR_ID=$UDID" >> "$GITHUB_ENV"
+
+      - name: Build and test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Salah.xcodeproj \
+            -scheme Salah \
+            -destination "id=$SIMULATOR_ID" \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify --renderer github-actions
