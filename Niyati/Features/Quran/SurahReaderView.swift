@@ -100,7 +100,6 @@ private struct VerseRow: View {
                 .lineSpacing(arabicSize * 0.35)
                 .multilineTextAlignment(.trailing)
                 .frame(maxWidth: .infinity, alignment: .trailing)
-                .environment(\.layoutDirection, .rightToLeft)
 
             if showTranslation, !verse.translation.isEmpty {
                 Text(verse.translation)

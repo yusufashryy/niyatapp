@@ -76,14 +76,14 @@ final class PrayerCalculatorTests: XCTestCase {
         settings.method = .recommended(forCountryCode: nil)
         XCTAssertEqual(settings.method.title, "Muslim World League")
         settings.madhab = .recommended(forCountryCode: "PK")
-        XCTAssertEqual(settings.madhab.title, "Hanafi (later Asr)")
+        XCTAssertEqual(settings.madhab.title, "Hanafi")
     }
 
     func testOldSettingsStillDecode() throws {
         let json = #"{"method":"egyptian"}"#.data(using: .utf8)!
         let settings = try JSONDecoder().decode(PrayerSettings.self, from: json)
         XCTAssertEqual(settings.method.title, "Egyptian General Authority")
-        XCTAssertEqual(settings.madhab.title, "Standard (Shafi'i, Maliki, Hanbali)")
+        XCTAssertEqual(settings.madhab.title, "Standard")
         XCTAssertEqual(settings.highLatitude, .automatic)
     }
 

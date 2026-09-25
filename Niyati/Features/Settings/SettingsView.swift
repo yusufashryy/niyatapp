@@ -28,6 +28,7 @@ struct SettingsView: View {
                         Text(method.title).tag(method)
                     }
                 }
+                .pickerStyle(.navigationLink)
                 Picker("Asr time", selection: $model.prayerSettings.madhab) {
                     ForEach(Madhab.allCases, id: \.self) { madhab in
                         Text(madhab.title).tag(madhab)
@@ -42,7 +43,7 @@ struct SettingsView: View {
             } header: {
                 Text("Calculation")
             } footer: {
-                Text("Different communities use different methods. If times don't match your local mosque, try another method or adjust them manually.")
+                Text("Different communities use different methods. If times don't match your local mosque, try another method or adjust them manually. Hanafi Asr starts later than the Standard (Shafi'i, Maliki, Hanbali) time.")
             }
 
             Section {

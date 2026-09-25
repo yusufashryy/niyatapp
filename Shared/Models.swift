@@ -195,8 +195,8 @@ extension CalculationMethod {
 extension Madhab {
     var title: String {
         switch self {
-        case .shafi: "Standard (Shafi'i, Maliki, Hanbali)"
-        case .hanafi: "Hanafi (later Asr)"
+        case .shafi: "Standard"
+        case .hanafi: "Hanafi"
         }
     }
 
