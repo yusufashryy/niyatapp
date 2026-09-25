@@ -79,7 +79,7 @@ final class DemoTour: XCTestCase {
         openTab("More")
         pause()
         snapshot("10 More")
-        app.buttons["Tasbih"].firstMatch.tap()
+        app.staticTexts["Tasbih"].firstMatch.tap()
         pause()
         let counter = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Count'")).firstMatch
         if counter.waitForExistence(timeout: 2) {
@@ -94,7 +94,7 @@ final class DemoTour: XCTestCase {
         pause()
 
         // Settings
-        app.buttons["Settings"].firstMatch.tap()
+        app.staticTexts["Settings"].firstMatch.tap()
         pause(1.5)
         snapshot("12 Settings")
         app.swipeUp()
@@ -103,7 +103,7 @@ final class DemoTour: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap()
         pause()
 
-        app.buttons["About & credits"].firstMatch.tap()
+        app.staticTexts["About & credits"].firstMatch.tap()
         pause(1.5)
         snapshot("14 About")
     }

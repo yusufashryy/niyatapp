@@ -98,6 +98,9 @@ jobs:
           for test in json.loads((raw / "manifest.json").read_text()):
               for a in test.get("attachments", []):
                   name = a.get("suggestedHumanReadableName") or a["exportedFileName"]
+                  # Keep only our numbered screenshots ("03 Today"), not Xcode's automatic attachments.
+                  if not name[:2].isdigit():
+                      continue
                   name = name.split("_0_")[0].replace("/", "-")
                   if not name.endswith(".png"):
                       name += ".png"
@@ -115,7 +118,7 @@ jobs:
       # Also keep the latest demo on a separate branch (no shared history with
       # the code) so screenshots can be linked from the README.
       - name: Publish demo to the demo-media branch
-        if: matrix.variant == 'full' && github.event_name == 'push' && !startsWith(github.ref_name, 'dependabot/')
+        if: always() && matrix.variant == 'full' && github.event_name == 'push' && !startsWith(github.ref_name, 'dependabot/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
