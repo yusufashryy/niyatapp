@@ -65,16 +65,11 @@ struct CheckInSheet: View {
                                 reasonButton(option)
                             }
                         }
-                        Button {
-                            save(PrayerRecord(status: status, reason: reason))
-                        } label: {
-                            Text("Save")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 4)
+                        Button("Save without a reason") {
+                            save(PrayerRecord(status: status, reason: nil))
                         }
-                        .buttonStyle(.glass)
-                        .controlSize(.large)
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
                         .padding(.top, 4)
                     }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -138,7 +133,9 @@ struct CheckInSheet: View {
 
     private func reasonButton(_ option: MissReason) -> some View {
         Button {
-            reason = reason == option ? nil : option
+            // Picking a reason saves straight away: one tap, no hunting for a Save button.
+            reason = option
+            if let status { save(PrayerRecord(status: status, reason: option)) }
         } label: {
             Label(option.title, systemImage: option.symbolName)
                 .font(.subheadline.weight(.semibold))
