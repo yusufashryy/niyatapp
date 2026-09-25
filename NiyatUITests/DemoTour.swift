@@ -49,22 +49,6 @@ final class DemoTour: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap()
         pause()
 
-        let search = app.searchFields.firstMatch
-        if search.waitForExistence(timeout: 2) {
-            search.tap()
-            search.typeText("Yaseen")
-            pause()
-            app.staticTexts["Yaseen"].firstMatch.tap()
-            pause(2)
-            app.swipeUp()
-            pause()
-            snapshot("07 Quran - Yaseen")
-            app.navigationBars.buttons.element(boundBy: 0).tap()
-            pause()
-            let cancel = app.buttons["Cancel"]
-            if cancel.exists { cancel.tap() }
-        }
-
         // Qibla
         openTab("Qibla")
         pause(2)
