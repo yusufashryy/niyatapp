@@ -23,7 +23,7 @@ jobs:
         # basic = free Apple ID build, full = with Prayer Lock (Screen Time)
         variant: [basic, full]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - run: mkdir -p demo
 
