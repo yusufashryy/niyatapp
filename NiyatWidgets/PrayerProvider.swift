@@ -45,10 +45,12 @@ struct PrayerProvider: TimelineProvider {
     func placeholder(in context: Context) -> PrayerEntry { .preview }
 
     func getSnapshot(in context: Context, completion: @escaping (PrayerEntry) -> Void) {
+        ThemeManager.shared.reload()
         completion(context.isPreview && SettingsStore.location == nil ? .preview : .make(at: .now))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<PrayerEntry>) -> Void) {
+        ThemeManager.shared.reload()
         let now = Date()
         guard let location = SettingsStore.location else {
             completion(Timeline(entries: [.make(at: now)], policy: .after(now.addingTimeInterval(3600))))

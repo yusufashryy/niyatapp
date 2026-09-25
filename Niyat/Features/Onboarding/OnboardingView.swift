@@ -5,6 +5,7 @@ struct OnboardingView: View {
     let onFinish: () -> Void
 
     @State private var step = 0
+    @State private var spin = false
 
     var body: some View {
         ZStack {
@@ -32,22 +33,33 @@ struct OnboardingView: View {
         VStack(spacing: 22) {
             Text("بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ")
                 .font(.quran(size: 30))
-                .foregroundStyle(Palette.gold)
-            Image(systemName: "moon.stars.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(Palette.gold)
-                .frame(width: 120, height: 120)
-                .glassEffect(.regular.tint(Palette.deepEmerald.opacity(0.5)), in: .circle)
-            VStack(spacing: 8) {
-                Text("Niyat").font(.display(48, weight: .heavy))
-                Text("نيّة · intention")
+                .foregroundStyle(Palette.highlight)
+            ZStack {
+                Rosette(color: Palette.highlight.opacity(0.35), lineWidth: 1.2)
+                    .frame(width: 230, height: 230)
+                    .rotationEffect(.degrees(spin ? 360 : 0))
+                    .animation(.linear(duration: 90).repeatForever(autoreverses: false), value: spin)
+                Image(systemName: "moon.stars.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(Palette.highlight)
+                    .frame(width: 120, height: 120)
+                    .glassEffect(.regular.tint(Palette.glow.opacity(0.5)), in: .circle)
+            }
+            .onAppear { spin = true }
+            VStack(spacing: 4) {
+                Text("نيّة")
+                    .font(.calligraphy(size: 54))
+                    .foregroundStyle(Palette.highlight)
+                Text("Niyat").font(.display(44, weight: .heavy))
+                Text("intention")
                     .font(.headline)
-                    .foregroundStyle(Palette.emerald)
+                    .foregroundStyle(Palette.accent)
             }
             Text("Prayer times, Quran, Qibla and more. Free forever. No ads, no accounts, no tracking.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white.opacity(0.75))
             primaryButton("Get started") { step = 1 }
+                .haptic(.impact(weight: .medium), trigger: step)
         }
     }
 
@@ -90,9 +102,9 @@ struct OnboardingView: View {
     private func stepIcon(_ name: String) -> some View {
         Image(systemName: name)
             .font(.system(size: 40, weight: .semibold))
-            .foregroundStyle(Palette.gold)
+            .foregroundStyle(Palette.highlight)
             .frame(width: 96, height: 96)
-            .glassEffect(.regular.tint(Palette.deepEmerald.opacity(0.5)), in: .circle)
+            .glassEffect(.regular.tint(Palette.glow.opacity(0.5)), in: .circle)
     }
 
     private func primaryButton(_ title: String, action: @escaping () -> Void) -> some View {
@@ -104,7 +116,7 @@ struct OnboardingView: View {
                 .padding(.vertical, 6)
         }
         .buttonStyle(.glassProminent)
-        .tint(Palette.gold)
+        .tint(Palette.highlight)
         .controlSize(.extraLarge)
     }
 }

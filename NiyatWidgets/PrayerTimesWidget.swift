@@ -43,7 +43,7 @@ struct PrayerTimesView: View {
                         .foregroundStyle(.white.opacity(0.7))
                     Text(next.name.displayName(on: next.date))
                         .font(.title3.bold())
-                        .foregroundStyle(Palette.gold)
+                        .foregroundStyle(Palette.highlight)
                     Text(next.date, style: .relative)
                         .font(.caption)
                 }
@@ -80,7 +80,7 @@ struct PrayerTimesView: View {
                     VStack(alignment: .trailing) {
                         Text(next.name.displayName(on: next.date))
                             .font(.headline)
-                            .foregroundStyle(Palette.gold)
+                            .foregroundStyle(Palette.highlight)
                         Text(next.date, style: .relative).font(.caption)
                     }
                 }
@@ -101,7 +101,7 @@ struct PrayerTimesView: View {
             if showIcon {
                 Image(systemName: time.name.symbolName)
                     .frame(width: 24)
-                    .foregroundStyle(Palette.gold)
+                    .foregroundStyle(Palette.highlight)
             }
             Text(time.name.displayName(on: time.date))
             Spacer()
@@ -110,7 +110,7 @@ struct PrayerTimesView: View {
         .font(.caption.weight(isNext ? .bold : .regular))
         .padding(.horizontal, 8)
         .padding(.vertical, showIcon ? 6 : 2)
-        .background(isNext ? Palette.emerald.opacity(0.25) : .clear, in: .rect(cornerRadius: 6))
+        .background(isNext ? Palette.accent.opacity(0.25) : .clear, in: .rect(cornerRadius: 6))
     }
 }
 

@@ -32,7 +32,11 @@ struct NextPrayerView: View {
         }
         .containerBackground(for: .widget) {
             if family == .systemSmall {
-                WidgetBackground()
+                if let next = entry.next {
+                    PrayerSky(prayer: next.name)
+                } else {
+                    WidgetBackground()
+                }
             } else {
                 Color.clear
             }
@@ -43,16 +47,16 @@ struct NextPrayerView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Image(systemName: next.name.symbolName)
-                    .foregroundStyle(Palette.gold)
+                    .foregroundStyle(Color.white)
                 Spacer()
                 Text(next.name.arabicName)
-                    .font(.quran(size: 15))
-                    .foregroundStyle(.white.opacity(0.8))
+                    .font(.calligraphy(size: 20))
+                    .foregroundStyle(.white)
             }
             Spacer(minLength: 0)
             Text(next.name.displayName(on: next.date))
                 .font(.headline)
-                .foregroundStyle(Palette.gold)
+                .foregroundStyle(Color.white)
             Text(next.date.shortTime)
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .minimumScaleFactor(0.7)

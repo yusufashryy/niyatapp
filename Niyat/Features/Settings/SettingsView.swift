@@ -4,10 +4,30 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @State private var notificationsAuthorized = true
+    @AppStorage(Haptics.settingKey) private var hapticsEnabled = true
 
     var body: some View {
         @Bindable var model = model
         Form {
+            Section("Appearance") {
+                NavigationLink {
+                    ThemePickerView()
+                } label: {
+                    LabeledContent {
+                        HStack(spacing: 6) {
+                            Circle().fill(Palette.accent).frame(width: 12, height: 12)
+                            Circle().fill(Palette.highlight).frame(width: 12, height: 12)
+                            Text(ThemeManager.shared.theme.name)
+                        }
+                    } label: {
+                        Label("Theme", systemImage: "paintpalette.fill")
+                    }
+                }
+                Toggle(isOn: $hapticsEnabled) {
+                    Label("Haptics", systemImage: "hand.tap.fill")
+                }
+            }
+
             Section("Location") {
                 NavigationLink {
                     LocationSettingsView()

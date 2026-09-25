@@ -34,8 +34,8 @@ final class ShieldConfigurationExtension: ShieldConfigurationDataSource {
             subtitle += "\n\nUnlocks at \(until.shortTime). Prayed already? Open Niyat and tap “I've prayed”."
         }
 
-        let background = UIColor(Palette.deepEmerald)
-        let gold = UIColor(Palette.gold)
+        let background = UIColor(Palette.glow)
+        let gold = UIColor(Palette.highlight)
 
         return ShieldConfiguration(
             backgroundBlurStyle: .systemUltraThinMaterialDark,

@@ -10,6 +10,7 @@ require them to stay exactly as published.
 | `Niyat/Resources/Quran/chapters.json` | Surah names and verse counts | Tanzil `quran-data.xml`, via risan/quran-json (`data/tanzil/chapters.json`) | CC BY 3.0 |
 | `Niyat/Resources/Quran/translation-en-clearquran.json` | English translation | *Translation by Talal Itani, ClearQuran.com* ("Allah" edition), via risan/quran-json (`data/extra/english_itani_allah.json`, sha256 `2e5d4d9f…250ed`) | [CC BY-ND 4.0](https://blog.clearquran.com/download): free to use and share, including commercially, unmodified, with credit |
 | `Niyat/Resources/Fonts/AmiriQuran-Regular.ttf` | Amiri Quran font | [aliftype/amiri](https://github.com/aliftype/amiri), via google/fonts | SIL Open Font License 1.1 (`AmiriQuran-OFL.txt`) |
+| `Niyat/Resources/Fonts/ArefRuqaa-Bold.ttf` | Aref Ruqaa calligraphy font (headings, art) | [alif-type/aref-ruqaa](https://github.com/alif-type/aref-ruqaa), via google/fonts | SIL Open Font License 1.1 (`ArefRuqaa-OFL.txt`) |
 | `Shared/DailyVerses.swift` | Verses for the Verse of the Day widget | Generated verbatim from the two files above by `scripts/generate_daily_verses.py` | As above |
 | Swift package `Adhan` | Prayer time calculation | [batoulapps/adhan-swift](https://github.com/batoulapps/adhan-swift) | MIT |
 

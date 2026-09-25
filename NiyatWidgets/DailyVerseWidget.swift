@@ -12,10 +12,12 @@ struct VerseProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (VerseEntry) -> Void) {
+        ThemeManager.shared.reload()
         completion(VerseEntry(date: .now, verse: .forDay(.now)))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<VerseEntry>) -> Void) {
+        ThemeManager.shared.reload()
         let now = Date()
         let calendar = Calendar.current
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? now.addingTimeInterval(86_400)
@@ -68,7 +70,7 @@ struct DailyVerseView: View {
                     Spacer(minLength: 0)
                     Text(entry.verse.reference)
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Palette.gold)
+                        .foregroundStyle(Palette.highlight)
                 }
                 .foregroundStyle(.white)
             }

@@ -25,7 +25,7 @@ struct LocationPickerView: View {
                 .padding(.vertical, 6)
             }
             .buttonStyle(.glassProminent)
-            .tint(Palette.emerald)
+            .tint(Palette.accent)
             .controlSize(.extraLarge)
             .disabled(isLocating)
 
@@ -54,7 +54,7 @@ struct LocationPickerView: View {
                     onPick(result)
                 } label: {
                     HStack {
-                        Image(systemName: "mappin.circle.fill").foregroundStyle(Palette.emerald)
+                        Image(systemName: "mappin.circle.fill").foregroundStyle(Palette.accent)
                         Text(result.name)
                             .foregroundStyle(.white)
                             .multilineTextAlignment(.leading)
@@ -66,7 +66,7 @@ struct LocationPickerView: View {
                     .padding(14)
                     .surface(cornerRadius: 18)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
             }
         }
     }

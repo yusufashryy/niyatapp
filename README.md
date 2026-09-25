@@ -41,6 +41,8 @@ Built with Apple's **Liquid Glass** design on iOS 26 and 27: a dark, high-contra
 | ✅ **Prayer tracker** | Tick off each prayer and build a streak. |
 | 📿 **Tasbih** | Dhikr counter with targets (33/99/100…) and haptics. |
 | 🌙 **Hijri date** | With ±2 day adjustment to match local moon sighting. |
+| 🎨 **Themes** | Six colour themes (Midnight, Emerald, Desert, Amethyst, Maghrib, Onyx) or pick your own colours. Widgets follow your theme. |
+| ✨ **Arabesque art** | Geometric Islamic star patterns, Ruqʿah calligraphy and sky scenes for each prayer, with haptics and smooth animations throughout (haptics can be turned off). |
 
 ## Running it on your iPhone
 
@@ -133,5 +135,5 @@ The app's code is under the [MIT License](LICENSE). Bundled content keeps its ow
 
 - Quran text: [Tanzil Project](https://tanzil.net), CC BY 3.0 (verbatim, unmodified)
 - English translation: Talal Itani, [ClearQuran.com](https://clearquran.com), CC BY-ND 4.0
-- Font: [Amiri Quran](https://github.com/aliftype/amiri), SIL Open Font License 1.1
+- Fonts: [Amiri Quran](https://github.com/aliftype/amiri) and [Aref Ruqaa](https://github.com/alif-type/aref-ruqaa), SIL Open Font License 1.1
 - Prayer times: [Adhan](https://github.com/batoulapps/adhan-swift), MIT

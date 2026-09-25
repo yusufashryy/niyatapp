@@ -39,10 +39,12 @@ struct TasbihProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (TasbihEntry) -> Void) {
+        ThemeManager.shared.reload()
         completion(.current)
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<TasbihEntry>) -> Void) {
+        ThemeManager.shared.reload()
         completion(Timeline(entries: [.current], policy: .never))
     }
 }

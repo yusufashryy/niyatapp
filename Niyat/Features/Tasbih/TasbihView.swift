@@ -20,17 +20,28 @@ struct TasbihView: View {
         ScrollView {
             VStack(spacing: 26) {
                 dhikrPicker
+                    .appearAnimation(0)
 
                 VStack(spacing: 6) {
                     Text(dhikr.arabic)
                         .font(.quran(size: 38))
-                        .foregroundStyle(Palette.gold)
+                        .foregroundStyle(Palette.highlight)
+                        .contentTransition(.opacity)
+                        .id(dhikr)
+                        .transition(.blurReplace)
                     Text(dhikr.meaning)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.top, 8)
 
-                counterButton
+                ZStack {
+                    Rosette(color: Palette.highlight.opacity(0.18), lineWidth: 1)
+                        .frame(width: 350, height: 350)
+                        .rotationEffect(.degrees(Double(count) * 2))
+                        .animation(.smooth(duration: 0.6), value: count)
+                    counterButton
+                }
+                .appearAnimation(1)
 
                 GlassEffectContainer(spacing: 12) {
                     HStack(spacing: 12) {
@@ -59,6 +70,7 @@ struct TasbihView: View {
             .padding(16)
         }
         .niyatBackground()
+        .haptic(.selection, trigger: dhikr)
         .navigationTitle("Tasbih")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: target) { _, new in TasbihCounter.target = new }
@@ -75,7 +87,7 @@ struct TasbihView: View {
                 HStack(spacing: 8) {
                     ForEach(Dhikr.allCases) { option in
                         Button {
-                            dhikr = option
+                            withAnimation(.smooth) { dhikr = option }
                             TasbihCounter.dhikr = option
                             reset()
                         } label: {
@@ -84,10 +96,10 @@ struct TasbihView: View {
                                 .foregroundStyle(option == dhikr ? Color.black : Color.white)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 9)
-                                .glassEffect(option == dhikr ? .regular.tint(Palette.emerald).interactive() : .regular.interactive(),
+                                .glassEffect(option == dhikr ? .regular.tint(Palette.accent).interactive() : .regular.interactive(),
                                              in: .capsule)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressable)
                     }
                 }
                 .padding(.horizontal, 2)
@@ -105,11 +117,11 @@ struct TasbihView: View {
                         .padding(14)
                     Circle()
                         .trim(from: 0, to: progress)
-                        .stroke(LinearGradient(colors: [Palette.emerald, Palette.gold], startPoint: .top, endPoint: .bottom),
+                        .stroke(LinearGradient(colors: [Palette.accent, Palette.highlight], startPoint: .top, endPoint: .bottom),
                                 style: StrokeStyle(lineWidth: 10, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                         .padding(14)
-                        .shadow(color: Palette.emerald.opacity(0.6), radius: 8)
+                        .shadow(color: Palette.accent.opacity(0.6), radius: 8)
                 }
                 VStack(spacing: 2) {
                     Text("\(count)")
@@ -126,9 +138,9 @@ struct TasbihView: View {
             .contentShape(.circle)
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.tint(Palette.deepEmerald.opacity(0.6)).interactive(), in: .circle)
-        .sensoryFeedback(.impact(weight: .light), trigger: count)
-        .sensoryFeedback(.success, trigger: count) { _, new in target > 0 && new > 0 && new % target == 0 }
+        .glassEffect(.regular.tint(Palette.glow.opacity(0.6)).interactive(), in: .circle)
+        .haptic(.impact(weight: .medium, intensity: 0.8), trigger: count)
+        .haptic(.success, trigger: count) { _, new in target > 0 && new > 0 && new % target == 0 }
         .accessibilityLabel("Count. \(count)")
     }
 

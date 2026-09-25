@@ -50,7 +50,7 @@ targets:
         UILaunchScreen:
           UIColorName: LaunchBackground
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        UIAppFonts: [AmiriQuran-Regular.ttf]
+        UIAppFonts: [AmiriQuran-Regular.ttf, ArefRuqaa-Bold.ttf]
         UIBackgroundModes: [fetch]
         BGTaskSchedulerPermittedIdentifiers: [$(PRODUCT_BUNDLE_IDENTIFIER).refresh]
         NSLocationWhenInUseUsageDescription: Niyat uses your location to calculate accurate prayer times and the Qibla direction. Your location never leaves your phone.
@@ -76,6 +76,8 @@ targets:
       - path: Shared
       - path: Niyat/Resources/Fonts/AmiriQuran-Regular.ttf
         buildPhase: resources
+      - path: Niyat/Resources/Fonts/ArefRuqaa-Bold.ttf
+        buildPhase: resources
     dependencies:
       - package: Adhan
       - sdk: WidgetKit.framework
@@ -86,7 +88,7 @@ targets:
         CFBundleDisplayName: Niyat Widgets
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        UIAppFonts: [AmiriQuran-Regular.ttf]
+        UIAppFonts: [AmiriQuran-Regular.ttf, ArefRuqaa-Bold.ttf]
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
         NiyatAppGroup: $(APP_GROUP_ID)

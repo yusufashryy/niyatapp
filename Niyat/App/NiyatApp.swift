@@ -15,7 +15,6 @@ struct NiyatApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
-                .tint(Palette.emerald)
                 .preferredColorScheme(.dark)
         }
         .backgroundTask(.appRefresh(BackgroundRefresh.identifier)) {
@@ -33,10 +32,16 @@ struct RootView: View {
         Group {
             if hasOnboarded, model.location != nil {
                 MainTabView()
+                    .transition(.opacity.combined(with: .scale(scale: 1.03)))
             } else {
-                OnboardingView { hasOnboarded = true }
+                OnboardingView {
+                    withAnimation(.smooth(duration: 0.6)) { hasOnboarded = true }
+                }
+                .transition(.opacity)
             }
         }
+        // Reading Palette here means the whole app re-tints when the theme changes.
+        .tint(Palette.accent)
         .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
             case .active: model.refresh()
@@ -64,5 +69,6 @@ struct MainTabView: View {
             Tab("More", systemImage: "circle.grid.2x2.fill", value: .more) { MoreView() }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        .haptic(.selection, trigger: selection)
     }
 }
