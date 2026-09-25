@@ -116,9 +116,9 @@ If you know Luau: a SwiftUI `View` is like a component whose `body` describes th
 
 ### Tests
 
-Every push is built and tested by GitHub Actions on macOS 27 with Xcode 27 (`.github/workflows/build.yml`), in both the free and paid variants. The latest demo video and screenshots are on the [`demo-media`](https://github.com/yusufashryy/niyatapp/tree/demo-media) branch. Locally: press ⌘U in Xcode.
+Every push is built and tested by GitHub Actions on macOS 27 with Xcode 27 (`.github/workflows/build.yml`), in both the free and paid variants. The latest screenshots are on the [`demo-media`](https://github.com/yusufashryy/niyatapp/tree/demo-media) branch. Locally: press ⌘U in Xcode.
 
-The `full` build also runs `NiyatUITests/DemoTour.swift`, which taps through every screen in a simulator and uploads a screen recording and screenshots as a build artifact named **demo**.
+The `full` build also runs `NiyatUITests/DemoTour.swift`, which taps through every screen in a simulator and saves a screenshot of each (build artifact **demo**, also published to the `demo-media` branch).
 
 ## Known limitations
 
