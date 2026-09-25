@@ -20,7 +20,9 @@ jobs:
         # basic = free Apple ID build, full = with Prayer Lock (Screen Time)
         variant: [basic, full]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - run: mkdir -p demo
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -30,7 +32,7 @@ jobs:
 
       - name: Check Prayer Lock targets are ${{ matrix.variant == 'full' && 'included' || 'left out' }}
         run: |
-          if grep -q "FocusMonitor" Salah.xcodeproj/project.pbxproj; then has=yes; else has=no; fi
+          if grep -q "FocusMonitor" Niyati.xcodeproj/project.pbxproj; then has=yes; else has=no; fi
           echo "Prayer Lock targets present: $has"
           [ "$has" = "${{ matrix.variant == 'full' && 'yes' || 'no' }}" ]
 
@@ -48,13 +50,68 @@ jobs:
           echo "Using simulator $UDID"
           echo "SIMULATOR_ID=$UDID" >> "$GITHUB_ENV"
 
-      - name: Build and test
+      - name: Build and run unit tests
         run: |
           set -o pipefail
           xcodebuild test \
-            -project Salah.xcodeproj \
-            -scheme Salah \
+            -project Niyati.xcodeproj \
+            -scheme Niyati \
             -destination "id=$SIMULATOR_ID" \
+            -only-testing:NiyatiTests \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify --renderer github-actions
+
+      # Demo: tap through every screen while recording the simulator.
+      - name: Record demo tour
+        if: matrix.variant == 'full'
+        run: |
+          set -o pipefail
+          xcrun simctl boot "$SIMULATOR_ID" || true
+          xcrun simctl bootstatus "$SIMULATOR_ID" -b
+          xcrun simctl status_bar "$SIMULATOR_ID" override \
+            --time "$(TZ=Europe/London date +%H:%M)" --batteryState charged --batteryLevel 100 \
+            --wifiBars 3 --cellularBars 4 || true
+          xcrun simctl io "$SIMULATOR_ID" recordVideo --codec=h264 --force demo/demo.mp4 &
+          RECORDER=$!
+          sleep 3
+          xcodebuild test \
+            -project Niyati.xcodeproj \
+            -scheme Niyati \
+            -destination "id=$SIMULATOR_ID" \
+            -only-testing:NiyatiUITests \
+            -parallel-testing-enabled NO \
+            -resultBundlePath demo/tour.xcresult \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify --renderer github-actions || STATUS=$?
+          sleep 2
+          kill -INT $RECORDER; wait $RECORDER || true
+          exit ${STATUS:-0}
+
+      - name: Export demo screenshots
+        if: always() && matrix.variant == 'full'
+        run: |
+          mkdir -p demo/screenshots
+          xcrun xcresulttool export attachments --path demo/tour.xcresult --output-path demo/raw
+          python3 - <<'PY'
+          import json, pathlib, shutil
+          raw = pathlib.Path("demo/raw")
+          for test in json.loads((raw / "manifest.json").read_text()):
+              for a in test.get("attachments", []):
+                  name = a.get("suggestedHumanReadableName") or a["exportedFileName"]
+                  name = name.split("_0_")[0].replace("/", "-")
+                  if not name.endswith(".png"):
+                      name += ".png"
+                  shutil.copy(raw / a["exportedFileName"], pathlib.Path("demo/screenshots") / name)
+          PY
+          ls -la demo/screenshots
+
+      - name: Upload demo
+        if: always() && matrix.variant == 'full'
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo
+          path: |
+            demo/demo.mp4
+            demo/screenshots

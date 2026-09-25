@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFilter
 SIZE = 1024
 SCALE = 4  # draw big, then downsample for smooth edges
 S = SIZE * SCALE
-OUT = Path(__file__).resolve().parent.parent / "Salah/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+OUT = Path(__file__).resolve().parent.parent / "Niyati/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
 
 top, bottom = (16, 110, 90), (4, 40, 34)
 gold = (217, 176, 88)
