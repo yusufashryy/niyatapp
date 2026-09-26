@@ -358,3 +358,36 @@ final class QuranicDuaTests: XCTestCase {
                        "https://cdn.islamic.network/quran/audio/128/ar.alafasy/8.mp3")
     }
 }
+
+final class TajweedTests: XCTestCase {
+    /// Every mark must land on the right letter in the bundled text: hamzat
+    /// al-wasl on ٱ, lam shamsiyyah on ل, qalqalah on one of ق ط ب ج د.
+    @MainActor
+    func testMarksLandOnTheRightLetters() async {
+        let quran = QuranStore.shared
+        await quran.load()
+        await quran.setEdition(.uthmani)
+        let tajweed = TajweedStore.shared
+        await tajweed.load()
+        var total = 0
+        for surah in quran.surahs {
+            for verse in quran.verses(for: surah.id) {
+                let scalars = Array(verse.arabic.unicodeScalars)
+                for mark in tajweed.marks(surah: surah.id, verse: verse.number, displayed: verse.arabic) {
+                    total += 1
+                    XCTAssertLessThanOrEqual(mark.range.upperBound, scalars.count, "\(surah.id):\(verse.number)")
+                    guard mark.range.upperBound <= scalars.count else { continue }
+                    let span = String(String.UnicodeScalarView(scalars[mark.range]))
+                    switch mark.rule {
+                    case .hamzatWasl: XCTAssertTrue(span.contains("ٱ"), "\(surah.id):\(verse.number) \(span)")
+                    case .lamShamsiyyah: XCTAssertTrue(span.contains("ل"), "\(surah.id):\(verse.number) \(span)")
+                    case .qalqalah: XCTAssertTrue(span.contains { "قطبجد".contains($0) }, "\(surah.id):\(verse.number) \(span)")
+                    default: break
+                    }
+                }
+            }
+        }
+        XCTAssertGreaterThan(total, 59_000)
+        XCTAssertFalse(tajweed.marks(surah: 1, verse: 1, displayed: quran.bismillah).isEmpty)
+    }
+}
