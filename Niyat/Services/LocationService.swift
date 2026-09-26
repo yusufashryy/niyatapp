@@ -1,4 +1,5 @@
 import CoreLocation
+import MapKit
 import Foundation
 
 enum LocationError: LocalizedError {
@@ -54,35 +55,38 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     }
 
     static func savedLocation(for location: CLLocation) async -> SavedLocation {
-        let placemark = try? await CLGeocoder().reverseGeocodeLocation(location).first
+        let item = try? await MKReverseGeocodingRequest(location: location)?.mapItems.first
         return SavedLocation(
             latitude: location.coordinate.latitude,
             longitude: location.coordinate.longitude,
-            name: placemark.map(displayName) ?? String(format: "%.2f°, %.2f°", location.coordinate.latitude,
-                                                      location.coordinate.longitude),
-            timeZoneIdentifier: placemark?.timeZone?.identifier ?? TimeZone.current.identifier,
-            countryCode: placemark?.isoCountryCode
+            name: item.flatMap(displayName) ?? String(format: "%.2f°, %.2f°", location.coordinate.latitude,
+                                                     location.coordinate.longitude),
+            timeZoneIdentifier: item?.timeZone?.identifier ?? TimeZone.current.identifier,
+            countryCode: item?.addressRepresentations?.region?.identifier
         )
     }
 
     /// Finds places matching a city name, e.g. "Cairo".
     static func search(_ query: String) async throws -> [SavedLocation] {
-        let placemarks = try await CLGeocoder().geocodeAddressString(query)
-        return placemarks.compactMap { placemark in
-            guard let coordinate = placemark.location?.coordinate else { return nil }
+        guard let request = MKGeocodingRequest(addressString: query) else { return [] }
+        return try await request.mapItems.map { item in
+            let coordinate = item.location.coordinate
             return SavedLocation(
                 latitude: coordinate.latitude,
                 longitude: coordinate.longitude,
-                name: displayName(placemark),
-                timeZoneIdentifier: placemark.timeZone?.identifier ?? TimeZone.current.identifier,
-                countryCode: placemark.isoCountryCode
+                name: displayName(item) ?? query,
+                timeZoneIdentifier: item.timeZone?.identifier ?? TimeZone.current.identifier,
+                countryCode: item.addressRepresentations?.region?.identifier
             )
         }
     }
 
-    private static func displayName(_ placemark: CLPlacemark) -> String {
-        let city = placemark.locality ?? placemark.subAdministrativeArea ?? placemark.administrativeArea ?? placemark.name
-        return [city, placemark.country].compactMap { $0 }.joined(separator: ", ")
+    /// "London, United Kingdom".
+    private static func displayName(_ item: MKMapItem) -> String? {
+        let representations = item.addressRepresentations
+        let city = representations?.cityName ?? item.name
+        let parts = [city, representations?.regionName].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
 
     // MARK: CLLocationManagerDelegate

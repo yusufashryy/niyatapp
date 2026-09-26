@@ -239,7 +239,7 @@ final class QuranStore {
 
     /// SHA-256 of every bundled Qur'an file, as published with its source dataset.
     /// If a file is changed or corrupted in any way, the hash won't match.
-    static let expectedChecksums: [String: String] = {
+    nonisolated static let expectedChecksums: [String: String] = {
         var sums = [
             "translation-en-clearquran": "2e5d4d9fc7ee9cad5ed3fc0691d8e398c6f943a9ab7fe49ac515961abf5250ed",
             "chapters": "5b18adae945fcb6f9fbb865dd7dc596f89a63607a4e6617ca9e37f7f10d3386b",

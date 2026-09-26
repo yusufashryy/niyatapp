@@ -400,10 +400,14 @@ private struct DayCell: View {
 // MARK: - Day detail
 
 /// One day's five prayers, each editable, for catching up or fixing a log.
-private struct DayDetailSheet: View {
+struct DayDetailSheet: View {
     @Environment(AppModel.self) private var model
     let day: Date
     @State private var checkIn: PrayerSlot?
+
+    init(day: Date) {
+        self.day = day
+    }
 
     var body: some View {
         NavigationStack {
