@@ -12,7 +12,7 @@ Religious accuracy comes first. Nothing Qur'anic, no hadith wording and no praye
 | Warsh | Warsh ʿan Nafiʿ | Qur'anpedia.net dump v2026-09-18 (KFGQPC printed mushaf) | Qur'anpedia data licence: credit + dump version | 6,214 | `f9d98e50…b61aa` |
 | Qalun | Qalun ʿan Nafiʿ | Qur'anpedia.net dump v2026-09-18 (KFGQPC printed mushaf) | Qur'anpedia data licence: credit + dump version | 6,214 | `ece0a2b0…1303` |
 
-All five were obtained through [risan/quran-json](https://github.com/risan/quran-json), which only republishes sources whose licence allows it and records a checksum for each file. The full hashes are in `Niyat/Features/Quran/QuranEdition.swift`.
+All five were obtained through [risan/quran-json](https://github.com/risan/quran-json), which only republishes sources whose licence allows it and records a checksum for each file. The full hashes are in `Niyat/Features/Quran/Text/QuranEdition.swift`.
 
 - **Hafs texts** include the Bismillah at the start of verse 1. Niyat shows it as a header, as in the mushaf (see `QuranStore.removingBismillah`), without changing the file.
 - **Warsh and Qalun** use the Madinan count. Each verse carries the Hafs verse number(s) it covers, which is how translations and bookmarks line up. The Qur'anpedia licence asks redistributors to keep their copy current. Check for newer dump versions before each release.

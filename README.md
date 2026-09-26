@@ -103,9 +103,11 @@ Swift and SwiftUI, iOS 26+, Liquid Glass. Every push is built and tested on GitH
 | `Niyat/` | The app |
 | `Shared/` | Code shared by the app and its widgets |
 | `NiyatWidgets/` | Home Screen and Lock Screen widgets |
-| `FocusShared/`, `FocusMonitor/`, `FocusShield/` | Prayer Lock |
-| `NiyatTests/` | Tests |
-| `docs/` | Sources, credits, privacy policy, App Store listing |
+| `PrayerLock/` | Prayer Lock (Screen Time extensions and shared code) |
+| `NiyatTests/`, `NiyatUITests/` | Tests, and the demo tour that takes the screenshots |
+| `Config/` | Build settings (your signing details go in `Config/Local.xcconfig`) |
+| `scripts/` | One-off generators for bundled data (layouts, tajweed, icon) |
+| `docs/` | Sources, credits, privacy policy, App Store listing and release guide |
 
 ## Credits
 
@@ -115,6 +117,7 @@ The code is under the [MIT License](LICENSE). Content keeps its own licence (det
 - Warsh and Qalun: [Qur'anpedia](https://quranpedia.net)
 - English translation: Talal Itani, [ClearQuran.com](https://clearquran.com), CC BY-ND 4.0
 - Recitation audio: [Islamic Network](https://islamic.network), free for non-commercial use
+- Mushaf line layout: [mushaf-layout](https://github.com/zonetecde/mushaf-layout) by zonetecde (word positions only)
 - Tajweed rules: [Quran Tajweed](https://github.com/cpfair/quran-tajweed) by Collin Fair, CC BY 4.0
 - Fonts: [Amiri Quran](https://github.com/aliftype/amiri) and [Aref Ruqaa](https://github.com/alif-type/aref-ruqaa), SIL Open Font License
 - Prayer times: [Adhan](https://github.com/batoulapps/adhan-swift), MIT

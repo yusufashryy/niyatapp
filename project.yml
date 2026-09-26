@@ -36,7 +36,8 @@ packages:
 # Prayer Lock (Screen Time) needs a paid Apple Developer account, so it lives in
 # its own file and is only switched on by `make full`.
 include:
-  - path: full-features.yml
+  - path: Config/full-features.yml
+    relativePaths: false
     enable: ${NIYAT_FULL}
 
 targets:

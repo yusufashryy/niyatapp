@@ -5,12 +5,13 @@
 #   - Groups: private accountability circles through iCloud (CloudKit) sharing
 #
 # Turned on with `make full`, which runs `NIYAT_FULL=true xcodegen`.
+# Paths are from the repository root.
 # Merged into project.yml: lists are appended, dictionaries are combined.
 
 targets:
   Niyat:
     sources:
-      - path: FocusShared
+      - path: PrayerLock/Shared
     dependencies:
       - target: FocusMonitor
       - target: FocusShield
@@ -30,13 +31,13 @@ targets:
     type: app-extension
     platform: iOS
     sources:
-      - path: FocusMonitor
+      - path: PrayerLock/Monitor
       - path: Shared
-      - path: FocusShared
+      - path: PrayerLock/Shared
     dependencies:
       - package: Adhan
     info:
-      path: FocusMonitor/Support/Info.plist
+      path: PrayerLock/Monitor/Support/Info.plist
       properties:
         CFBundleDisplayName: Niyat Prayer Lock
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -46,7 +47,7 @@ targets:
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).FocusMonitorExtension
         NiyatAppGroup: $(APP_GROUP_ID)
     entitlements:
-      path: FocusMonitor/Support/FocusMonitor.entitlements
+      path: PrayerLock/Monitor/Support/FocusMonitor.entitlements
       properties:
         com.apple.security.application-groups: [$(APP_GROUP_ID)]
         com.apple.developer.family-controls: true
@@ -60,13 +61,13 @@ targets:
     type: app-extension
     platform: iOS
     sources:
-      - path: FocusShield
+      - path: PrayerLock/Shield
       - path: Shared
-      - path: FocusShared
+      - path: PrayerLock/Shared
     dependencies:
       - package: Adhan
     info:
-      path: FocusShield/Support/Info.plist
+      path: PrayerLock/Shield/Support/Info.plist
       properties:
         CFBundleDisplayName: Niyat Prayer Shield
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -76,7 +77,7 @@ targets:
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShieldConfigurationExtension
         NiyatAppGroup: $(APP_GROUP_ID)
     entitlements:
-      path: FocusShield/Support/FocusShield.entitlements
+      path: PrayerLock/Shield/Support/FocusShield.entitlements
       properties:
         com.apple.security.application-groups: [$(APP_GROUP_ID)]
         com.apple.developer.family-controls: true

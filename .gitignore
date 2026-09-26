@@ -3,8 +3,8 @@
 *.xcworkspace
 Niyat/Support/
 NiyatWidgets/Support/
-FocusMonitor/Support/
-FocusShield/Support/
+PrayerLock/Monitor/Support/
+PrayerLock/Shield/Support/
 
 # Your personal signing settings
 Config/Local.xcconfig
