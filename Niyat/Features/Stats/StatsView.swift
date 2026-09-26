@@ -19,6 +19,31 @@ struct StatsView: View {
                     }
                     .pickerStyle(.segmented)
 
+                    NavigationLink {
+                        YearCalendarView()
+                    } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "calendar")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(Palette.highlight)
+                                .frame(width: 30)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Year view").font(.headline)
+                                Text("Every day of every year, at a glance")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.bold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .foregroundStyle(.white)
+                        .padding(16)
+                        .surface(cornerRadius: 20)
+                    }
+                    .buttonStyle(.pressable)
+
                     switch section {
                     case .salah: SalahStatsSection()
                     case .quran: QuranStatsSection()

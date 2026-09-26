@@ -44,7 +44,14 @@ struct MushafPageView: View {
                     .haptic(.selection, trigger: page)
                 }
             }
-            .niyatBackground()
+            .background {
+                if options.layout == .screen {
+                    options.style.colors.paper.ignoresSafeArea()
+                } else {
+                    AmbientBackground().ignoresSafeArea()
+                }
+            }
+            .toolbarColorScheme(options.style.isLight && options.layout == .screen ? .light : .dark, for: .navigationBar)
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 8) {
                     if let selected {
@@ -78,15 +85,17 @@ struct MushafPageView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close", systemImage: "xmark") { dismiss() }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    QuranGoalPill { }
-                        .allowsHitTesting(false)
+                ToolbarItem(placement: .principal) {
+                    MushafHeader(page: page, colors: options.style.colors)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Go to page", systemImage: "list.number") { showJump = true }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Page settings", systemImage: "textformat.size") { showOptions = true }
+                    Menu {
+                        Button("Go to page, juz or surah", systemImage: "list.number") { showJump = true }
+                        Button("Page settings", systemImage: "textformat.size") { showOptions = true }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .accessibilityLabel("Page options")
                 }
             }
             .sheet(isPresented: $showJump) {
@@ -148,6 +157,36 @@ struct MushafPageView: View {
     }
 }
 
+/// Surah · page · juz, in the navigation bar.
+private struct MushafHeader: View {
+    let page: Int
+    let colors: MushafColors
+    @State private var store = QuranStore.shared
+    @State private var goal = QuranGoalModel.shared
+
+    var body: some View {
+        let start = store.pageStarts.isEmpty ? VerseReference(surah: 1, verse: 1) : store.pageStarts[min(page, store.pageStarts.count) - 1]
+        HStack(spacing: 10) {
+            Text("جزء \(MushafTypesetter.arabicDigits(store.juz(containing: start)))")
+            ZStack {
+                Circle().stroke(.secondary.opacity(0.4), lineWidth: 2)
+                Circle()
+                    .trim(from: 0, to: goal.progress)
+                    .stroke(Palette.control, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Text(MushafTypesetter.arabicDigits(page)).font(.quran(size: 12))
+            }
+            .frame(width: 30, height: 30)
+            .accessibilityLabel("Page \(page), today's goal \(Int(goal.progress * 100)) percent")
+            Text(store.surah(start.surah)?.name ?? "")
+        }
+        .font(.quran(size: 16))
+        .lineLimit(1)
+        .padding(.horizontal, 12)
+        .environment(\.layoutDirection, .rightToLeft)
+    }
+}
+
 // MARK: - Options
 
 /// Everything the reader can adjust about the mushaf pages.
@@ -156,6 +195,15 @@ struct MushafOptions: Codable, Equatable {
         case actions, play
         var id: String { rawValue }
         var title: String { self == .actions ? "Show verse options" : "Play recitation" }
+    }
+
+    enum Layout: String, Codable, CaseIterable, Identifiable {
+        /// Text across the whole screen, like most Qur'an apps.
+        case screen
+        /// A framed page, like holding a printed copy.
+        case book
+        var id: String { rawValue }
+        var title: String { self == .screen ? "Full screen" : "Book page" }
     }
 
     enum Border: String, Codable, CaseIterable, Identifiable {
@@ -170,6 +218,7 @@ struct MushafOptions: Codable, Equatable {
         }
     }
 
+    var layout = Layout.screen
     var style = MushafStyle.paper
     var border = Border.illuminated
     /// 1 = fit the page like print; larger scrolls within the page.
@@ -200,6 +249,7 @@ struct MushafOptions: Codable, Equatable {
             ((try? c.decodeIfPresent(T.self, forKey: key)) ?? nil) ?? fallback
         }
         let d = MushafOptions()
+        layout = value(.layout, d.layout)
         style = value(.style, d.style)
         border = value(.border, d.border)
         textScale = value(.textScale, d.textScale)
@@ -213,52 +263,64 @@ struct MushafOptions: Codable, Equatable {
 }
 
 enum MushafStyle: String, Codable, CaseIterable, Identifiable {
-    /// Cream paper, like a printed copy.
-    case paper
-    /// Warmer, older paper.
-    case sepia
-    /// Bright white.
-    case white
-    /// Dark page in the app's theme colours, for reading at night.
-    case night
+    case paper, sepia, white, rose, mint, sky, lavender, stone, night, black
 
     var id: String { rawValue }
-    var title: String { rawValue.capitalized }
+
+    var title: String {
+        switch self {
+        case .paper: "Cream"
+        case .sepia: "Sepia"
+        case .white: "White"
+        case .rose: "Rose"
+        case .mint: "Mint"
+        case .sky: "Sky"
+        case .lavender: "Lavender"
+        case .stone: "Stone"
+        case .night: "Night"
+        case .black: "Black"
+        }
+    }
+
+    /// Light pages get dark bars and text around them.
+    var isLight: Bool { self != .night && self != .black }
 
     var colors: MushafColors {
-        // Paper, sepia and white are deliberately fixed colours: they recreate
-        // a printed mushaf rather than following the app theme.
+        // The paper styles are deliberately fixed colours: they recreate a
+        // printed mushaf rather than following the app theme.
         switch self {
         case .paper:
-            MushafColors(paper: Color(red: 0.985, green: 0.962, blue: 0.885),
-                         paperShade: Color(red: 0.94, green: 0.90, blue: 0.79),
-                         band: Color(red: 0.91, green: 0.94, blue: 0.86),
-                         gold: Color(red: 0.72, green: 0.55, blue: 0.24),
-                         green: Color(red: 0.27, green: 0.47, blue: 0.36),
-                         rose: Color(red: 0.72, green: 0.33, blue: 0.36),
-                         ink: UIColor(red: 0.11, green: 0.09, blue: 0.07, alpha: 1),
-                         marker: UIColor(red: 0.55, green: 0.39, blue: 0.10, alpha: 1),
-                         label: Color(red: 0.30, green: 0.24, blue: 0.14))
+            .printed(paper: (0.985, 0.962, 0.885), shade: (0.94, 0.90, 0.79), band: (0.91, 0.94, 0.86),
+                     gold: (0.72, 0.55, 0.24), green: (0.27, 0.47, 0.36), rose: (0.72, 0.33, 0.36),
+                     ink: (0.11, 0.09, 0.07), marker: (0.55, 0.39, 0.10), label: (0.30, 0.24, 0.14))
         case .sepia:
-            MushafColors(paper: Color(red: 0.96, green: 0.91, blue: 0.80),
-                         paperShade: Color(red: 0.88, green: 0.80, blue: 0.66),
-                         band: Color(red: 0.93, green: 0.87, blue: 0.74),
-                         gold: Color(red: 0.62, green: 0.45, blue: 0.20),
-                         green: Color(red: 0.35, green: 0.45, blue: 0.30),
-                         rose: Color(red: 0.62, green: 0.30, blue: 0.28),
-                         ink: UIColor(red: 0.20, green: 0.13, blue: 0.07, alpha: 1),
-                         marker: UIColor(red: 0.50, green: 0.32, blue: 0.10, alpha: 1),
-                         label: Color(red: 0.36, green: 0.24, blue: 0.12))
+            .printed(paper: (0.96, 0.91, 0.80), shade: (0.88, 0.80, 0.66), band: (0.93, 0.87, 0.74),
+                     gold: (0.62, 0.45, 0.20), green: (0.35, 0.45, 0.30), rose: (0.62, 0.30, 0.28),
+                     ink: (0.20, 0.13, 0.07), marker: (0.50, 0.32, 0.10), label: (0.36, 0.24, 0.12))
         case .white:
-            MushafColors(paper: .white,
-                         paperShade: Color(white: 0.95),
-                         band: Color(red: 0.95, green: 0.96, blue: 0.97),
-                         gold: Color(red: 0.70, green: 0.56, blue: 0.28),
-                         green: Color(red: 0.20, green: 0.45, blue: 0.38),
-                         rose: Color(red: 0.66, green: 0.28, blue: 0.35),
-                         ink: UIColor(white: 0.05, alpha: 1),
-                         marker: UIColor(red: 0.45, green: 0.35, blue: 0.12, alpha: 1),
-                         label: Color(white: 0.25))
+            .printed(paper: (1, 1, 1), shade: (0.95, 0.95, 0.95), band: (0.95, 0.96, 0.97),
+                     gold: (0.70, 0.56, 0.28), green: (0.20, 0.45, 0.38), rose: (0.66, 0.28, 0.35),
+                     ink: (0.05, 0.05, 0.05), marker: (0.45, 0.35, 0.12), label: (0.25, 0.25, 0.25))
+        case .rose:
+            .printed(paper: (0.99, 0.94, 0.93), shade: (0.95, 0.86, 0.85), band: (0.97, 0.89, 0.88),
+                     gold: (0.72, 0.50, 0.32), green: (0.45, 0.55, 0.45), rose: (0.74, 0.36, 0.42),
+                     ink: (0.16, 0.08, 0.09), marker: (0.62, 0.33, 0.30), label: (0.40, 0.20, 0.22))
+        case .mint:
+            .printed(paper: (0.93, 0.97, 0.93), shade: (0.85, 0.92, 0.86), band: (0.88, 0.94, 0.89),
+                     gold: (0.60, 0.52, 0.26), green: (0.20, 0.47, 0.34), rose: (0.62, 0.36, 0.34),
+                     ink: (0.05, 0.13, 0.09), marker: (0.20, 0.42, 0.30), label: (0.14, 0.32, 0.22))
+        case .sky:
+            .printed(paper: (0.93, 0.96, 0.99), shade: (0.85, 0.90, 0.96), band: (0.88, 0.92, 0.97),
+                     gold: (0.66, 0.56, 0.30), green: (0.22, 0.42, 0.60), rose: (0.60, 0.34, 0.42),
+                     ink: (0.05, 0.09, 0.16), marker: (0.20, 0.36, 0.58), label: (0.15, 0.27, 0.45))
+        case .lavender:
+            .printed(paper: (0.96, 0.94, 0.99), shade: (0.90, 0.86, 0.96), band: (0.92, 0.89, 0.97),
+                     gold: (0.66, 0.54, 0.32), green: (0.38, 0.40, 0.62), rose: (0.62, 0.36, 0.56),
+                     ink: (0.10, 0.07, 0.16), marker: (0.46, 0.34, 0.64), label: (0.32, 0.24, 0.46))
+        case .stone:
+            .printed(paper: (0.93, 0.93, 0.91), shade: (0.85, 0.85, 0.83), band: (0.89, 0.89, 0.87),
+                     gold: (0.58, 0.52, 0.40), green: (0.36, 0.42, 0.38), rose: (0.55, 0.38, 0.38),
+                     ink: (0.10, 0.10, 0.10), marker: (0.40, 0.38, 0.32), label: (0.30, 0.30, 0.28))
         case .night:
             MushafColors(paper: Palette.base.mix(with: .white, by: 0.06),
                          paperShade: Palette.base,
@@ -269,11 +331,27 @@ enum MushafStyle: String, Codable, CaseIterable, Identifiable {
                          ink: .white,
                          marker: UIColor(Palette.highlight),
                          label: Palette.highlight)
+        case .black:
+            // Pure black with silver ornaments: easy on the eyes at night and on OLED screens.
+            .printed(paper: (0.07, 0.07, 0.08), shade: (0, 0, 0), band: (0.14, 0.14, 0.15),
+                     gold: (0.62, 0.62, 0.64), green: (0.45, 0.45, 0.47), rose: (0.55, 0.55, 0.58),
+                     ink: (0.96, 0.96, 0.96), marker: (0.72, 0.72, 0.74), label: (0.85, 0.85, 0.86))
         }
     }
 }
 
 struct MushafColors {
+    typealias RGB = (Double, Double, Double)
+
+    static func printed(paper: RGB, shade: RGB, band: RGB, gold: RGB, green: RGB, rose: RGB,
+                        ink: RGB, marker: RGB, label: RGB) -> MushafColors {
+        func color(_ c: RGB) -> Color { Color(red: c.0, green: c.1, blue: c.2) }
+        func uiColor(_ c: RGB) -> UIColor { UIColor(red: c.0, green: c.1, blue: c.2, alpha: 1) }
+        return MushafColors(paper: color(paper), paperShade: color(shade), band: color(band), gold: color(gold),
+                            green: color(green), rose: color(rose), ink: uiColor(ink), marker: uiColor(marker),
+                            label: color(label))
+    }
+
     let paper: Color
     let paperShade: Color
     let band: Color
@@ -293,8 +371,15 @@ private struct MushafOptionsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Page") {
-                    HStack(spacing: 10) {
+                Section("Layout") {
+                    Picker("Layout", selection: $options.layout) {
+                        ForEach(MushafOptions.Layout.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Section("Paper") {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 5), spacing: 12) {
                         ForEach(MushafStyle.allCases) { style in
                             let colors = style.colors
                             Button {
@@ -309,7 +394,7 @@ private struct MushafOptionsSheet: View {
                                                 .font(.quran(size: 14))
                                                 .foregroundStyle(Color(colors.ink))
                                         }
-                                        .frame(height: 64)
+                                        .frame(height: 52)
                                         .overlay {
                                             RoundedRectangle(cornerRadius: 8)
                                                 .strokeBorder(options.style == style ? Palette.control : .clear, lineWidth: 2)
@@ -324,11 +409,16 @@ private struct MushafOptionsSheet: View {
                         }
                     }
                     .padding(.vertical, 4)
-                    Picker("Border", selection: $options.border) {
-                        ForEach(MushafOptions.Border.allCases) { Text($0.title).tag($0) }
+                }
+
+                if options.layout == .book {
+                    Section("Book page") {
+                        Picker("Border", selection: $options.border) {
+                            ForEach(MushafOptions.Border.allCases) { Text($0.title).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        Toggle("Surah and juz at the top", isOn: $options.showHeader)
                     }
-                    .pickerStyle(.segmented)
-                    Toggle("Surah and juz at the top", isOn: $options.showHeader)
                 }
 
                 Section {
@@ -465,7 +555,7 @@ private struct MushafPage: View {
     var body: some View {
         let verses = store.verses(onPage: number)
         GeometryReader { geo in
-            let size = Self.pageSize(in: geo.size)
+            let size = options.layout == .screen ? geo.size : Self.pageSize(in: geo.size)
             let pageLayout = makeLayout(verses, size: size)
             ScrollView(.vertical) {
                 page(verses, layout: pageLayout)
@@ -507,11 +597,22 @@ private struct MushafPage: View {
 
     private func makeLayout(_ verses: [Verse], size: CGSize) -> Layout {
         let segments = MushafTypesetter.segments(for: verses, store: store)
-        let headerHeight = options.showHeader ? Self.headerHeight + Self.spacing : 0
-        let textWidth = size.width - contentInset * 2
-        let textHeight = size.height - contentInset * 2 - headerHeight - Self.footerHeight - Self.spacing
+        let textWidth: CGFloat
+        let textHeight: CGFloat
+        let maxSize: CGFloat
+        switch options.layout {
+        case .screen:
+            textWidth = size.width - Self.screenMargin * 2
+            textHeight = size.height - Self.screenTop - Self.footerHeight - Self.spacing
+            maxSize = min(34, textWidth / 11)
+        case .book:
+            let headerHeight = options.showHeader ? Self.headerHeight + Self.spacing : 0
+            textWidth = size.width - contentInset * 2
+            textHeight = size.height - contentInset * 2 - headerHeight - Self.footerHeight - Self.spacing
+            maxSize = min(30, textWidth / 10)
+        }
         let fit = MushafTypesetter.fittingSize(page: number, segments: segments, store: store,
-                                               width: textWidth, height: textHeight)
+                                               width: textWidth, height: textHeight, maxSize: maxSize)
         guard options.textScale > 1.001 else { return Layout(segments: segments, fontSize: fit, pageHeight: size.height) }
         // Bigger than print: the page grows and scrolls.
         let fontSize = fit * options.textScale
@@ -519,9 +620,58 @@ private struct MushafPage: View {
         return Layout(segments: segments, fontSize: fontSize, pageHeight: size.height + max(0, needed - textHeight))
     }
 
+    private static let screenMargin: CGFloat = 18
+    private static let screenTop: CGFloat = 10
+
+    @ViewBuilder
     private func page(_ verses: [Verse], layout: Layout) -> some View {
-        let first = verses.first?.hafsReference ?? VerseReference(surah: 1, verse: 1)
+        switch options.layout {
+        case .screen: screenPage(layout: layout)
+        case .book: bookPage(verses, layout: layout)
+        }
+    }
+
+    /// Full-screen layout: text across the whole screen, page number below.
+    private func screenPage(layout: Layout) -> some View {
+        VStack(spacing: Self.spacing) {
+            segmentViews(layout)
+            Spacer(minLength: 0)
+            Text(MushafTypesetter.arabicDigits(number))
+                .font(.quran(size: 15))
+                .foregroundStyle(colors.label)
+                .frame(height: Self.footerHeight)
+                .accessibilityLabel("Page \(number)")
+        }
+        .padding(.horizontal, Self.screenMargin)
+        .padding(.top, Self.screenTop)
+    }
+
+    /// Banners, Bismillah and verses, shared by both layouts.
+    private func segmentViews(_ layout: Layout) -> some View {
         let fontSize = layout.fontSize
+        return ForEach(layout.segments) { segment in
+            switch segment.kind {
+            case .banner(let surah):
+                SurahBanner(surah: surah, colors: colors, height: MushafTypesetter.bannerHeight(fontSize))
+                    .onTapGesture { onTap(nil) }
+            case .bismillah:
+                MushafTextView(text: MushafTypesetter.centered(store.bismillah, size: fontSize, color: colors.ink)) { _ in
+                    onTap(nil)
+                }
+            case .verses(let verses):
+                MushafTextView(text: MushafTypesetter.verses(verses, size: fontSize, colors: colors,
+                                                             sajdahs: store.sajdahVerses,
+                                                             selected: selected,
+                                                             reciting: options.highlightRecitation ? reciting : nil)) { id in
+                    onTap(id.flatMap { id in verses.first { $0.id == id } })
+                }
+            }
+        }
+    }
+
+    /// Book layout: a framed printed page.
+    private func bookPage(_ verses: [Verse], layout: Layout) -> some View {
+        let first = verses.first?.hafsReference ?? VerseReference(surah: 1, verse: 1)
 
         return ZStack {
             RoundedRectangle(cornerRadius: 6)
@@ -543,24 +693,7 @@ private struct MushafPage: View {
                 }
 
                 VStack(spacing: Self.spacing) {
-                    ForEach(layout.segments) { segment in
-                        switch segment.kind {
-                        case .banner(let surah):
-                            SurahBanner(surah: surah, colors: colors, height: MushafTypesetter.bannerHeight(fontSize))
-                                .onTapGesture { onTap(nil) }
-                        case .bismillah:
-                            MushafTextView(text: MushafTypesetter.centered(store.bismillah, size: fontSize, color: colors.ink)) { _ in
-                                onTap(nil)
-                            }
-                        case .verses(let verses):
-                            MushafTextView(text: MushafTypesetter.verses(verses, size: fontSize, colors: colors,
-                                                                         sajdahs: store.sajdahVerses,
-                                                                         selected: selected,
-                                                                         reciting: options.highlightRecitation ? reciting : nil)) { id in
-                                onTap(id.flatMap { id in verses.first { $0.id == id } })
-                            }
-                        }
-                    }
+                    segmentViews(layout)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -615,16 +748,16 @@ private enum MushafTypesetter {
         return result
     }
 
-    static func bannerHeight(_ fontSize: CGFloat) -> CGFloat { fontSize * 1.9 }
+    static func bannerHeight(_ fontSize: CGFloat) -> CGFloat { fontSize * 2.1 }
 
     /// The largest text size at which the whole page fits, like a printed page
     /// filling its frame. Capped so short pages (Al-Fatiha) don't get huge.
     static func fittingSize(page: Int, segments: [MushafSegment], store: QuranStore,
-                            width: CGFloat, height: CGFloat) -> CGFloat {
-        let key = "\(page)-\(Int(width))-\(Int(height))-\(store.edition.rawValue)"
+                            width: CGFloat, height: CGFloat, maxSize: CGFloat) -> CGFloat {
+        let key = "\(page)-\(Int(width))-\(Int(height))-\(Int(maxSize))-\(store.edition.rawValue)"
         if let cached = sizeCache[key] { return cached }
         var low: CGFloat = 9
-        var high: CGFloat = min(30, width / 10)
+        var high = maxSize
         for _ in 0..<14 {
             let mid = (low + high) / 2
             if totalHeight(segments, size: mid, width: width, store: store) <= height * 0.97 {
@@ -853,33 +986,81 @@ private struct Cartouche: View {
     }
 }
 
-/// The framed title where a new surah begins.
+/// The ornamental title where a new surah begins: a framed band with a
+/// pointed cartouche in the middle and rosettes on each side.
 private struct SurahBanner: View {
     let surah: Surah
     let colors: MushafColors
     let height: CGFloat
 
     var body: some View {
-        HStack(spacing: 0) {
-            EightPointStar().fill(colors.rose).frame(width: height * 0.45, height: height * 0.45)
-            Spacer(minLength: 4)
-            Text("سورة " + surah.name)
-                .font(.quran(size: height * 0.42))
-                .foregroundStyle(colors.label)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            Spacer(minLength: 4)
-            EightPointStar().fill(colors.rose).frame(width: height * 0.45, height: height * 0.45)
+        Canvas { context, size in
+            let rect = CGRect(origin: .zero, size: size).insetBy(dx: 1, dy: 1)
+            let midY = rect.midY
+            context.fill(Path(roundedRect: rect, cornerRadius: 4), with: .color(colors.band))
+            context.stroke(Path(roundedRect: rect, cornerRadius: 4), with: .color(colors.gold), lineWidth: 1.4)
+            context.stroke(Path(roundedRect: rect.insetBy(dx: 3, dy: 3), cornerRadius: 2),
+                           with: .color(colors.gold.opacity(0.55)), lineWidth: 0.6)
+
+            // Centre cartouche with pointed ends.
+            let cartoucheWidth = rect.width * 0.46
+            let cartoucheHeight = rect.height * 0.74
+            let tip = cartoucheHeight * 0.45
+            func cartouche(_ inset: CGFloat) -> Path {
+                let left = rect.midX - cartoucheWidth / 2 + inset, right = rect.midX + cartoucheWidth / 2 - inset
+                let top = midY - cartoucheHeight / 2 + inset, bottom = midY + cartoucheHeight / 2 - inset
+                var path = Path()
+                path.move(to: CGPoint(x: left, y: midY))
+                path.addLine(to: CGPoint(x: left + tip, y: top))
+                path.addLine(to: CGPoint(x: right - tip, y: top))
+                path.addLine(to: CGPoint(x: right, y: midY))
+                path.addLine(to: CGPoint(x: right - tip, y: bottom))
+                path.addLine(to: CGPoint(x: left + tip, y: bottom))
+                path.closeSubpath()
+                return path
+            }
+            context.fill(cartouche(0), with: .color(colors.paper))
+            context.stroke(cartouche(0), with: .color(colors.gold), lineWidth: 1.4)
+            context.stroke(cartouche(3), with: .color(colors.gold.opacity(0.5)), lineWidth: 0.6)
+
+            // Side panels: a rosette in each, joined to the cartouche by fine scrolls.
+            let panelWidth = (rect.width - cartoucheWidth) / 2
+            for side in [-1.0, 1.0] {
+                let centreX = rect.midX + side * (cartoucheWidth / 2 + panelWidth / 2)
+                let radius = rect.height * 0.3
+                let flower = CGRect(x: centreX - radius, y: midY - radius, width: radius * 2, height: radius * 2)
+                context.fill(EightPointStar().path(in: flower), with: .color(colors.rose.opacity(0.85)))
+                context.stroke(EightPointStar().path(in: flower), with: .color(colors.gold), lineWidth: 0.8)
+                context.fill(Path(ellipseIn: flower.insetBy(dx: radius * 0.55, dy: radius * 0.55)), with: .color(colors.gold))
+                for offset in [-0.5, 0.5] {
+                    let x = centreX + offset * panelWidth * 0.62
+                    let small = CGRect(x: x - radius * 0.38, y: midY - radius * 0.38, width: radius * 0.76, height: radius * 0.76)
+                    context.fill(EightPointStar().path(in: small), with: .color(colors.green.opacity(0.8)))
+                }
+                var scroll = Path()
+                let inner = rect.midX + side * cartoucheWidth / 2
+                let outer = rect.midX + side * (rect.width / 2 - 8)
+                for dy in [-rect.height * 0.3, rect.height * 0.3] {
+                    scroll.move(to: CGPoint(x: inner, y: midY + dy * 0.4))
+                    scroll.addQuadCurve(to: CGPoint(x: outer, y: midY + dy),
+                                        control: CGPoint(x: (inner + outer) / 2, y: midY + dy * 1.4))
+                }
+                context.stroke(scroll, with: .color(colors.gold.opacity(0.7)), lineWidth: 0.8)
+            }
         }
-        .padding(.horizontal, height * 0.3)
         .frame(height: height)
-        .background {
-            IslamicPattern(tile: height * 0.7, lineWidth: 0.5, color: colors.gold.opacity(0.25))
-                .background(colors.band)
+        .overlay {
+            GeometryReader { geo in
+                Text("سورة " + surah.name)
+                    .font(.quran(size: height * 0.4))
+                    .foregroundStyle(colors.label)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .frame(width: geo.size.width * 0.36, height: geo.size.height)
+                    .position(x: geo.size.width / 2, y: geo.size.height / 2)
+            }
         }
-        .clipShape(.rect(cornerRadius: 4))
-        .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(colors.gold, lineWidth: 1.4) }
-        .overlay { RoundedRectangle(cornerRadius: 2).strokeBorder(colors.gold.opacity(0.55), lineWidth: 0.6).padding(3) }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Surah \(surah.transliteration)")
     }
 }
