@@ -381,7 +381,7 @@ struct MushafColors {
 /// Page settings sheet.
 private struct MushafOptionsSheet: View {
     @Binding var options: MushafOptions
-    @AppStorage("quran.tajweed") private var tajweedOn = false
+    @AppStorage("quran.tajweed") private var tajweedOn = true
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -589,7 +589,7 @@ private struct MushafPage: View {
 
     private var colors: MushafColors { options.style.colors }
 
-    @AppStorage("quran.tajweed") private var tajweedOn = false
+    @AppStorage("quran.tajweed") private var tajweedOn = true
     @State private var tajweedStore = TajweedStore.shared
 
     /// Tajweed colours are for the Uthmani (Hafs) text they were made for.
@@ -653,7 +653,7 @@ private struct MushafPage: View {
         case .screen:
             textWidth = size.width - Self.screenMargin * 2
             textHeight = size.height - Self.screenTop - Self.footerHeight - Self.spacing
-            maxSize = min(34, textWidth / 11)
+            maxSize = min(36, textWidth / 10.5)
         case .book:
             let headerHeight = options.showHeader ? Self.headerHeight + Self.spacing : 0
             textWidth = size.width - contentInset * 2
@@ -669,8 +669,8 @@ private struct MushafPage: View {
         return Layout(segments: segments, fontSize: fontSize, pageHeight: size.height + max(0, needed - textHeight))
     }
 
-    private static let screenMargin: CGFloat = 18
-    private static let screenTop: CGFloat = 10
+    private static let screenMargin: CGFloat = 12
+    private static let screenTop: CGFloat = 14
 
     @ViewBuilder
     private func page(_ verses: [Verse], layout: Layout) -> some View {
@@ -843,12 +843,18 @@ private enum MushafTypesetter {
                                options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil).height) + 2
     }
 
+    /// Lines sit close together like a printed mushaf. Amiri Quran's natural
+    /// line is 2.45× its size (room for stacked marks); print is closer to 1.8×.
+    static let lineHeight: CGFloat = 1.8
+
     private static func paragraph(_ alignment: NSTextAlignment, size: CGFloat) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = alignment
         style.baseWritingDirection = .rightToLeft
         style.lineBreakMode = .byWordWrapping
-        style.lineSpacing = size * 0.12
+        style.minimumLineHeight = size * lineHeight
+        style.maximumLineHeight = size * lineHeight
+        style.lineSpacing = 0
         return style
     }
 
@@ -947,6 +953,10 @@ private struct MushafTextView: UIViewRepresentable {
         view.backgroundColor = .clear
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
+        // Lines are tighter than the font's natural height, so tall marks may
+        // reach just outside the view: draw them rather than clip them.
+        view.clipsToBounds = false
+        view.layer.masksToBounds = false
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped(_:)))
         view.addGestureRecognizer(tap)

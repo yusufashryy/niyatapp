@@ -201,13 +201,6 @@ private struct QiblaDial: View {
     var body: some View {
         let heading = continuousHeading ?? 0
         ZStack {
-            // Glow when aligned, kept inside the dial so it never covers the text around it.
-            Circle()
-                .fill(RadialGradient(colors: [Palette.highlight.opacity(aligned ? 0.35 : 0), .clear],
-                                     center: .center, startRadius: 10, endRadius: radius))
-                .frame(width: radius * 2, height: radius * 2)
-                .allowsHitTesting(false)
-
             // Rotating face: ticks and N/E/S/W.
             ZStack {
                 Circle()
@@ -233,17 +226,6 @@ private struct QiblaDial: View {
                 }
             }
             .rotationEffect(.degrees(-heading))
-
-            // How far to turn: an arc from the top marker to the Kaaba.
-            if let turn, !aligned {
-                Circle()
-                    .trim(from: 0, to: min(abs(turn), 180) / 360)
-                    .stroke(Palette.accent, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                    .frame(width: radius * 2, height: radius * 2)
-                    .rotationEffect(.degrees(-90))
-                    .scaleEffect(x: turn < 0 ? -1 : 1, y: 1)
-                    .shadow(color: Palette.accent, radius: 8)
-            }
 
             // The Kaaba on the ring, kept upright.
             KaabaMarker(highlighted: aligned)
