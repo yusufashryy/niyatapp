@@ -95,11 +95,17 @@ jobs:
           python3 - <<'PY'
           import json, pathlib, shutil
           raw = pathlib.Path("demo/raw")
+          diagnostics = pathlib.Path("demo/diagnostics")
           for test in json.loads((raw / "manifest.json").read_text()):
               for a in test.get("attachments", []):
                   name = a.get("suggestedHumanReadableName") or a["exportedFileName"]
-                  # Keep only our numbered screenshots ("03 Today"), not Xcode's automatic attachments.
+                  # Keep only our numbered screenshots ("03 Today"), not Xcode's automatic attachments,
+                  # except hang reports and failure details, which say why a tour failed.
                   if not name[:2].isdigit():
+                      if name.startswith(("Spindump", "Debug description")):
+                          diagnostics.mkdir(exist_ok=True)
+                          clean = name.split("_0_")[0].replace("/", "-").replace("`", "")
+                          shutil.copy(raw / a["exportedFileName"], diagnostics / f"{clean} {a['exportedFileName'][:8]}.txt")
                       continue
                   name = name.split("_0_")[0].replace("/", "-")
                   if not name.endswith(".png"):
@@ -126,6 +132,7 @@ jobs:
         run: |
           mkdir -p demo/publish
           cp -R demo/screenshots demo/publish/
+          if [ -d demo/diagnostics ]; then cp -R demo/diagnostics demo/publish/; fi
           cd demo/publish
           git init -q -b demo-media
           git config user.name "github-actions[bot]"
