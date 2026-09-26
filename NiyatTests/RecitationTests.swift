@@ -166,7 +166,7 @@ final class RecitationTrackerTests: XCTestCase {
     }
 
     @MainActor
-    private func tracker(_ verses: [(Int, Int)]) async -> RecitationTracker {
+    private func makeTracker(_ verses: [(Int, Int)]) async -> RecitationTracker {
         let store = await loadUthmani()
         let words = verses.compactMap { store.verse(VerseReference(surah: $0.0, verse: $0.1)) }
             .map { QuranWords.shared.words(for: $0, edition: .uthmani) }
@@ -187,7 +187,7 @@ final class RecitationTrackerTests: XCTestCase {
 
     @MainActor
     func testFollowsAlongWordByWord() async {
-        var tracker = await tracker([(14, 1), (14, 2), (14, 3)])
+        var tracker = await makeTracker([(14, 1), (14, 2), (14, 3)])
         let heard = speech(14, 1)
         for count in [2, 5] {
             XCTAssertEqual(tracker.update(heard: Array(heard.prefix(count)), isFinal: false), .following)
@@ -200,7 +200,7 @@ final class RecitationTrackerTests: XCTestCase {
 
     @MainActor
     func testStartsInTheMiddleOfAnAyah() async {
-        var tracker = await tracker([(14, 1), (14, 2), (14, 3)])
+        var tracker = await makeTracker([(14, 1), (14, 2), (14, 3)])
         let heard = speech(14, 2, from: 3)
         _ = tracker.update(heard: heard, confidences: sure(heard), isFinal: true)
         XCTAssertEqual(position(tracker), WordID(surah: 14, verse: 2, index: 13))
@@ -209,7 +209,7 @@ final class RecitationTrackerTests: XCTestCase {
 
     @MainActor
     func testStartsLaterThanExpected() async {
-        var tracker = await tracker([(14, 1), (14, 2), (14, 3)])
+        var tracker = await makeTracker([(14, 1), (14, 2), (14, 3)])
         let heard = speech(14, 3)
         XCTAssertEqual(tracker.update(heard: Array(heard.prefix(6)), isFinal: false), .following)
         _ = tracker.update(heard: heard, confidences: sure(heard), isFinal: true)
@@ -219,7 +219,7 @@ final class RecitationTrackerTests: XCTestCase {
 
     @MainActor
     func testSkippedWord() async {
-        var tracker = await tracker([(14, 1), (14, 2), (14, 3)])
+        var tracker = await makeTracker([(14, 1), (14, 2), (14, 3)])
         var heard = speech(14, 1)
         heard.remove(at: 5)
         _ = tracker.update(heard: heard, confidences: sure(heard), isFinal: true)
@@ -232,11 +232,11 @@ final class RecitationTrackerTests: XCTestCase {
     func testDifferentWordNeedsConfidence() async {
         var heard = speech(14, 1)
         heard[4] = "قلم"
-        var confident = await tracker([(14, 1), (14, 2), (14, 3)])
+        var confident = await makeTracker([(14, 1), (14, 2), (14, 3)])
         _ = confident.update(heard: heard, confidences: sure(heard), isFinal: true)
         XCTAssertEqual(flagged(confident), [WordID(surah: 14, verse: 1, index: 4): .mistake])
 
-        var unsure = await tracker([(14, 1), (14, 2), (14, 3)])
+        var unsure = await makeTracker([(14, 1), (14, 2), (14, 3)])
         _ = unsure.update(heard: heard, confidences: Array(repeating: 0.3, count: heard.count), isFinal: true)
         XCTAssertEqual(flagged(unsure), [WordID(surah: 14, verse: 1, index: 4): .uncertain])
     }
@@ -245,14 +245,14 @@ final class RecitationTrackerTests: XCTestCase {
     func testRepeatsPausesAndRestartsAreNotMistakes() async {
         let heard = speech(14, 1)
         // Repeating a phrase.
-        var repeated = await tracker([(14, 1), (14, 2), (14, 3)])
+        var repeated = await makeTracker([(14, 1), (14, 2), (14, 3)])
         let again = Array(heard[..<6] + heard[3..<6] + heard[6...])
         _ = repeated.update(heard: again, confidences: sure(again), isFinal: true)
         XCTAssertTrue(repeated.flagged.isEmpty)
         XCTAssertEqual(position(repeated), WordID(surah: 14, verse: 1, index: 15))
 
         // A pause, then carrying on.
-        var paused = await tracker([(14, 1), (14, 2), (14, 3)])
+        var paused = await makeTracker([(14, 1), (14, 2), (14, 3)])
         let first = Array(heard[..<7]), rest = Array(heard[7...])
         _ = paused.update(heard: first, confidences: sure(first), isFinal: true)
         _ = paused.update(heard: rest, confidences: sure(rest), isFinal: true)
@@ -260,7 +260,7 @@ final class RecitationTrackerTests: XCTestCase {
         XCTAssertEqual(position(paused), WordID(surah: 14, verse: 1, index: 15))
 
         // Starting the ayah again.
-        var restarted = await tracker([(14, 1), (14, 2), (14, 3)])
+        var restarted = await makeTracker([(14, 1), (14, 2), (14, 3)])
         let part = Array(heard[..<9])
         _ = restarted.update(heard: part, confidences: sure(part), isFinal: true)
         _ = restarted.update(heard: heard, confidences: sure(heard), isFinal: true)
@@ -269,7 +269,7 @@ final class RecitationTrackerTests: XCTestCase {
 
     @MainActor
     func testGoesOnToTheNextAyah() async {
-        var tracker = await tracker([(14, 1), (14, 2), (14, 3)])
+        var tracker = await makeTracker([(14, 1), (14, 2), (14, 3)])
         let first = speech(14, 1), second = speech(14, 2)
         _ = tracker.update(heard: first, confidences: sure(first), isFinal: true)
         _ = tracker.update(heard: second, confidences: sure(second), isFinal: true)
@@ -280,7 +280,7 @@ final class RecitationTrackerTests: XCTestCase {
     /// "يا أيها" is one word in the Uthmani text and two when recognised.
     @MainActor
     func testWordsSplitByTheRecogniser() async {
-        var tracker = await tracker([(2, 21)])
+        var tracker = await makeTracker([(2, 21)])
         let heard = speech(2, 21)
         _ = tracker.update(heard: heard, confidences: sure(heard), isFinal: true)
         XCTAssertEqual(position(tracker), WordID(surah: 2, verse: 21, index: 10))
@@ -289,7 +289,7 @@ final class RecitationTrackerTests: XCTestCase {
 
     @MainActor
     func testUnrelatedSpeechIsNotFollowed() async {
-        var tracker = await tracker([(14, 1), (14, 2), (14, 3)])
+        var tracker = await makeTracker([(14, 1), (14, 2), (14, 3)])
         let heard = "هذا كلام عادي عن الطقس اليوم في المدينة الجميلة جدا".split(separator: " ").map(String.init)
         XCTAssertEqual(tracker.update(heard: heard, isFinal: false), .lost)
         XCTAssertNil(tracker.position)
@@ -299,7 +299,7 @@ final class RecitationTrackerTests: XCTestCase {
     /// Timing a reciter's recording: only clearly recognised words are placed.
     @MainActor
     func testMatchedPairsPlaceOnlyRecognisedWords() async {
-        let tracker = await tracker([(14, 1)])
+        let tracker = await makeTracker([(14, 1)])
         var heard = speech(14, 1)
         heard[4] = "قلم"   // misheard: left out
         heard.remove(at: 8) // not heard: left out

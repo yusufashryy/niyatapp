@@ -94,8 +94,7 @@ struct MushafPageView: View {
         .sheet(isPresented: $showJump) { MushafJumpSheet(page: $page).preferredColorScheme(.dark) }
         .sheet(isPresented: $showOptions) { MushafOptionsSheet(options: $options).preferredColorScheme(.dark) }
         .sheet(isPresented: $showReview) {
-            RecitationReviewSheet(onListen: store.edition.riwayah.hasVerseAudio ? { key in play(key) } : nil,
-                                  onGoTo: { key in go(to: key) })
+            RecitationReviewSheet(onListen: listenAction, onGoTo: { key in go(to: key) })
                 .preferredColorScheme(.dark)
         }
         .sheet(isPresented: $showIntro) {
@@ -342,6 +341,12 @@ struct MushafPageView: View {
 
     private func play(_ key: VerseKey) {
         if let verse = displayedVerse(key) { play(from: verse, only: true) }
+    }
+
+    /// "Listen" in the review, when there's audio for the reading.
+    private var listenAction: ((VerseKey) -> Void)? {
+        guard store.edition.riwayah.hasVerseAudio else { return nil }
+        return { key in play(key) }
     }
 
     private func togglePlay() {

@@ -180,7 +180,7 @@ struct SurahReaderView: View {
         .sheet(isPresented: $showSettings) { QuranSettingsView() }
         .sheet(isPresented: $showGoal) { QuranGoalSheet() }
         .sheet(isPresented: $showReview) {
-            RecitationReviewSheet(onListen: audioAvailable ? { key in play(only: key) } : nil) { key in
+            RecitationReviewSheet(onListen: listenAction) { key in
                 withAnimation(.smooth) { position.scrollTo(id: key.surah * 1000 + key.verse, anchor: .center) }
             }
         }
@@ -318,6 +318,12 @@ struct SurahReaderView: View {
     private func play(from verse: Int) {
         live.stop()
         player.play(surah: surahID, from: verse, verseCounts: store.hafsVerseCounts)
+    }
+
+    /// "Listen" in the review, when there's audio for the reading.
+    private var listenAction: ((VerseKey) -> Void)? {
+        guard store.edition.riwayah.hasVerseAudio else { return nil }
+        return { key in play(only: key) }
     }
 
     /// Plays one verse (from the review).

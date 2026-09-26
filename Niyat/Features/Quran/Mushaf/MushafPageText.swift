@@ -30,8 +30,6 @@ struct MushafPageText {
 
     private static var cache: [String: MushafPageText] = [:]
 
-    static func clearCache() { cache = [:] }
-
     /// The page in the current reading, or nil until the text and layout are loaded.
     static func page(_ number: Int) -> MushafPageText? {
         let store = QuranStore.shared
