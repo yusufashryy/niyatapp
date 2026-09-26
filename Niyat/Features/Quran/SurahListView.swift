@@ -10,6 +10,7 @@ struct SurahListView: View {
     @State private var showGoal = false
     @State private var showMushaf = false
     @State private var showNotifications = false
+    @State private var showRecite = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -49,6 +50,9 @@ struct SurahListView: View {
                 NavigationStack { QuranNotificationsView(showsDone: true) }
             }
             .fullScreenCover(isPresented: $showMushaf) { MushafPageView() }
+            .fullScreenCover(isPresented: $showRecite) {
+                RecitationCheckView(surah: store.lastRead?.surah ?? 1, verse: store.lastRead?.verse ?? 1)
+            }
             .task { await store.load() }
             .onAppear { goal.refresh() }
             // A Qur'an reminder was tapped: go straight to where you left off.
@@ -89,6 +93,24 @@ struct SurahListView: View {
                     }
                     .buttonStyle(.pressable)
                     .appearAnimation(0)
+                }
+
+                if searchText.isEmpty {
+                    HStack(spacing: 10) {
+                        NavigationLink {
+                            QuranicDuasView { reference in
+                                path.append(ReaderDestination(surah: reference.surah, verse: reference.verse))
+                            }
+                        } label: {
+                            QuranToolTile(title: "Duas", subtitle: "From the Qur'an", icon: "hands.and.sparkles.fill")
+                        }
+                        .buttonStyle(.pressable)
+                        Button { showRecite = true } label: {
+                            QuranToolTile(title: "Recite", subtitle: "Beta · follows along", icon: "mic.fill")
+                        }
+                        .buttonStyle(.pressable)
+                    }
+                    .appearAnimation(1)
                 }
 
                 if searchText.isEmpty, !store.bookmarks.isEmpty {
@@ -276,5 +298,30 @@ private struct QuranGoalCard: View {
         }
         .buttonStyle(.pressable)
         .onAppear { goal.refresh() }
+    }
+}
+
+/// A small tile on the Qur'an screen (Duas, Recite).
+private struct QuranToolTile: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Palette.highlight)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.headline)
+                Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.white)
+        .padding(14)
+        .frame(maxWidth: .infinity)
+        .surface(cornerRadius: 18)
     }
 }
