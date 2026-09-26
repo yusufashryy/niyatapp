@@ -67,21 +67,21 @@ struct SurahReaderView: View {
                 .padding(.bottom, 24)
             }
             .onAppear {
-                guard !didScroll, let startVerse, startVerse > 1 else { return }
+                guard !didScroll else { return }
                 didScroll = true
+                // Opened while this surah is being recited: go to that verse.
+                if let current = player.current, current.surah == surahID {
+                    DispatchQueue.main.async { follow(current, proxy: proxy, animated: false) }
+                    return
+                }
+                guard let startVerse, startVerse > 1 else { return }
                 let target = store.verse(VerseReference(surah: surahID, verse: startVerse))?.number ?? startVerse
                 DispatchQueue.main.async { proxy.scrollTo(target, anchor: .top) }
             }
-            // Follow along: keep the verse being recited on screen.
+            // Follow along: keep the verse being recited in the middle of the screen.
             .onChange(of: player.current) { _, current in
                 guard let current, current.surah == surahID else { return }
-                withAnimation(.smooth(duration: 0.5)) {
-                    if let verse = current.verse {
-                        proxy.scrollTo(verse, anchor: .center)
-                    } else {
-                        proxy.scrollTo("bismillah", anchor: .center)
-                    }
-                }
+                follow(current, proxy: proxy, animated: true)
             }
         }
         .niyatBackground()
@@ -140,6 +140,24 @@ struct SurahReaderView: View {
         .onDisappear {
             // Update the afternoon reminder with today's remaining ayat.
             model.refresh()
+        }
+    }
+
+    /// Scrolls so the verse being recited sits in the middle of the screen.
+    private func follow(_ item: RecitationItem, proxy: ScrollViewProxy, animated: Bool) {
+        let scroll = {
+            if let verse = item.verse {
+                // Recitation is numbered like Hafs; find the matching card.
+                let target = store.verse(VerseReference(surah: surahID, verse: verse))?.number ?? verse
+                proxy.scrollTo(target, anchor: .center)
+            } else {
+                proxy.scrollTo("bismillah", anchor: .center)
+            }
+        }
+        if animated {
+            withAnimation(.smooth(duration: 0.5), scroll)
+        } else {
+            scroll()
         }
     }
 

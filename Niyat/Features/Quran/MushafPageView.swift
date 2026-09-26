@@ -116,6 +116,10 @@ struct MushafPageView: View {
             }
             .onAppear {
                 page = min(max(page, 1), 604)
+                // Opened while listening: go to the verse being recited.
+                if options.followRecitation, !store.pageStarts.isEmpty, case .verse(let surah, let verse)? = player.current {
+                    page = store.page(containing: VerseReference(surah: surah, verse: verse))
+                }
                 UIApplication.shared.isIdleTimerDisabled = options.keepScreenOn
             }
             .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
@@ -535,6 +539,18 @@ private struct MushafPage: View {
     @State private var store = QuranStore.shared
     @State private var goal = QuranGoalModel.shared
     @State private var readTask: Task<Void, Never>?
+    @State private var scrollPosition = ScrollPosition(edge: .top)
+    @State private var viewportHeight: CGFloat = 0
+
+    static let pageSpace = "mushafPage"
+
+    /// Keeps the verse being recited in view when bigger text makes the page scroll.
+    private func scrollToVerse(atY y: CGFloat) {
+        guard isCurrent, options.textScale > 1.001 else { return }
+        withAnimation(.smooth(duration: 0.5)) {
+            scrollPosition.scrollTo(y: max(0, y - viewportHeight * 0.3))
+        }
+    }
 
     // Page geometry, in points.
     private static let aspect: CGFloat = 0.64
@@ -561,9 +577,13 @@ private struct MushafPage: View {
                 page(verses, layout: pageLayout)
                     .frame(width: size.width, height: pageLayout.pageHeight)
                     .frame(maxWidth: .infinity, minHeight: geo.size.height)
+                    .coordinateSpace(.named(Self.pageSpace))
             }
+            .scrollPosition($scrollPosition)
             .scrollDisabled(pageLayout.pageHeight <= size.height + 1)
             .scrollIndicators(.hidden)
+            .onAppear { viewportHeight = geo.size.height }
+            .onChange(of: geo.size.height) { _, height in viewportHeight = height }
         }
         .onChange(of: isCurrent, initial: true) { _, current in
             readTask?.cancel()
@@ -659,10 +679,12 @@ private struct MushafPage: View {
                     onTap(nil)
                 }
             case .verses(let verses):
-                MushafTextView(text: MushafTypesetter.verses(verses, size: fontSize, colors: colors,
+                VerseTextBlock(text: MushafTypesetter.verses(verses, size: fontSize, colors: colors,
                                                              sajdahs: store.sajdahVerses,
                                                              selected: selected,
-                                                             reciting: options.highlightRecitation ? reciting : nil)) { id in
+                                                             reciting: options.highlightRecitation ? reciting : nil),
+                               focus: reciting.flatMap { id in verses.contains { $0.id == id } ? id : nil },
+                               onScroll: scrollToVerse) { id in
                     onTap(id.flatMap { id in verses.first { $0.id == id } })
                 }
             }
@@ -847,10 +869,30 @@ private enum MushafTypesetter {
     }
 }
 
+/// A run of verses that reports where the reciting verse is on the page.
+private struct VerseTextBlock: View {
+    let text: NSAttributedString
+    let focus: Int?
+    let onScroll: (CGFloat) -> Void
+    let onTap: (Int?) -> Void
+    @State private var top: CGFloat = 0
+
+    var body: some View {
+        MushafTextView(text: text, focus: focus, onFocus: { rect in onScroll(top + rect.minY) }, onTap: onTap)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.frame(in: .named(MushafPage.pageSpace)).minY
+            } action: { top = $0 }
+    }
+}
+
 /// Justified Arabic text that knows which verse was tapped. (SwiftUI's Text
 /// can't justify lines or report where it was tapped.)
 private struct MushafTextView: UIViewRepresentable {
     let text: NSAttributedString
+    /// A verse to bring into view (the one being recited), and where it is
+    /// reported: its rectangle inside this text.
+    var focus: Int? = nil
+    var onFocus: ((CGRect) -> Void)? = nil
     /// The tapped verse ID, or nil if the tap wasn't on a verse.
     let onTap: (Int?) -> Void
 
@@ -874,6 +916,23 @@ private struct MushafTextView: UIViewRepresentable {
     func updateUIView(_ view: UITextView, context: Context) {
         context.coordinator.onTap = onTap
         if view.attributedText != text { view.attributedText = text }
+        guard focus != context.coordinator.lastFocus else { return }
+        context.coordinator.lastFocus = focus
+        guard let focus, let onFocus else { return }
+        // After this layout pass, find where the verse sits and report it.
+        DispatchQueue.main.async {
+            var range: NSRange?
+            view.textStorage.enumerateAttribute(.niyatVerse, in: NSRange(location: 0, length: view.textStorage.length)) { value, found, stop in
+                if value as? Int == focus {
+                    range = found
+                    stop.pointee = true
+                }
+            }
+            guard let range else { return }
+            view.layoutManager.ensureLayout(for: view.textContainer)
+            let glyphs = view.layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            onFocus(view.layoutManager.boundingRect(forGlyphRange: glyphs, in: view.textContainer))
+        }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
@@ -883,6 +942,7 @@ private struct MushafTextView: UIViewRepresentable {
 
     final class Coordinator: NSObject {
         var onTap: (Int?) -> Void = { _ in }
+        var lastFocus: Int?
 
         @objc func tapped(_ gesture: UITapGestureRecognizer) {
             guard let view = gesture.view as? UITextView else { return }
