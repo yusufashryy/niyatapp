@@ -235,7 +235,7 @@ final class TajweedStore {
 
 /// Qur'an › Settings › Tajweed colour guide.
 struct TajweedGuideView: View {
-    @AppStorage("quran.tajweed") private var tajweedOn = false
+    @AppStorage("quran.tajweed") private var tajweedOn = true
 
     var body: some View {
         List {

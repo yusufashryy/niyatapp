@@ -10,7 +10,8 @@ struct QuranSettingsView: View {
     @State private var goal = QuranGoalModel.shared
     @AppStorage("quran.arabicSize") private var arabicSize = 30.0
     @AppStorage("quran.showTranslation") private var showTranslation = true
-    @AppStorage("quran.tajweed") private var tajweedOn = false
+    @AppStorage("quran.tajweed") private var tajweedOn = true
+    @AppStorage("quran.readingLayout") private var readingLayout = "pages"
     @State private var showMushaf = false
 
     var body: some View {
@@ -18,6 +19,10 @@ struct QuranSettingsView: View {
         NavigationStack {
             Form {
                 Section {
+                    Picker("Open surahs as", selection: $readingLayout) {
+                        Text("Mushaf pages").tag("pages")
+                        Text("Verse by verse").tag("verses")
+                    }
                     Button {
                         showMushaf = true
                     } label: {

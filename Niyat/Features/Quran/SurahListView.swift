@@ -11,6 +11,9 @@ struct SurahListView: View {
     @State private var showMushaf = false
     @State private var showNotifications = false
     @State private var showRecite = false
+    /// "pages" opens surahs in the mushaf view; "verses" in the verse-by-verse reader.
+    @AppStorage("quran.readingLayout") private var readingLayout = "pages"
+    @AppStorage("quran.mushafPage") private var mushafPage = 1
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -64,8 +67,19 @@ struct SurahListView: View {
                 case nil: return
                 }
                 deepLink.pending = nil
-                path = [ReaderDestination(surah: target.surah, verse: target.verse)]
+                path = []
+                open(ReaderDestination(surah: target.surah, verse: target.verse))
             }
+        }
+    }
+
+    /// Opens a surah or verse in the chosen reading layout.
+    private func open(_ destination: ReaderDestination) {
+        if readingLayout == "pages", !store.pageStarts.isEmpty {
+            mushafPage = store.page(containing: VerseReference(surah: destination.surah, verse: destination.verse ?? 1))
+            showMushaf = true
+        } else {
+            path.append(destination)
         }
     }
 
@@ -88,7 +102,7 @@ struct SurahListView: View {
                         .appearAnimation(0)
                 }
                 if searchText.isEmpty, let lastRead = store.lastRead, let surah = store.surah(lastRead.surah) {
-                    NavigationLink(value: ReaderDestination(surah: surah.id, verse: lastRead.verse)) {
+                    Button { open(ReaderDestination(surah: surah.id, verse: lastRead.verse)) } label: {
                         ContinueReadingCard(surah: surah, verse: lastRead.verse)
                     }
                     .buttonStyle(.pressable)
@@ -99,7 +113,7 @@ struct SurahListView: View {
                     HStack(spacing: 10) {
                         NavigationLink {
                             QuranicDuasView { reference in
-                                path.append(ReaderDestination(surah: reference.surah, verse: reference.verse))
+                                open(ReaderDestination(surah: reference.surah, verse: reference.verse))
                             }
                         } label: {
                             QuranToolTile(title: "Duas", subtitle: "From the Qur'an", icon: "hands.and.sparkles.fill")
@@ -120,7 +134,7 @@ struct SurahListView: View {
                             HStack(spacing: 8) {
                                 ForEach(store.bookmarks) { bookmark in
                                     if let surah = store.surah(bookmark.surah) {
-                                        NavigationLink(value: ReaderDestination(surah: surah.id, verse: bookmark.verse)) {
+                                        Button { open(ReaderDestination(surah: surah.id, verse: bookmark.verse)) } label: {
                                             Label("\(surah.transliteration) \(bookmark.surah):\(bookmark.verse)", systemImage: "bookmark.fill")
                                                 .font(.subheadline.weight(.semibold))
                                                 .padding(.horizontal, 14)
@@ -146,7 +160,7 @@ struct SurahListView: View {
                 Text("Surahs").sectionLabelStyle().padding(.top, 8)
 
                 ForEach(Array(filteredSurahs.enumerated()), id: \.element.id) { index, surah in
-                    NavigationLink(value: ReaderDestination(surah: surah.id, verse: nil)) {
+                    Button { open(ReaderDestination(surah: surah.id, verse: nil)) } label: {
                         SurahRow(surah: surah, verseCount: store.verseCount(for: surah.id))
                     }
                     .buttonStyle(.pressable)

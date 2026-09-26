@@ -12,7 +12,7 @@ struct SurahReaderView: View {
     @State private var goal = QuranGoalModel.shared
     @AppStorage("quran.arabicSize") private var arabicSize = 30.0
     @AppStorage("quran.showTranslation") private var showTranslation = true
-    @AppStorage("quran.tajweed") private var tajweedOn = false
+    @AppStorage("quran.tajweed") private var tajweedOn = true
     @State private var tajweedStore = TajweedStore.shared
     @State private var didScroll = false
     @State private var showSettings = false
@@ -295,7 +295,7 @@ private struct VerseCard: View {
                 }
             }
                 .font(.quran(size: arabicSize))
-                .lineSpacing(arabicSize * 0.35)
+                .lineSpacing(0)
                 .multilineTextAlignment(.trailing)
                 .frame(maxWidth: .infinity, alignment: .trailing)
 
