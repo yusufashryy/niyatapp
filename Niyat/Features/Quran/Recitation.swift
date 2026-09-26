@@ -79,13 +79,21 @@ final class RecitationPlayer {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
     /// Repeat the current verse instead of moving on.
-    var repeatVerse = false
+    var repeatVerse: Bool {
+        get { repeatVerseValue }
+        set {
+            repeatVerseValue = newValue
+            applyEndBehaviour()
+        }
+    }
+    private var repeatVerseValue = false
     /// Carry on to the next verse automatically (off = stop after each verse).
     var continuous: Bool {
         get { continuousValue }
         set {
             continuousValue = newValue
             UserDefaults.standard.set(newValue, forKey: "quran.continuous")
+            applyEndBehaviour()
         }
     }
     private var continuousValue: Bool = UserDefaults.standard.object(forKey: "quran.continuous") as? Bool ?? true
@@ -98,16 +106,27 @@ final class RecitationPlayer {
         reciter = newReciter
         UserDefaults.standard.set(newReciter.id, forKey: "quran.reciter")
         if let current, isPlaying || isLoading {
-            play(surah: current.surah, from: current.verse ?? 1, verseCounts: verseCounts)
+            play(surah: current.surah, from: current.verse ?? 1, verseCounts: verseCounts, acrossSurahs: acrossSurahs)
         }
     }
 
-    @ObservationIgnored private let player = AVPlayer()
+    /// A queue player with the next few verses already loaded, so each verse
+    /// starts the instant the previous one ends (no gap between verses).
+    @ObservationIgnored private let player = AVQueuePlayer()
+    @ObservationIgnored private var itemsByPlayerItem: [ObjectIdentifier: RecitationItem] = [:]
+    @ObservationIgnored private var lastEnqueued: RecitationItem?
     @ObservationIgnored private var endObserver: NSObjectProtocol?
-    @ObservationIgnored private var statusObservation: NSKeyValueObservation?
+    @ObservationIgnored private var currentItemObservation: NSKeyValueObservation?
     @ObservationIgnored private var timeControlObservation: NSKeyValueObservation?
-    @ObservationIgnored private var queue: [RecitationItem] = []
+    @ObservationIgnored private var statusObservations: [ObjectIdentifier: NSKeyValueObservation] = [:]
     @ObservationIgnored private var verseCounts: [Int] = []
+    /// Keep going into the next surah (the mushaf view) rather than stopping
+    /// at the end of this one (the surah reader).
+    @ObservationIgnored private var acrossSurahs = false
+    /// Play just one verse, then stop.
+    @ObservationIgnored private var singleVerse = false
+    /// How many verses to keep loaded ahead of the one playing.
+    private let lookahead = 3
 
     private init() {
         setUpRemoteCommands()
@@ -118,30 +137,61 @@ final class RecitationPlayer {
                 self?.isLoading = status == .waitingToPlayAtSpecifiedRate
             }
         }
+        currentItemObservation = player.observe(\.currentItem, options: [.new]) { [weak self] _, _ in
+            Task { @MainActor in self?.currentItemChanged() }
+        }
+        endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: nil,
+                                                             queue: .main) { [weak self] note in
+            let finished = note.object as? AVPlayerItem
+            Task { @MainActor in self?.itemFinished(finished) }
+        }
     }
 
     // MARK: Playback
 
-    /// Starts reciting `surah` from `verse` to the end of the surah.
-    func play(surah: Int, from verse: Int = 1, verseCounts: [Int]) {
+    /// Starts reciting `surah` from `verse`: to the end of the surah, or on
+    /// through the following surahs when `acrossSurahs` is true.
+    func play(surah: Int, from verse: Int = 1, verseCounts: [Int], acrossSurahs: Bool = false, only single: Bool = false) {
         self.verseCounts = verseCounts
+        self.acrossSurahs = acrossSurahs
+        self.singleVerse = single
         guard surah >= 1, surah <= verseCounts.count else { return }
-        var items: [RecitationItem] = []
-        if verse == 1, surah != 1, surah != 9 { items.append(.bismillah(surah: surah)) }
-        items += (verse...verseCounts[surah - 1]).map { RecitationItem.verse(surah: surah, verse: $0) }
-        queue = items
+        resetQueue()
         errorMessage = nil
+        consecutiveFailures = 0
+        let first: RecitationItem = verse == 1 && surah != 1 && surah != 9 && !single
+            ? .bismillah(surah: surah) : .verse(surah: surah, verse: verse)
         activateAudioSession()
-        advance()
+        enqueue(first)
+        topUp()
+        applyEndBehaviour()
+        player.play()
     }
 
     func togglePlayPause() {
-        if isPlaying { player.pause() } else if current != nil { player.play() }
+        if isPlaying {
+            player.pause()
+        } else if let item = player.currentItem, item.duration.isNumeric,
+                  item.currentTime().seconds >= item.duration.seconds - 0.2 {
+            // Paused at the end of a verse ("stop after each verse"): go on to the next.
+            next()
+        } else if current != nil {
+            player.play()
+        }
         updateNowPlaying()
     }
 
     func next() {
-        advance()
+        guard current != nil else { return }
+        if player.items().count <= 1 {
+            // Nothing loaded after this one yet (e.g. after pausing at a verse end).
+            if let current, let following = item(after: current) {
+                play(surah: following.surah, from: following.verse ?? 1, verseCounts: verseCounts, acrossSurahs: acrossSurahs)
+            }
+            return
+        }
+        player.advanceToNextItem()
+        player.play()
     }
 
     /// Plays the current verse again from the start.
@@ -153,72 +203,108 @@ final class RecitationPlayer {
 
     func previous() {
         guard case .verse(let surah, let verse)? = current, verse > 1 else { return }
-        play(surah: surah, from: verse - 1, verseCounts: verseCounts)
+        play(surah: surah, from: verse - 1, verseCounts: verseCounts, acrossSurahs: acrossSurahs)
     }
 
     func stop() {
-        player.pause()
-        player.replaceCurrentItem(with: nil)
-        queue = []
+        resetQueue()
         current = nil
         isPlaying = false
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
-    private func advance() {
-        guard !queue.isEmpty else {
-            stop()
-            return
-        }
-        let item = queue.removeFirst()
-        current = item
-        load(item)
+    private func resetQueue() {
+        player.pause()
+        player.removeAllItems()
+        itemsByPlayerItem.removeAll()
+        statusObservations.removeAll()
+        lastEnqueued = nil
     }
 
-    private func load(_ item: RecitationItem) {
-        let url = reciter.url(forGlobalAyah: globalAyahNumber(for: item))
-        let playerItem = AVPlayerItem(url: url)
-
-        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
-        endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: playerItem,
-                                                             queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.itemFinished() }
+    /// The verse that follows `item`, or nil at the end.
+    private func item(after item: RecitationItem) -> RecitationItem? {
+        if singleVerse { return nil }
+        switch item {
+        case .bismillah(let surah):
+            return .verse(surah: surah, verse: 1)
+        case .verse(let surah, let verse):
+            guard surah <= verseCounts.count else { return nil }
+            if verse < verseCounts[surah - 1] { return .verse(surah: surah, verse: verse + 1) }
+            guard acrossSurahs, surah < verseCounts.count else { return nil }
+            let nextSurah = surah + 1
+            return nextSurah == 9 ? .verse(surah: 9, verse: 1) : .bismillah(surah: nextSurah)
         }
-        statusObservation = playerItem.observe(\.status, options: [.new]) { [weak self] item, _ in
-            guard item.status == .failed else { return }
-            Task { @MainActor in self?.itemFailed() }
-        }
+    }
 
-        player.replaceCurrentItem(with: playerItem)
-        player.play()
+    private func enqueue(_ item: RecitationItem) {
+        let asset = AVURLAsset(url: reciter.url(forGlobalAyah: globalAyahNumber(for: item)))
+        let playerItem = AVPlayerItem(asset: asset)
+        playerItem.preferredForwardBufferDuration = 10
+        let key = ObjectIdentifier(playerItem)
+        itemsByPlayerItem[key] = item
+        statusObservations[key] = playerItem.observe(\.status, options: [.new]) { [weak self] observed, _ in
+            guard observed.status == .failed else { return }
+            Task { @MainActor in self?.itemFailed(observed) }
+        }
+        player.insert(playerItem, after: nil)
+        lastEnqueued = item
+    }
+
+    /// Keeps `lookahead` verses loaded after the one playing.
+    private func topUp() {
+        while player.items().count < lookahead + 1, let last = lastEnqueued, let following = item(after: last) {
+            enqueue(following)
+        }
+    }
+
+    private func currentItemChanged() {
+        guard let playerItem = player.currentItem else {
+            // The queue ran out: the surah (or the Qur'an) is finished.
+            if current != nil, lastEnqueued.map({ item(after: $0) == nil }) ?? true { stop() }
+            return
+        }
+        current = itemsByPlayerItem[ObjectIdentifier(playerItem)]
+        // Forget items that have already played.
+        let live = Set(player.items().map(ObjectIdentifier.init))
+        itemsByPlayerItem = itemsByPlayerItem.filter { live.contains($0.key) }
+        statusObservations = statusObservations.filter { live.contains($0.key) }
+        topUp()
         updateNowPlaying()
     }
 
-    private func itemFinished() {
+    /// Repeat and "stop after each verse" are handled by what the player does
+    /// when an item ends; otherwise it glides straight into the next verse.
+    private func applyEndBehaviour() {
+        player.actionAtItemEnd = repeatVerse || !continuous ? .pause : .advance
+    }
+
+    private func itemFinished(_ finished: AVPlayerItem?) {
+        guard let finished, finished == player.currentItem else { return }
         consecutiveFailures = 0
-        if repeatVerse, let current, current.verse != nil {
+        applyEndBehaviour()
+        if repeatVerse {
             player.seek(to: .zero)
             player.play()
-        } else if !continuous, current?.verse != nil {
+        } else if !continuous {
             // Stop after this verse, but remember where we are.
             player.pause()
-            queue.removeAll()
-        } else {
-            advance()
         }
     }
 
     @ObservationIgnored private var consecutiveFailures = 0
 
-    private func itemFailed() {
+    private func itemFailed(_ failed: AVPlayerItem) {
         consecutiveFailures += 1
         if consecutiveFailures >= 3 {
-            consecutiveFailures = 0
             stop()
             errorMessage = "Couldn't play the recitation. Check your internet connection and try again."
-        } else {
+        } else if failed == player.currentItem {
             // One verse missing on the server shouldn't stop the whole surah.
-            advance()
+            player.advanceToNextItem()
+            player.play()
+        } else {
+            player.remove(failed)
+            topUp()
         }
     }
 

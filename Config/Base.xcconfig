@@ -21,4 +21,9 @@ APP_STORE_ID =
 // Tip: use a separate address rather than a personal one, because it ships in the app.
 FEEDBACK_EMAIL =
 
+// Discord webhook for More › Send feedback. Set it in Local.xcconfig (never
+// here: this file is public). Leave out "https://", e.g.
+// DISCORD_WEBHOOK = discord.com/api/webhooks/123456/abcdef
+DISCORD_WEBHOOK =
+
 #include? "Local.xcconfig"

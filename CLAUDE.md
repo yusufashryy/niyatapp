@@ -7,3 +7,5 @@
 - No Mac in the dev container: CI (`.github/workflows/build.yml`, macOS runner) is the compiler. Push and read the Actions logs to verify.
 - Design: dark-only. Colours come from the user's theme via `Palette` (`Shared/Theme.swift`, `Shared/ThemeStore.swift`); never hard-code accent colours. `niyatBackground()` behind screens, `glassPanel` for floating/hero elements, `surface` for content rows. Ornaments (`EightPointStar`, `IslamicPattern`, `Rosette`, `PrayerSky`) in `Shared/Ornaments.swift`. Interactions (`.haptic`, `.pressable`, `.appearAnimation`, `.scrollFade`) in `Niyat/App/Interaction.swift`; use `.haptic` rather than `.sensoryFeedback` so the Settings toggle works.
 - The owner is new to iOS (background: Roblox/Luau). Keep explanations beginner-friendly.
+- Exceptions to theme colours: the mushaf's Paper/Sepia/White page palettes are deliberately fixed (they recreate print). Switches use `Palette.control` (via `NiyatToggleStyle`), because a near-white accent makes an "on" switch invisible.
+- Secrets such as `DISCORD_WEBHOOK` go in the git-ignored `Config/Local.xcconfig`, never `Base.xcconfig`.

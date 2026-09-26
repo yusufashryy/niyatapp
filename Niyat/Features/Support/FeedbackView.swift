@@ -3,9 +3,10 @@ import SwiftUI
 import UIKit
 
 /// More › Send feedback: report a bug, suggest an idea, or flag something
-/// inaccurate. Sends by email when `FEEDBACK_EMAIL` is set in
-/// Config/Base.xcconfig and Mail is set up; otherwise opens a prefilled
-/// GitHub issue.
+/// inaccurate. Where it goes, in order:
+/// 1. A Discord channel, if `DISCORD_WEBHOOK` is set (in Config/Local.xcconfig);
+/// 2. email, if `FEEDBACK_EMAIL` is set and Mail is set up;
+/// 3. otherwise a prefilled GitHub issue.
 struct FeedbackView: View {
     enum Kind: String, CaseIterable, Identifiable {
         case idea = "Idea or request"
@@ -32,6 +33,9 @@ struct FeedbackView: View {
     @State private var includeDetails = true
     @State private var showMail = false
     @State private var sent = false
+    @State private var replyEmail = ""
+    @State private var isSending = false
+    @State private var errorMessage: String?
 
     var body: some View {
         Form {
@@ -56,6 +60,20 @@ struct FeedbackView: View {
                 }
             }
 
+            if FeedbackSender.discordWebhook != nil {
+                Section {
+                    TextField("Email (optional)", text: $replyEmail)
+                        .keyboardType(.emailAddress)
+                        .textContentType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("Want a reply?")
+                } footer: {
+                    Text("Only if you'd like an answer. It's used to reply to this message and nothing else.")
+                }
+            }
+
             Section {
                 Toggle("Include app details", isOn: $includeDetails)
             } footer: {
@@ -66,10 +84,19 @@ struct FeedbackView: View {
                 Button {
                     send()
                 } label: {
-                    Label(sent ? "Thank you!" : "Send", systemImage: sent ? "checkmark.circle.fill" : "paperplane.fill")
-                        .frame(maxWidth: .infinity)
+                    Group {
+                        if isSending {
+                            ProgressView()
+                        } else {
+                            Label(sent ? "Sent. Thank you!" : "Send", systemImage: sent ? "checkmark.circle.fill" : "paperplane.fill")
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
                 }
-                .disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending || sent)
+                if let errorMessage {
+                    Text(errorMessage).font(.footnote).foregroundStyle(.orange)
+                }
                 .haptic(.success, trigger: sent)
             }
         }
@@ -101,24 +128,35 @@ struct FeedbackView: View {
 
     private var subject: String { "Niyat feedback: \(kind.rawValue)" }
 
+    private var details: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return """
+        Niyat \(version) (\(build)) · iOS \(UIDevice.current.systemVersion) · \(UIDevice.current.model)
+        Method: \(model.prayerSettings.method.title) · Asr: \(model.prayerSettings.madhab.title)
+        """
+    }
+
     private var fullBody: String {
-        var text = message
-        if includeDetails {
-            let info = Bundle.main.infoDictionary
-            let version = info?["CFBundleShortVersionString"] as? String ?? "?"
-            let build = info?["CFBundleVersion"] as? String ?? "?"
-            text += """
-
-
-            ---
-            Niyat \(version) (\(build)) · iOS \(UIDevice.current.systemVersion) · \(UIDevice.current.model)
-            Method: \(model.prayerSettings.method.title) · Asr: \(model.prayerSettings.madhab.title)
-            """
-        }
-        return text
+        includeDetails ? message + "\n\n---\n" + details : message
     }
 
     private func send() {
+        if FeedbackSender.discordWebhook != nil {
+            isSending = true
+            errorMessage = nil
+            Task {
+                let result = await FeedbackSender.sendToDiscord(kind: kind.rawValue, message: message,
+                                                               replyTo: replyEmail, details: includeDetails ? details : nil)
+                isSending = false
+                switch result {
+                case .success: sent = true
+                case .failure(let error): errorMessage = error.message
+                }
+            }
+            return
+        }
         if Self.email != nil, MFMailComposeViewController.canSendMail() {
             showMail = true
             return
@@ -131,6 +169,73 @@ struct FeedbackView: View {
         if let url = components?.url {
             openURL(url)
             sent = true
+        }
+    }
+}
+
+/// Posts feedback to a Discord channel through a webhook.
+///
+/// A webhook URL inside an app can be extracted by a determined person, so:
+/// keep it out of the public repo (Config/Local.xcconfig, which is
+/// git-ignored), use a channel only for feedback, and if it's ever abused,
+/// delete the webhook in Discord and make a new one. Mentions are disabled
+/// so nobody can ping @everyone through it, and the app limits how often it
+/// can be used.
+enum FeedbackSender {
+    struct Failure: Error { let message: String }
+
+    static var discordWebhook: URL? {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: "NiyatDiscordWebhook") as? String,
+              value.contains("discord.com/api/webhooks/") else { return nil }
+        // Stored without "https://" because "//" starts a comment in .xcconfig files.
+        return URL(string: value.hasPrefix("https://") ? value : "https://" + value)
+    }
+
+    private static let recentKey = "feedback.recentSends"
+
+    static func sendToDiscord(kind: String, message: String, replyTo: String, details: String?) async -> Result<Void, Failure> {
+        guard let url = discordWebhook else { return .failure(Failure(message: "Feedback isn't set up.")) }
+
+        // At most one message a minute and ten a day from this phone.
+        let now = Date.now
+        var recent = (UserDefaults.standard.array(forKey: recentKey) as? [Date] ?? []).filter { now.timeIntervalSince($0) < 86_400 }
+        if let last = recent.max(), now.timeIntervalSince(last) < 60 {
+            return .failure(Failure(message: "Please wait a minute before sending another message."))
+        }
+        if recent.count >= 10 {
+            return .failure(Failure(message: "You've sent a lot of feedback today. Thank you! Please try again tomorrow."))
+        }
+
+        var fields: [[String: Any]] = [["name": "Type", "value": kind, "inline": true]]
+        let reply = replyTo.trimmingCharacters(in: .whitespaces)
+        if !reply.isEmpty { fields.append(["name": "Reply to", "value": String(reply.prefix(200)), "inline": true]) }
+        if let details { fields.append(["name": "Details", "value": String(details.prefix(1000))]) }
+        let payload: [String: Any] = [
+            "username": "Niyat Feedback",
+            "allowed_mentions": ["parse": [String]()],
+            "embeds": [[
+                "title": kind,
+                "description": String(message.prefix(3900)),
+                "color": 0xD4AF37,
+                "fields": fields,
+                "timestamp": ISO8601DateFormatter().string(from: now),
+            ]],
+        ]
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                return .failure(Failure(message: "Couldn't send right now. Please try again later."))
+            }
+            recent.append(now)
+            UserDefaults.standard.set(recent, forKey: recentKey)
+            return .success(())
+        } catch {
+            return .failure(Failure(message: "Couldn't send. Check your internet connection and try again."))
         }
     }
 }

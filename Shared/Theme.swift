@@ -15,6 +15,12 @@ enum Palette {
     static var accent: Color { theme.accent.color }
     /// Warm highlight: next prayer, Arabic headings, streaks.
     static var highlight: Color { theme.highlight.color }
+    /// Switches and other "on" states. A near-white accent (Onyx) would make
+    /// an "on" switch all white, so those use the highlight colour instead.
+    static var control: Color {
+        let accent = theme.accent.hsb
+        return accent.b > 0.85 && accent.s < 0.2 ? theme.highlight.color : theme.accent.color
+    }
     /// Hairline borders on dark surfaces.
     static let hairline = Color.white.opacity(0.10)
 }

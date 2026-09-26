@@ -100,8 +100,14 @@ struct SettingsView: View {
                         let sent = await NotificationScheduler.sendTest(location: model.location,
                                                                         current: model.currentPrayer(at: .now),
                                                                         next: model.nextPrayer(after: .now))
-                        testMessage = sent ? "Sent! It arrives in 5 seconds. Lock your phone, then press and hold the alert to try Log Prayer."
-                                           : "Notifications are off. Turn them on in the iPhone Settings app › Notifications › Niyat."
+                        let problems = await NotificationScheduler.problems()
+                        if !sent {
+                            testMessage = problems.first ?? "Notifications are off. Turn them on in the iPhone Settings app › Notifications › Niyat."
+                        } else {
+                            testMessage = "Sent! It arrives in \(Int(NotificationScheduler.testDelay)) seconds. Lock your phone now, then press and hold the alert to try Log Prayer."
+                                + (problems.isEmpty ? "" : "\n\n⚠️ " + problems.joined(separator: "\n⚠️ "))
+                                + "\n\nNot seeing it? A Focus (Do Not Disturb, Sleep) can hide alerts. Allow Niyat in that Focus, or turn on Time Sensitive Notifications for Niyat."
+                        }
                     }
                 } label: {
                     Label("Send a test notification", systemImage: "bell.and.waves.left.and.right.fill")

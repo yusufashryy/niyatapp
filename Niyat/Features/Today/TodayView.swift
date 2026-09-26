@@ -22,6 +22,7 @@ struct TodayView: View {
                     Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)))
                         .font(.headline)
                         .fixedSize()
+                        .padding(.horizontal, 12)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {

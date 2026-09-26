@@ -74,3 +74,12 @@ struct PressableStyle: ButtonStyle {
 extension ButtonStyle where Self == PressableStyle {
     static var pressable: PressableStyle { PressableStyle() }
 }
+
+/// Standard iOS switch, tinted so "on" is always easy to see against the knob.
+struct NiyatToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Toggle(configuration)
+            .toggleStyle(.switch)
+            .tint(Palette.control)
+    }
+}
