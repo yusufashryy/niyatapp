@@ -20,3 +20,7 @@ risan/quran-json keeps a detailed record of which translations can legally be
 redistributed, so check there before adding a new one.
 
 Arabic dhikr phrases in `Shared/Tasbih.swift` are standard phrases, not copied from any dataset.
+
+## Tajweed rules
+
+- **Quran Tajweed** by Collin Fair, [github.com/cpfair/quran-tajweed](https://github.com/cpfair/quran-tajweed), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Built from ReciteQuran.com and the Dar al-Maarifah tajweed masahif. Niyat re-runs its classifier on the bundled Tanzil text (see docs/SOURCES.md); no rule data was changed by hand.

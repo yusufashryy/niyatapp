@@ -12,13 +12,15 @@ struct SurahReaderView: View {
     @State private var goal = QuranGoalModel.shared
     @AppStorage("quran.arabicSize") private var arabicSize = 30.0
     @AppStorage("quran.showTranslation") private var showTranslation = true
+    @AppStorage("quran.tajweed") private var tajweedOn = false
+    @State private var tajweedStore = TajweedStore.shared
     @State private var didScroll = false
     @State private var showSettings = false
     @State private var showGoal = false
     @State private var showRecite = false
     /// Verses currently on screen, for counting what's actually read.
     @State private var visibleVerses: Set<Int> = []
-    /// Where the list is scrolled to, by verse number (0 = the Bismillah).
+    /// Where the list is scrolled to, by Verse.id (0 = the Bismillah).
     @State private var position = ScrollPosition(idType: Int.self)
     private static let bismillahID = 0
 
@@ -35,9 +37,15 @@ struct SurahReaderView: View {
                             .padding(.bottom, 6)
                         if store.showsBismillahHeader(for: surah) {
                             let reciting = player.current == .bismillah(surah: surah.id)
-                            Text(store.bismillah)
+                            Group {
+                                if showsTajweed {
+                                    Text(TajweedStore.shared.attributed(store.bismillah, surah: 1, verse: 1,
+                                                                        base: Palette.highlight, dark: true))
+                                } else {
+                                    Text(store.bismillah).foregroundStyle(Palette.highlight)
+                                }
+                            }
                                 .font(.quran(size: 28))
-                                .foregroundStyle(Palette.highlight)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
                                 .background {
@@ -50,13 +58,14 @@ struct SurahReaderView: View {
                     }
                     ForEach(store.verses(for: surahID)) { verse in
                         VerseCard(verse: verse, arabicSize: arabicSize, showTranslation: showTranslation,
+                                  tajweed: showsTajweed,
                                   isBookmarked: store.isBookmarked(verse),
                                   isReciting: player.current == .verse(surah: surahID, verse: verse.number),
                                   showsPlay: audioAvailable,
                                   onPlay: { play(from: verse.number) }) {
                             store.toggleBookmark(verse)
                         }
-                        .id(verse.number)
+                        .id(verse.id)
                         .scrollFade()
                         .onAppear {
                             store.markRead(verse)
@@ -80,7 +89,7 @@ struct SurahReaderView: View {
                     return
                 }
                 guard let startVerse, startVerse > 1 else { return }
-                let target = store.verse(VerseReference(surah: surahID, verse: startVerse))?.number ?? startVerse
+                let target = store.verse(VerseReference(surah: surahID, verse: startVerse))?.id ?? surahID * 1000 + startVerse
                 DispatchQueue.main.async { position.scrollTo(id: target, anchor: .top) }
             }
             // Follow along: keep the verse being recited in the middle of the screen.
@@ -144,6 +153,7 @@ struct SurahReaderView: View {
         }
         .sheet(isPresented: $showSettings) { QuranSettingsView() }
         .sheet(isPresented: $showGoal) { QuranGoalSheet() }
+        .task { await tajweedStore.load() }
         .fullScreenCover(isPresented: $showRecite) {
             RecitationCheckView(surah: surahID, verse: store.lastRead?.surah == surahID ? store.lastRead?.verse ?? 1 : 1)
         }
@@ -155,13 +165,20 @@ struct SurahReaderView: View {
 
     /// Scrolls so the verse being recited sits in the middle of the screen.
     private func follow(_ item: RecitationItem, animated: Bool) {
-        // Recitation is numbered like Hafs; find the matching card.
-        let target = item.verse.map { store.verse(VerseReference(surah: surahID, verse: $0))?.number ?? $0 } ?? Self.bismillahID
+        // Recitation is numbered like Hafs; find the matching card. Cards are
+        // identified by Verse.id (surah × 1000 + verse), the same as the ForEach.
+        let target = item.verse.map { store.verse(VerseReference(surah: surahID, verse: $0))?.id ?? surahID * 1000 + $0 }
+            ?? Self.bismillahID
         if animated {
             withAnimation(.smooth(duration: 0.5)) { position.scrollTo(id: target, anchor: .center) }
         } else {
             position.scrollTo(id: target, anchor: .center)
         }
+    }
+
+    /// Tajweed colours are for the Uthmani (Hafs) text they were made for.
+    private var showsTajweed: Bool {
+        tajweedOn && store.edition == .uthmani && tajweedStore.isLoaded
     }
 
     private func play(from verse: Int) {
@@ -222,6 +239,7 @@ private struct VerseCard: View {
     let verse: Verse
     let arabicSize: Double
     let showTranslation: Bool
+    let tajweed: Bool
     let isBookmarked: Bool
     let isReciting: Bool
     let showsPlay: Bool
@@ -268,9 +286,15 @@ private struct VerseCard: View {
                 .accessibilityLabel(isBookmarked ? "Remove bookmark" : "Bookmark")
             }
 
-            Text(verse.arabic)
+            Group {
+                if tajweed {
+                    Text(TajweedStore.shared.attributed(verse.arabic, surah: verse.surah, verse: verse.number,
+                                                        base: .white, dark: true))
+                } else {
+                    Text(verse.arabic).foregroundStyle(.white)
+                }
+            }
                 .font(.quran(size: arabicSize))
-                .foregroundStyle(.white)
                 .lineSpacing(arabicSize * 0.35)
                 .multilineTextAlignment(.trailing)
                 .frame(maxWidth: .infinity, alignment: .trailing)

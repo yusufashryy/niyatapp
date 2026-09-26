@@ -126,7 +126,10 @@ struct MushafPageView: View {
                 UIApplication.shared.isIdleTimerDisabled = options.keepScreenOn
             }
             .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
-            .task { await store.load() }
+            .task {
+                await store.load()
+                await TajweedStore.shared.load()
+            }
         }
     }
 
@@ -378,6 +381,7 @@ struct MushafColors {
 /// Page settings sheet.
 private struct MushafOptionsSheet: View {
     @Binding var options: MushafOptions
+    @AppStorage("quran.tajweed") private var tajweedOn = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -440,6 +444,15 @@ private struct MushafOptionsSheet: View {
                     }
                 } footer: {
                     Text("At \"Fit page\" each page fills its frame like a printed mushaf. Bigger text scrolls within the page.")
+                }
+
+                Section {
+                    Toggle("Tajweed colours", isOn: $tajweedOn)
+                    NavigationLink("Colour guide") { TajweedGuideView() }
+                } header: {
+                    Text("Tajweed")
+                } footer: {
+                    Text("For the Uthmani script (Hafs).")
                 }
 
                 Section("Tap and recitation") {
@@ -576,6 +589,14 @@ private struct MushafPage: View {
 
     private var colors: MushafColors { options.style.colors }
 
+    @AppStorage("quran.tajweed") private var tajweedOn = false
+    @State private var tajweedStore = TajweedStore.shared
+
+    /// Tajweed colours are for the Uthmani (Hafs) text they were made for.
+    private var showsTajweed: Bool {
+        tajweedOn && store.edition == .uthmani && tajweedStore.isLoaded
+    }
+
     var body: some View {
         let verses = store.verses(onPage: number)
         GeometryReader { geo in
@@ -683,14 +704,16 @@ private struct MushafPage: View {
                 SurahBanner(surah: surah, colors: colors, height: MushafTypesetter.bannerHeight(fontSize))
                     .onTapGesture { onTap(nil) }
             case .bismillah:
-                MushafTextView(text: MushafTypesetter.centered(store.bismillah, size: fontSize, color: colors.ink)) { _ in
+                MushafTextView(text: MushafTypesetter.centered(store.bismillah, size: fontSize, color: colors.ink,
+                                                               tajweedBismillah: showsTajweed, dark: !options.style.isLight)) { _ in
                     onTap(nil)
                 }
             case .verses(let verses):
                 VerseTextBlock(text: MushafTypesetter.verses(verses, size: fontSize, colors: colors,
                                                              sajdahs: store.sajdahVerses,
                                                              selected: selected,
-                                                             reciting: options.highlightRecitation ? reciting : nil),
+                                                             reciting: options.highlightRecitation ? reciting : nil,
+                                                             tajweed: showsTajweed, dark: !options.style.isLight),
                                focus: reciting.flatMap { id in verses.contains { $0.id == id } ? id : nil },
                                onScroll: scrollToVerse) { id in
                     onTap(id.flatMap { id in verses.first { $0.id == id } })
@@ -829,15 +852,19 @@ private enum MushafTypesetter {
         return style
     }
 
-    static func centered(_ text: String, size: CGFloat, color: UIColor) -> NSAttributedString {
-        NSAttributedString(string: text, attributes: [.font: font(size), .foregroundColor: color,
-                                                      .paragraphStyle: paragraph(.center, size: size)])
+    static func centered(_ text: String, size: CGFloat, color: UIColor, tajweedBismillah: Bool = false, dark: Bool = false) -> NSAttributedString {
+        let result = NSMutableAttributedString(string: text, attributes: [.font: font(size), .foregroundColor: color,
+                                                                          .paragraphStyle: paragraph(.center, size: size)])
+        if tajweedBismillah {
+            TajweedStore.shared.colour(result, verseText: text, at: 0, surah: 1, verse: 1, dark: dark)
+        }
+        return result
     }
 
     /// Verses run together, justified, each closed by an ayah marker ۝ with its
     /// number in Arabic-Indic digits (the font draws the ornament around it).
     static func verses(_ verses: [Verse], size: CGFloat, colors: MushafColors, sajdahs: Set<VerseReference>,
-                       selected: Int?, reciting: Int?) -> NSAttributedString {
+                       selected: Int?, reciting: Int?, tajweed: Bool = false, dark: Bool = false) -> NSAttributedString {
         let text = NSMutableAttributedString()
         let base: [NSAttributedString.Key: Any] = [.font: font(size), .foregroundColor: colors.ink,
                                                    .paragraphStyle: paragraph(.justified, size: size)]
@@ -850,7 +877,12 @@ private enum MushafTypesetter {
                 attributes[.backgroundColor] = UIColor(colors.green).withAlphaComponent(0.22)
             }
             // (The Bismillah is already split off verse 1 when the text loads.)
+            let start = text.length
             text.append(NSAttributedString(string: verse.arabic, attributes: attributes))
+            if tajweed {
+                TajweedStore.shared.colour(text, verseText: verse.arabic, at: start,
+                                           surah: verse.surah, verse: verse.number, dark: dark)
+            }
             var markerAttributes = attributes
             markerAttributes[.foregroundColor] = sajdahs.contains(verse.hafsReference) ? UIColor(colors.rose) : colors.marker
             // No-break space keeps the marker on the same line as the verse's last word.

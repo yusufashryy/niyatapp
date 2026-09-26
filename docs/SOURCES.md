@@ -72,3 +72,14 @@ Qur'an › Duas lists 54 supplications from the Qur'an. Only the verse reference
 ## Recitation checker (beta)
 
 Qur'an › Recite listens while you recite and follows along word by word. It uses Apple's Speech framework for Arabic (`ar-SA`), on the device whenever the iPhone supports it. What it hears is compared with Tanzil's Imla'i (modern spelling) Hafs text, after removing harakat and folding spelling variants. It checks words only: no tajwid or pronunciation judgement, and highlighted words are shown as "worth double-checking", never as errors. See `docs/research/recitation-checker.md`.
+
+## Tajweed colours
+
+Source: [cpfair/quran-tajweed](https://github.com/cpfair/quran-tajweed), CC BY 4.0, built from ReciteQuran.com and the Dar al-Maarifah colour-coded tajweed masahif. It marks 17 rules (ghunnah, ikhfa, iqlab, idgham types, qalqalah, madd types, hamzat al-wasl, lam shamsiyyah, silent letters) at exact character positions in the Tanzil Uthmani text.
+
+Its published file points into a 2017 copy of the Tanzil text whose encoding differs slightly from ours, so `scripts/generate_tajweed.py` runs the project's own classifier (its published decision trees) on our exact bundled text and writes `Niyat/Resources/Quran/tajweed-hafs.json` (60,024 marks). Compared with the published file:
+- 5,932 of 6,236 verses: identical.
+- 272 more: the same rules in the same order, only shifted by the encoding change.
+- 32 verses: 34 "madd, 2 counts" marks from the published file are not produced, and one extra "madd lazim" mark is.
+
+The tests check every hamzat al-wasl, lam shamsiyyah and qalqalah mark lands on the right letter. Colours are shown only with the Uthmani script (Hafs), the text they were made for.

@@ -10,6 +10,7 @@ struct QuranSettingsView: View {
     @State private var goal = QuranGoalModel.shared
     @AppStorage("quran.arabicSize") private var arabicSize = 30.0
     @AppStorage("quran.showTranslation") private var showTranslation = true
+    @AppStorage("quran.tajweed") private var tajweedOn = false
     @State private var showMushaf = false
 
     var body: some View {
@@ -60,6 +61,14 @@ struct QuranSettingsView: View {
                     }
 
                     Toggle("Show translation", isOn: $showTranslation)
+                    Toggle("Tajweed colours", isOn: $tajweedOn)
+                    NavigationLink("Tajweed colour guide") { TajweedGuideView() }
+                    if tajweedOn, store.edition != .uthmani {
+                        Label("Tajweed colours show with the Uthmani script (Hafs). Switch the script above to see them.",
+                              systemImage: "info.circle")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                     VStack(alignment: .leading) {
                         LabeledContent("Arabic size", value: "\(Int(arabicSize))")
                         Slider(value: $arabicSize, in: 20...48, step: 2)

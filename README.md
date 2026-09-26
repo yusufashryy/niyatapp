@@ -34,6 +34,7 @@
 - The full Qur'an with an English translation, all offline
 - Read verse by verse, or page by page like a printed mushaf (604 pages)
 - Uthmani, simpler and modern scripts, plus the Warsh and Qalun readings
+- Tajweed colours: 17 rules colour-coded like a tajweed mushaf, with a colour guide
 - Listen to 20 reciters, verse by verse, with no gaps between verses
 - Duas from the Qur'an: 54 supplications, grouped by theme, with where each comes from
 - Recite (beta): recite aloud and the app follows along word by word, pointing out words to double-check
@@ -113,5 +114,6 @@ The code is under the [MIT License](LICENSE). Content keeps its own licence (det
 - Warsh and Qalun: [Qur'anpedia](https://quranpedia.net)
 - English translation: Talal Itani, [ClearQuran.com](https://clearquran.com), CC BY-ND 4.0
 - Recitation audio: [Islamic Network](https://islamic.network), free for non-commercial use
+- Tajweed rules: [Quran Tajweed](https://github.com/cpfair/quran-tajweed) by Collin Fair, CC BY 4.0
 - Fonts: [Amiri Quran](https://github.com/aliftype/amiri) and [Aref Ruqaa](https://github.com/alif-type/aref-ruqaa), SIL Open Font License
 - Prayer times: [Adhan](https://github.com/batoulapps/adhan-swift), MIT
