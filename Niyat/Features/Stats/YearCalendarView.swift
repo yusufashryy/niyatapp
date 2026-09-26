@@ -30,7 +30,7 @@ struct YearCalendarView: View {
                 summary(data)
                     .appearAnimation(0)
 
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12, alignment: .top), GridItem(.flexible(), spacing: 12, alignment: .top)], spacing: 12) {
                     ForEach(1...12, id: \.self) { month in
                         MiniMonth(year: year, month: month, data: data) { day in
                             if kind == .salah { selectedDay = DayDestination(day: day) }

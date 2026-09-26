@@ -83,7 +83,10 @@ struct MushafPageView: View {
             .toolbarVisibility(showChrome ? .visible : .hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close", systemImage: "xmark") { dismiss() }
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark").foregroundStyle(barIconColor)
+                    }
+                    .accessibilityLabel("Close")
                 }
                 ToolbarItem(placement: .principal) {
                     MushafHeader(page: page, colors: options.style.colors)
@@ -93,7 +96,7 @@ struct MushafPageView: View {
                         Button("Go to page, juz or surah", systemImage: "list.number") { showJump = true }
                         Button("Page settings", systemImage: "textformat.size") { showOptions = true }
                     } label: {
-                        Image(systemName: "ellipsis")
+                        Image(systemName: "ellipsis").foregroundStyle(barIconColor)
                     }
                     .accessibilityLabel("Page options")
                 }
@@ -125,6 +128,11 @@ struct MushafPageView: View {
             .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
             .task { await store.load() }
         }
+    }
+
+    /// Bar buttons stay readable on light paper.
+    private var barIconColor: Color {
+        options.layout == .screen && options.style.isLight ? options.style.colors.label : .white
     }
 
     private var title: String {
