@@ -62,6 +62,7 @@ targets:
         NiyatAppGroup: $(APP_GROUP_ID)
         NiyatAppStoreID: $(APP_STORE_ID)
         NiyatFeedbackEmail: $(FEEDBACK_EMAIL)
+        NiyatDiscordWebhook: $(DISCORD_WEBHOOK)
     entitlements:
       path: Niyat/Support/Niyat.entitlements
       properties:

@@ -49,11 +49,35 @@ enum NotificationScheduler {
         return status == .authorized || status == .provisional || status == .ephemeral
     }
 
+    /// The reschedule in progress, so a new one waits for it instead of both
+    /// clearing and adding alerts at the same time.
+    @MainActor private static var lastReschedule: Task<Void, Never>?
+
+    @MainActor
     static func reschedule(location: SavedLocation?, prayerSettings: PrayerSettings,
                            notificationSettings: NotificationSettings,
                            quranReminders: QuranReminderSettings = SettingsStore.quranReminders) async {
+        let previous = lastReschedule
+        let task = Task { @MainActor in
+            await previous?.value
+            await performReschedule(location: location, prayerSettings: prayerSettings,
+                                    notificationSettings: notificationSettings, quranReminders: quranReminders)
+        }
+        lastReschedule = task
+        await task.value
+    }
+
+    /// Test alerts are never cleared by a reschedule.
+    private static func isTest(_ identifier: String) -> Bool {
+        identifier.hasPrefix("test.") || identifier == "quran.test"
+    }
+
+    private static func performReschedule(location: SavedLocation?, prayerSettings: PrayerSettings,
+                                           notificationSettings: NotificationSettings,
+                                           quranReminders: QuranReminderSettings) async {
         let center = UNUserNotificationCenter.current()
-        center.removeAllPendingNotificationRequests()
+        let pending = await center.pendingNotificationRequests().map(\.identifier).filter { !isTest($0) }
+        center.removePendingNotificationRequests(withIdentifiers: pending)
         guard await isAuthorized() else { return }
 
         let now = Date()
@@ -247,7 +271,10 @@ enum NotificationScheduler {
 
     // MARK: Testing
 
-    /// Sends a sample alert in 5 seconds. It's for the prayer whose time is
+    /// Seconds before a test alert arrives: long enough to lock the phone.
+    static let testDelay: TimeInterval = 8
+
+    /// Sends a sample alert in a few seconds. It's for the prayer whose time is
     /// current, with the real "Log Prayer" button, so the whole flow can be tried.
     static func sendTest(location: SavedLocation?, current: PrayerTime?, next: PrayerTime?) async -> Bool {
         let allowed = await requestAuthorization()
@@ -270,13 +297,40 @@ enum NotificationScheduler {
         content.sound = .default
         content.interruptionLevel = .timeSensitive
         let request = UNNotificationRequest(identifier: "test.\(UUID().uuidString)", content: content,
-                                            trigger: UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false))
+                                            trigger: UNTimeIntervalNotificationTrigger(timeInterval: testDelay, repeats: false))
         do {
             try await UNUserNotificationCenter.current().add(request)
             return true
         } catch {
             return false
         }
+    }
+
+    /// iPhone settings that would stop alerts from being seen, in plain words.
+    static func problems() async -> [String] {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        var result: [String] = []
+        switch settings.authorizationStatus {
+        case .denied:
+            return ["Notifications are turned off for Niyat. Turn on Allow Notifications in the Settings app › Notifications › Niyat."]
+        case .notDetermined:
+            return ["Niyat hasn't been allowed to send notifications yet."]
+        default:
+            break
+        }
+        if settings.lockScreenSetting == .disabled {
+            result.append("Lock Screen alerts are off. Turn on Lock Screen in Settings › Notifications › Niyat.")
+        }
+        if settings.alertSetting == .disabled, settings.notificationCenterSetting == .disabled {
+            result.append("Alerts are hidden. Turn on Banners and Notification Centre in Settings › Notifications › Niyat.")
+        }
+        if settings.scheduledDeliverySetting == .enabled {
+            result.append("Niyat is in your Scheduled Summary, so alerts are held back. Set it to Immediate Delivery in Settings › Notifications › Niyat.")
+        }
+        if settings.soundSetting == .disabled {
+            result.append("Sounds are off for Niyat's notifications.")
+        }
+        return result
     }
 
     struct ScheduledAlert: Identifiable {

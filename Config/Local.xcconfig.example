@@ -10,3 +10,7 @@ BUNDLE_ID_PREFIX = com.yourname
 
 // Optional: where More › Send feedback emails go (otherwise it opens a GitHub issue).
 // FEEDBACK_EMAIL = feedback@example.com
+
+// Optional: send More › Send feedback to a Discord channel. Server Settings ›
+// Integrations › Webhooks › New Webhook › Copy URL, then paste it here WITHOUT "https://".
+// DISCORD_WEBHOOK = discord.com/api/webhooks/123456/abcdef

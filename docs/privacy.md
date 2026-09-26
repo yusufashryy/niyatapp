@@ -29,7 +29,7 @@ Niyat works offline. A few optional features connect to outside services:
 | Qur'an recitation audio | Islamic Network CDN (cdn.islamic.network) | A normal web request for the audio file, which includes your IP address, as with any website |
 | Groups (optional) | Apple iCloud (CloudKit) | The display name and summary you choose to share (prayers completed, Qur'an goal progress), visible only to people in the groups you create or join. Stored in your iCloud account, not by Niyat. |
 | Tips (optional) | Apple In-App Purchase | Handled entirely by Apple. Niyat never sees your payment details. |
-| Send feedback (optional) | Email or GitHub, your choice | Only what you write, plus app version, iOS version and your calculation settings if you leave "Include app details" on. Never your location. |
+| Send feedback (optional) | A private Discord channel read by the developer (or email/GitHub) | Only what you write, an email address if you choose to give one for a reply, plus app version, iOS version and your calculation settings if you leave "Include app details" on. Never your location. |
 
 ## Notifications
 

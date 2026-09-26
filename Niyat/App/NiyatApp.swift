@@ -50,6 +50,7 @@ struct RootView: View {
         }
         // Reading Palette here means the whole app re-tints when the theme changes.
         .tint(Palette.accent)
+        .toggleStyle(NiyatToggleStyle())
         // Widget taps, e.g. the Qur'an Goal widget opens niyat://quran.
         .onOpenURL { url in
             if url.host() == "quran" { DeepLink.shared.pending = .quranContinueReading }

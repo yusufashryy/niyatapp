@@ -67,7 +67,7 @@ struct QuranNotificationsView: View {
                     Button {
                         Task { await sendTest() }
                     } label: {
-                        Label(testSent ? "Sent. Lock your phone to see it" : "Send a test in 5 seconds",
+                        Label(testSent ? "Sent. Lock your phone to see it" : "Send a test in \(Int(NotificationScheduler.testDelay)) seconds",
                               systemImage: testSent ? "checkmark.circle.fill" : "paperplane.fill")
                     }
                     .haptic(.success, trigger: testSent)
@@ -135,7 +135,7 @@ struct QuranNotificationsView: View {
                             NotificationScheduler.UserInfoKey.surah: verse.surah,
                             NotificationScheduler.UserInfoKey.verse: verse.ayah]
         let request = UNNotificationRequest(identifier: "quran.test", content: content,
-                                            trigger: UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false))
+                                            trigger: UNTimeIntervalNotificationTrigger(timeInterval: NotificationScheduler.testDelay, repeats: false))
         try? await UNUserNotificationCenter.current().add(request)
         testSent = true
     }
