@@ -145,13 +145,13 @@ struct SurahReaderView: View {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button { highlights.setHidden(!highlights.isHidden) } label: {
                     Image(systemName: highlights.isHidden ? "eye.slash.fill" : "eye.slash")
-                        .foregroundStyle(highlights.isHidden ? Palette.accent : Color.primary)
+                        .foregroundStyle(highlights.isHidden ? Palette.control : Color.primary)
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .accessibilityLabel(highlights.isHidden ? "Show the text" : "Hide the text to recite from memory")
                 Button(action: toggleListening) {
                     Image(systemName: live.isListening ? "mic.fill" : "mic")
-                        .foregroundStyle(live.isListening ? Palette.accent : Color.primary)
+                        .foregroundStyle(live.isListening ? Palette.control : Color.primary)
                         .symbolEffect(.pulse, options: .repeating, isActive: live.isListening)
                 }
                 .accessibilityLabel(live.isListening ? "Stop listening" : "Recite: follow along as I recite")
