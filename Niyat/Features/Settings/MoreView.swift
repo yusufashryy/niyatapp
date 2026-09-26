@@ -206,7 +206,9 @@ struct AboutView: View {
                     credit("Quran font", "Amiri Quran by Khaled Hosny and the Amiri Quran Project Authors. SIL Open Font License 1.1.")
                     credit("Calligraphy font", "Aref Ruqaa by the Aref Ruqaa Project Authors. SIL Open Font License 1.1.")
                     credit("Prayer time calculation", "Adhan by Batoul Apps. MIT License.")
-                    credit("Recitation audio", "Streamed from the Islamic Network CDN (islamic.network), free for non-commercial use. Each recitation's copyright stays with its reciter.")
+                    credit("Mushaf lines", "Line breaks of the Madinah mushaf from the mushaf-layout project by zonetecde (positions only), checked word by word against the Tanzil text.")
+                    credit("Tajweed rules", "Quran Tajweed by Collin Fair. CC BY 4.0.")
+                    credit("Recitation audio", "Streamed from the Islamic Network CDN (islamic.network), free for non-commercial use, and EveryAyah.com for Yasser Al-Dosari. Each recitation's copyright stays with its reciter.")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(18)

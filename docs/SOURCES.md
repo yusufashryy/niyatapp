@@ -20,9 +20,17 @@ All five were obtained through [risan/quran-json](https://github.com/risan/quran
 
 ## Mushaf pages, juz, hizb and sajdah
 
-The page-by-page view uses Tanzil's Qur'an metadata (in `chapters.json`, same CC BY 3.0 source): where each of the 604 pages of the Madinah mushaf, each of the 30 juz and each of the 240 hizb quarters begins, plus the 15 sajdah verses. The tests check that the pages cover all 6,236 verses exactly once and match known landmarks (Al-Baqarah on page 2, Al-Kahf on page 293, An-Nas on page 604).
+Tanzil's Qur'an metadata (in `chapters.json`, same CC BY 3.0 source) gives where each of the 604 pages of the Madinah mushaf, each of the 30 juz and each of the 240 hizb quarters begins, plus the 15 sajdah verses. The tests check that the pages cover all 6,236 verses exactly once and match known landmarks (Al-Baqarah on page 2, Al-Kahf on page 293, An-Nas on page 604).
 
-Niyat does **not** bundle the printed page images: the King Fahd Complex page scans are copyrighted. Each page is typeset by the app from the verified text, so the verses on each page match the printed mushaf but line breaks can differ. Page divisions are for the Hafs mushaf; with Warsh or Qalun selected, verses are placed by their Hafs equivalents.
+**Lines.** Mushaf pages show the same 15 lines as the printed Madinah mushaf (Hafs, 1405 AH edition layout). Which word starts and ends each line comes from [zonetecde/mushaf-layout](https://github.com/zonetecde/mushaf-layout) (the repository has no licence file; its `package.json` declares ISC). Only those positions are used: its text, glyphs and fonts are not. `scripts/generate_mushaf_layout.py` matches every layout word to a word of Niyat's own Tanzil Uthmani text by its letters and writes `Niyat/Resources/Quran/mushaf-lines.json` (word positions only). It checks, and the tests check again in the app:
+- every one of the 77,433 words appears exactly once, in order;
+- every page starts where Tanzil's page divisions say;
+- every surah is preceded by its title line, and by the Bismillah (except Al-Fatiha, where it is verse 1, and At-Tawbah);
+- every page has 15 lines (the first two pages have 8, as printed).
+
+Four slips in the source layout are corrected by the script, each checked against the rules above: a missing title and Bismillah line on pages 586 and 590, a title placed at the top of page 207 instead of the bottom, and 19 title lines labelled with the wrong surah.
+
+Niyat does **not** bundle the printed page images: the King Fahd Complex scans are copyrighted. Each line is drawn by the app from the verified text in the Amiri Quran font, stretched to the full width like print (words may be widened or narrowed by up to 10%, then the spaces between them grow). Pages are for the Uthmani script (Hafs), and the "fewer marks" Uthmani text, which has exactly the same words (tested). With another script or riwayah selected, the pages say so and offer to switch rather than placing a different text on Hafs lines.
 
 ## Translation
 
@@ -69,9 +77,19 @@ Apple's Umm al-Qura calendar (`Calendar(identifier: .islamicUmmAlQura)`), with a
 
 Qur'an › Duas lists 54 supplications from the Qur'an. Only the verse references are stored (`QuranicDuas.swift`); the Arabic and English are read from the same bundled Tanzil and ClearQuran files as the reader, so nothing is retyped. The short note on each ("Prophet Musa", "The youths of the cave") says who makes the dua, as stated in or directly around the verse. A test checks every reference exists and that its text contains "Rabb" (Lord), "a'udhu" (I seek refuge) or, for Yunus, "la ilaha illa anta".
 
-## Recitation checker (beta)
+## Reciting with the app (live recitation)
 
-Qur'an › Recite listens while you recite and follows along word by word. It uses Apple's Speech framework for Arabic (`ar-SA`), on the device whenever the iPhone supports it. What it hears is compared with Tanzil's Imla'i (modern spelling) Hafs text, after removing harakat and folding spelling variants. It checks words only: no tajwid or pronunciation judgement, and highlighted words are shown as "worth double-checking", never as errors. See `docs/research/recitation-checker.md`.
+The microphone button in the reader and on the mushaf pages listens while you recite and follows along word by word. It uses Apple's Speech framework for Arabic (`ar-SA`), on the device whenever the iPhone supports it. Nothing from the Qur'an is generated or corrected:
+- **Two layers.** What's shown is always the verified text of the selected reading. For comparing with speech only, each word is also reduced to its letters (harakat, pause marks and small signs removed; alef, hamza seats, ta marbuta and alef maqsura folded; the dagger alif read as an alif). These forms are never displayed.
+- **Accepted alternatives** (`Niyat/Resources/Quran/recognition-forms.json`, 83 words, from `scripts/generate_recognition_forms.py`): the everyday spelling of Uthmani words whose letters differ (taken from Tanzil's own Imla'i edition of the same verse) and the letter names of the disjoined letters (الٓمٓ is recited "alif lam mim"). Recognition only.
+- **Judging** is conservative: a word is marked "sounded different" only when the recogniser was confident and heard something clearly different; anything less certain is marked "couldn't tell", never an error. Words are compared, not pronunciation: tajweed is not assessed.
+- **Riwayah:** words are compared with the text of the selected reading. Apple's recogniser isn't trained on each riwayah, which the app says when you start.
+
+Tested with the tracker's scenarios (following along, starting mid-ayah, skipping, repeating, pausing, restarting an ayah, unrelated speech) and, while building it, by reciting the whole Qur'an's Imla'i text through it: no word marked as a mistake. See `docs/research/recitation-checker.md`.
+
+## Word-by-word highlighting of the reciter
+
+The recitation audio (Islamic Network, EveryAyah) comes with no word timings. The best published timings ([quran-align](https://github.com/cpfair/quran-align), CC BY 4.0) were made for other copies of these recordings, so they can't be trusted to match Niyat's files. Instead, each ayah's recording is aligned on the iPhone: Apple's on-device speech recognition transcribes the reciter with the time of each word, and the recognised words are matched to the verified text by the same aligner as live recitation. Only words clearly recognised are placed; words between them share the time in between by their number of letters. An ayah is followed word by word only when at least 60% of its words were placed and in order; otherwise the whole ayah is highlighted as before. Results (the start time of each word) are cached on the device; the audio isn't kept. Settings › Qur'an › Follow the reciter word by word turns it off.
 
 ## Tajweed colours
 
@@ -82,4 +100,4 @@ Its published file points into a 2017 copy of the Tanzil text whose encoding dif
 - 272 more: the same rules in the same order, only shifted by the encoding change.
 - 32 verses: 34 "madd, 2 counts" marks from the published file are not produced, and one extra "madd lazim" mark is.
 
-The tests check every hamzat al-wasl, lam shamsiyyah and qalqalah mark lands on the right letter. Colours are shown only with the Uthmani script (Hafs), the text they were made for.
+The tests check every hamzat al-wasl, lam shamsiyyah and qalqalah mark lands on the right letter. Colours are shown only with the Uthmani script (Hafs), the text they were made for. Each rule has a colour for light paper and a brighter one for dark pages; with Increase Contrast on (iOS Settings › Accessibility), both are made 30% deeper or brighter.

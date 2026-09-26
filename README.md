@@ -32,12 +32,13 @@
 
 **Qur'an**
 - The full Qur'an with an English translation, all offline
-- Read verse by verse, or page by page like a printed mushaf (604 pages)
+- Read verse by verse, or page by page: the 604 pages of the Madinah mushaf, with the same 15 lines on every page as the printed copy
 - Uthmani, simpler and modern scripts, plus the Warsh and Qalun readings
 - Tajweed colours: 17 rules colour-coded like a tajweed mushaf, with a colour guide
-- Listen to 20 reciters, verse by verse, with no gaps between verses
+- Listen to 20 reciters, verse by verse, with no gaps between verses; the text follows the reciter word by word
 - Duas from the Qur'an: 54 supplications, grouped by theme, with where each comes from
-- Recite (beta): recite aloud and the app follows along word by word, pointing out words to double-check
+- Recite with the app: tap the mic, recite from anywhere, and the text follows you word by word and turns the pages, quietly marking words to double-check afterwards (words only, not tajweed)
+- Memorise: hide the text in place and recite from memory, with the app still following
 - A daily goal in ayat with a streak
 - Reminders: morning, afternoon, streak, verse of the day, and Surah Al-Kahf on Fridays
 

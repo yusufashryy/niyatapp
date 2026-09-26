@@ -15,6 +15,10 @@ import DeviceActivity
 enum DataReset {
     static func eraseEverything(model: AppModel) {
         RecitationPlayer.shared.stop()
+        LiveRecitation.shared.stop()
+        LiveRecitation.shared.clearReview()
+        WordTimingAligner.removeCache()
+        ReciterWordSync.shared.reset()
 
         let center = UNUserNotificationCenter.current()
         center.removeAllPendingNotificationRequests()

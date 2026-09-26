@@ -10,7 +10,6 @@ struct SurahListView: View {
     @State private var showGoal = false
     @State private var showMushaf = false
     @State private var showNotifications = false
-    @State private var showRecite = false
     /// "verses" (default) opens surahs verse by verse; "pages" in the mushaf view.
     @AppStorage("quran.readingLayout") private var readingLayout = "verses"
     @AppStorage("quran.mushafPage") private var mushafPage = 1
@@ -53,9 +52,6 @@ struct SurahListView: View {
                 NavigationStack { QuranNotificationsView(showsDone: true) }
             }
             .fullScreenCover(isPresented: $showMushaf) { MushafPageView() }
-            .fullScreenCover(isPresented: $showRecite) {
-                RecitationCheckView(surah: store.lastRead?.surah ?? 1, verse: store.lastRead?.verse ?? 1)
-            }
             .task { await store.load() }
             .onAppear { goal.refresh() }
             // A Qur'an reminder was tapped: go straight to where you left off.
@@ -119,8 +115,8 @@ struct SurahListView: View {
                             QuranToolTile(title: "Duas", subtitle: "From the Qur'an", icon: "hands.and.sparkles.fill")
                         }
                         .buttonStyle(.pressable)
-                        Button { showRecite = true } label: {
-                            QuranToolTile(title: "Recite", subtitle: "Beta · follows along", icon: "mic.fill")
+                        Button { showMushaf = true } label: {
+                            QuranToolTile(title: "Mushaf", subtitle: "15-line pages", icon: "book.pages.fill")
                         }
                         .buttonStyle(.pressable)
                     }
@@ -315,7 +311,7 @@ private struct QuranGoalCard: View {
     }
 }
 
-/// A small tile on the Qur'an screen (Duas, Recite).
+/// A small tile on the Qur'an screen (Duas, Mushaf).
 private struct QuranToolTile: View {
     let title: String
     let subtitle: String
