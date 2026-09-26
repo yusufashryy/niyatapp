@@ -222,7 +222,7 @@ final class LiveRecitation {
         request.taskHint = .dictation
         if isOnDevice { request.requiresOnDeviceRecognition = true }
         // The words around the place help the recogniser (up to 100 hints).
-        let around = tracker.position ?? 0
+        let around = tracker.focus
         let hints = tracker.tokens[max(0, around - 5)..<min(tracker.tokens.count, around + 95)]
             .compactMap { wordText[$0.id].map(RecitationText.withoutMarks) }
         request.contextualStrings = Array(hints)

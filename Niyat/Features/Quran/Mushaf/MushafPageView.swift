@@ -54,7 +54,8 @@ struct MushafPageView: View {
                 ProgressView().tint(Color(colors.label))
             }
         }
-        .safeAreaInset(edge: .bottom) { controls(colors) }
+        // Verse options float over the page, above the control bar: at the
+        // bottom, or at the top when the verse is low on the page.
         .overlay(alignment: selected != nil && actionsAtTop ? .top : .bottom) {
             if let selected {
                 MushafVerseActions(verse: selected, showTranslation: options.showTranslation,
@@ -69,6 +70,7 @@ struct MushafPageView: View {
                     .transition(.move(edge: actionsAtTop ? .top : .bottom).combined(with: .opacity))
             }
         }
+        .safeAreaInset(edge: .bottom) { controls(colors) }
         .overlay(alignment: .top) {
             if let error = player.errorMessage {
                 Text(error)
