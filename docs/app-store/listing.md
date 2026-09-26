@@ -65,7 +65,7 @@ Primary: Lifestyle (or Reference). Secondary: Books.
 - Support URL: https://github.com/yusufashryy/niyatapp/issues
 
 ## App Privacy ("nutrition label")
-Answer **"No, we do not collect data from this app."** Niyat has no server and no analytics. Apple's own services (geocoding, iCloud, In-App Purchase) don't count as the app collecting data.
+Answer **"No, we do not collect data from this app."** Niyat has no server and no analytics. Apple's own services (geocoding, iCloud, In-App Purchase, speech recognition) don't count as the app collecting data: the developer never receives any of it.
 
 ## In-App Purchases (Support Niyat)
 Create three **Consumable** in-app purchases with exactly these Product IDs:
@@ -79,10 +79,10 @@ Create three **Consumable** in-app purchases with exactly these Product IDs:
 Each needs a screenshot of the Support Niyat screen for review. Join the App Store Small Business Program so Apple's fee is 15% rather than 30%.
 
 ## App Review notes
-Niyat is free with no login. Tips are optional and unlock nothing. Location is only used to calculate prayer times and the Qibla. Prayer Lock uses Screen Time (Family Controls) to lock apps the user chooses during prayer times.
+Niyat is free with no login. Tips are optional and unlock nothing. Location is only used to calculate prayer times and the Qibla. Prayer Lock uses Screen Time (Family Controls) to lock apps the user chooses during prayer times. The microphone and speech recognition are only used after the user taps the microphone in the Qur'an reader, to follow their recitation word by word; audio is never recorded or saved. Speech recognition is also used, on the device only, to line up reciters' recordings with the text.
 
 ## Screenshots
-Needed at 6.9" (1320 × 2868) and optionally 6.5". Suggested set: Today dial · Qur'an reader · Mushaf page · Qibla · Stats · Widgets · Notification settings.
+Needed at 6.9" (1320 × 2868). CI's demo tour takes them on the largest iPhone simulator, so they're already the right size: download them from the `demo-media` branch (`screenshots/` folder) on GitHub. Suggested set (up to 10): 03 Today · 06 Quran - Al-Fatiha · 07 Mushaf · 07c Mushaf - memorisation · 08 Qibla · 09 Stats · 09c Year · 11 Tasbih.
 
 ## Enabling the privacy policy page (free)
 1. On GitHub: repo **Settings › Pages**.
