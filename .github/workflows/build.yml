@@ -40,16 +40,24 @@ jobs:
           echo "Prayer Lock targets present: $has"
           [ "$has" = "${{ matrix.variant == 'full' && 'yes' || 'no' }}" ]
 
+      - name: Check the privacy manifests are bundled
+        run: |
+          count=$(grep -c "PrivacyInfo.xcprivacy in Resources" Niyat.xcodeproj/project.pbxproj || true)
+          echo "Privacy manifests in Resources: $count"
+          [ "$count" -ge ${{ matrix.variant == 'full' && '4' || '2' }} ]
+
       - name: Pick an iPhone simulator
         run: |
           UDID=$(xcrun simctl list devices available -j | python3 -c '
           import json, sys
           devices = json.load(sys.stdin)["devices"]
+          # The biggest iPhone, so demo screenshots are the size the App Store asks for (6.9").
           for runtime in sorted(devices, reverse=True):
               if "iOS" in runtime:
-                  for d in devices[runtime]:
-                      if d["name"].startswith("iPhone"):
-                          print(d["udid"]); sys.exit()
+                  phones = [d for d in devices[runtime] if d["name"].startswith("iPhone")]
+                  best = [d for d in phones if "Pro Max" in d["name"]] or phones
+                  if best:
+                      print(best[0]["udid"]); sys.exit()
           ')
           echo "Using simulator $UDID"
           echo "SIMULATOR_ID=$UDID" >> "$GITHUB_ENV"
