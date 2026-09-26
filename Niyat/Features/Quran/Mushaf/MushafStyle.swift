@@ -129,7 +129,7 @@ struct MushafColors {
         style.mistake = isLight ? UIColor(red: 0.85, green: 0.38, blue: 0.05, alpha: 1)
                                 : UIColor(red: 0.98, green: 0.58, blue: 0.22, alpha: 1)
         // Words may be squeezed or stretched a little to fill each line, as in print.
-        style.stretch = 0.9...1.1
+        style.stretch = MushafMetrics.stretch
         return style
     }
 }
