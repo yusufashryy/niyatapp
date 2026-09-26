@@ -6,6 +6,8 @@ struct OnboardingView: View {
 
     @State private var step = 0
     @State private var spin = false
+    @State private var quranGoal = 10
+    @State private var quranReminder = true
 
     var body: some View {
         ZStack {
@@ -17,7 +19,8 @@ struct OnboardingView: View {
                     switch step {
                     case 0: welcome
                     case 1: locationStep
-                    default: notificationStep
+                    case 2: notificationStep
+                    default: quranGoalStep
                     }
                 }
                 .transition(.blurReplace)
@@ -90,12 +93,36 @@ struct OnboardingView: View {
                 Task {
                     await NotificationScheduler.requestAuthorization()
                     model.refresh()
-                    onFinish()
+                    step = 3
                 }
             }
-            Button("Not now", action: onFinish)
+            Button("Not now") { step = 3 }
                 .buttonStyle(.glass)
                 .controlSize(.large)
+        }
+    }
+
+    private var quranGoalStep: some View {
+        VStack(spacing: 20) {
+            stepIcon("book.fill")
+            Text("A daily Qur'an goal").font(.display(32))
+            Text("How many ayat would you like to read each day? Small and steady is beloved. You can change this any time.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.white.opacity(0.75))
+            GoalPicker(selection: $quranGoal)
+                .padding(16)
+                .surface(cornerRadius: 20)
+            Toggle("Remind me each day", isOn: $quranReminder)
+                .padding(16)
+                .surface(cornerRadius: 20)
+            primaryButton("Start") {
+                QuranGoalModel.shared.setGoal(quranGoal)
+                model.quranReminders.isEnabled = quranReminder
+                model.settingsChanged()
+                onFinish()
+            }
+            Button("Skip for now", action: onFinish)
+                .buttonStyle(.glass)
         }
     }
 

@@ -88,16 +88,17 @@ struct SettingsView: View {
                         }
                     ))
                 }
-                Picker("Reminder before", selection: $model.notificationSettings.reminderMinutesBefore) {
-                    Text("Off").tag(0)
-                    ForEach([5, 10, 15, 20, 30], id: \.self) { minutes in
-                        Text("\(minutes) min").tag(minutes)
-                    }
+                NavigationLink {
+                    AlertTimingsView()
+                } label: {
+                    LabeledContent("Alert times", value: "\(model.notificationSettings.timings.count) per prayer")
                 }
                 Button {
                     Task {
-                        let sent = await NotificationScheduler.sendTest(location: model.location, next: model.nextPrayer(after: .now))
-                        testMessage = sent ? "Sent! It arrives in 5 seconds. Lock your phone to see it like a real adhan alert."
+                        let sent = await NotificationScheduler.sendTest(location: model.location,
+                                                                        current: model.currentPrayer(at: .now),
+                                                                        next: model.nextPrayer(after: .now))
+                        testMessage = sent ? "Sent! It arrives in 5 seconds. Lock your phone, then press and hold the alert to try Log Prayer."
                                            : "Notifications are off. Turn them on in the iPhone Settings app › Notifications › Niyat."
                     }
                 } label: {
@@ -116,7 +117,7 @@ struct SettingsView: View {
             } header: {
                 Text("Adhan notifications")
             } footer: {
-                Text("iOS limits how many alerts an app can schedule, so open Niyat at least once a week to keep them coming.")
+                Text("iOS limits how many alerts an app can queue, so the more alert times you choose, the fewer days ahead are covered. Open Niyat every couple of days to keep them coming.")
             }
 
             Section {
@@ -225,5 +226,43 @@ private struct ScheduledAlertsView: View {
             alerts = await NotificationScheduler.scheduledAlerts()
             loaded = true
         }
+    }
+}
+
+/// Which of the four alerts to send for each prayer.
+private struct AlertTimingsView: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(AlertTiming.allCases) { timing in
+                    Toggle(isOn: Binding(
+                        get: { model.notificationSettings.timings.contains(timing) },
+                        set: { isOn in
+                            if isOn {
+                                model.notificationSettings.timings.insert(timing)
+                            } else {
+                                model.notificationSettings.timings.remove(timing)
+                            }
+                            model.settingsChanged()
+                        }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(timing.title)
+                            if timing.offersLogging {
+                                Text("Has a Log Prayer button").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            } footer: {
+                Text("These apply to every prayer you've turned on. Press and hold an alert (or pull it down) to use Log Prayer without opening the app. Logging a prayer cancels its \"30 minutes after\" alert.")
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .niyatBackground()
+        .navigationTitle("Alert times")
+        .haptic(.selection, trigger: model.notificationSettings.timings)
     }
 }

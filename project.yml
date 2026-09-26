@@ -55,6 +55,10 @@ targets:
         BGTaskSchedulerPermittedIdentifiers: [$(PRODUCT_BUNDLE_IDENTIFIER).refresh]
         NSLocationWhenInUseUsageDescription: Niyat uses your location to calculate accurate prayer times and the Qibla direction. Your location never leaves your phone.
         ITSAppUsesNonExemptEncryption: false
+        CKSharingSupported: true
+        CFBundleURLTypes:
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
+            CFBundleURLSchemes: [niyat]
         NiyatAppGroup: $(APP_GROUP_ID)
     entitlements:
       path: Niyat/Support/Niyat.entitlements

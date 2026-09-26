@@ -155,15 +155,3 @@ struct CheckInSheet: View {
         dismiss()
     }
 }
-
-extension PrayerStatus {
-    /// Colour used for this status in rows, the dial and the calendar.
-    var color: Color {
-        switch self {
-        case .onTime: Palette.accent
-        case .late: Palette.highlight
-        case .missed: Color(red: 0.97, green: 0.45, blue: 0.45)
-        case .excused: Color.white.opacity(0.55)
-        }
-    }
-}

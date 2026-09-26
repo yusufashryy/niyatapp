@@ -27,7 +27,7 @@ enum DemoMode {
         SettingsStore.notificationSettings = NotificationSettings()
         UserDefaults.standard.set(true, forKey: "hasOnboarded")
 
-        // Five weeks of check-ins so the Journey calendar has something to show:
+        // Five weeks of check-ins so the Stats calendar has something to show:
         // mostly on time, a few late or missed Fajrs, and a six-day streak.
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: .now)
@@ -52,6 +52,21 @@ enum DemoMode {
         records[PrayerLog.key(.fajr, on: today)] = PrayerRecord(status: .onTime)
         records[PrayerLog.key(.dhuhr, on: today)] = PrayerRecord(status: .late, reason: .work)
         PrayerLog.save(records)
+
+        // A Qur'an habit: 10 ayat a day for the last 9 days, 6 so far today.
+        var quranDays: [String: QuranDay] = [:]
+        for offset in 0...9 {
+            guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { continue }
+            let read = offset == 0 ? 6 : 10 + (offset % 3) * 4
+            var entry = QuranDay(goal: 10)
+            entry.verses = Set((1...read).map { "2:\($0 + offset * 20)" })
+            entry.letters = read * 38
+            if read >= 10 { entry.completedAt = day.addingTimeInterval(20 * 3600) }
+            quranDays[QuranProgress.dayKey(for: day.addingTimeInterval(12 * 3600))] = entry
+        }
+        AppGroup.defaults.setEncoded(quranDays, forKey: "quran.days")
+        QuranProgress.dailyGoal = 10
+        ThemeManager.shared.select(AppTheme.onyx.id)
 
         TasbihCounter.count = 21
         TasbihCounter.lifetimeCount = 1_254

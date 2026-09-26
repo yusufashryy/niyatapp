@@ -10,6 +10,7 @@ final class AppModel {
     var prayerSettings: PrayerSettings
     var notificationSettings: NotificationSettings
     var hijriAdjustment: Int
+    var quranReminders: QuranReminderSettings
     private(set) var records: [String: PrayerRecord]
 
     init() {
@@ -17,7 +18,17 @@ final class AppModel {
         prayerSettings = SettingsStore.prayerSettings
         notificationSettings = SettingsStore.notificationSettings
         hijriAdjustment = SettingsStore.hijriAdjustment
+        quranReminders = SettingsStore.quranReminders
         records = PrayerLog.load()
+        // Prayers logged from a notification or widget happen outside this model.
+        NotificationCenter.default.addObserver(forName: .prayerJournalChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.reloadJournal() }
+        }
+    }
+
+    func reloadJournal() {
+        let fresh = PrayerLog.load()
+        if fresh != records { records = fresh }
     }
 
     // MARK: Prayer times
@@ -54,17 +65,22 @@ final class AppModel {
         SettingsStore.prayerSettings = prayerSettings
         SettingsStore.notificationSettings = notificationSettings
         SettingsStore.hijriAdjustment = hijriAdjustment
+        SettingsStore.quranReminders = quranReminders
         refresh()
     }
 
     /// Re-schedules everything that depends on prayer times. Safe to call often.
     func refresh() {
+        // Prayers may have been logged from a widget or notification meanwhile.
+        reloadJournal()
+        QuranGoalModel.shared.refresh()
         let location = location
         let prayerSettings = prayerSettings
         let notificationSettings = notificationSettings
         Task {
             await NotificationScheduler.reschedule(location: location, prayerSettings: prayerSettings,
-                                                   notificationSettings: notificationSettings)
+                                                   notificationSettings: notificationSettings,
+                                                   quranReminders: SettingsStore.quranReminders)
         }
         WidgetCenter.shared.reloadAllTimelines()
         #if SCREEN_TIME
@@ -82,6 +98,9 @@ final class AppModel {
     func setRecord(_ record: PrayerRecord?, for prayer: PrayerName, on day: Date) {
         records[PrayerLog.key(prayer, on: day)] = record
         PrayerLog.save(records)
+        if record != nil { NotificationScheduler.prayerLogged(prayer, dayKey: PrayerLog.dayKey(for: day)) }
+        WidgetCenter.shared.reloadAllTimelines()
+        GroupSync.shared.publishSoon()
     }
 
     func isPrayed(_ prayer: PrayerName, on day: Date) -> Bool {

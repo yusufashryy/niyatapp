@@ -208,16 +208,58 @@ extension Madhab {
     }
 }
 
+/// When, relative to each prayer, an alert is sent.
+enum AlertTiming: String, Codable, CaseIterable, Identifiable, Comparable {
+    case before30, before10, atTime, after30
+
+    var id: String { rawValue }
+
+    /// Offset from the prayer time, in minutes.
+    var minutes: Int {
+        switch self {
+        case .before30: -30
+        case .before10: -10
+        case .atTime: 0
+        case .after30: 30
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .before30: "30 minutes before"
+        case .before10: "10 minutes before"
+        case .atTime: "At prayer time (adhan)"
+        case .after30: "30 minutes after"
+        }
+    }
+
+    /// Alerts at or after the prayer time offer a "Log Prayer" button.
+    var offersLogging: Bool { self == .atTime || self == .after30 }
+
+    static func < (lhs: AlertTiming, rhs: AlertTiming) -> Bool { lhs.minutes < rhs.minutes }
+}
+
 struct NotificationSettings: Codable, Equatable {
     var enabledPrayers: Set<PrayerName> = Set(PrayerName.obligatory)
-    /// Extra heads-up this many minutes before each enabled prayer (0 = off).
-    var reminderMinutesBefore: Int = 0
+    /// Which alerts to send for each enabled prayer.
+    var timings: Set<AlertTiming> = [.before10, .atTime, .after30]
 
     init() {}
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         enabledPrayers = (try? c.decodeIfPresent(Set<PrayerName>.self, forKey: .enabledPrayers)) ?? Set(PrayerName.obligatory)
-        reminderMinutesBefore = (try? c.decodeIfPresent(Int.self, forKey: .reminderMinutesBefore)) ?? 0
+        if let timings = try? c.decodeIfPresent(Set<AlertTiming>.self, forKey: .timings) {
+            self.timings = timings
+        } else {
+            // Earlier versions had one optional "reminder before" setting.
+            let legacy = try? decoder.container(keyedBy: LegacyKeys.self)
+                .decodeIfPresent(Int.self, forKey: .reminderMinutesBefore)
+            var timings: Set<AlertTiming> = [.atTime, .after30]
+            if let legacy, legacy > 0 { timings.insert(legacy >= 20 ? .before30 : .before10) }
+            self.timings = timings
+        }
     }
+
+    private enum LegacyKeys: String, CodingKey { case reminderMinutesBefore }
 }

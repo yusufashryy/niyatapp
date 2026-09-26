@@ -7,6 +7,31 @@ struct PrayerEntry: TimelineEntry {
     let schedule: DaySchedule?
     let next: PrayerTime?
     let current: PrayerTime?
+    var records: [String: PrayerRecord] = PrayerLog.load()
+    var quranToday: QuranDay = QuranProgress.day()
+    var quranGoal: Int? = QuranProgress.dailyGoal
+    var quranStreak: Int = QuranProgress.currentStreak()
+
+    func record(for prayer: PrayerName) -> PrayerRecord? {
+        guard let day = schedule?.day else { return nil }
+        return records[PrayerLog.key(prayer, on: day)]
+    }
+
+    /// Consecutive days with every prayer logged and none missed.
+    var prayerStreak: Int {
+        let calendar = Calendar.current
+        func complete(_ day: Date) -> Bool {
+            PrayerName.obligatory.allSatisfy { records[PrayerLog.key($0, on: day)]?.status.keepsStreak ?? false }
+        }
+        var day = calendar.startOfDay(for: date)
+        if !complete(day) { day = calendar.date(byAdding: .day, value: -1, to: day) ?? day }
+        var count = 0
+        while complete(day), count < 10_000 {
+            count += 1
+            day = calendar.date(byAdding: .day, value: -1, to: day) ?? day
+        }
+        return count
+    }
 
     var hasLocation: Bool { locationName != nil }
 

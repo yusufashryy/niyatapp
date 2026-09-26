@@ -7,6 +7,7 @@ enum SettingsStore {
         static let prayerSettings = "prayerSettings"
         static let notificationSettings = "notificationSettings"
         static let hijriAdjustment = "hijriAdjustment"
+        static let quranReminders = "quranReminders"
     }
 
     private static var defaults: UserDefaults { AppGroup.defaults }
@@ -24,6 +25,11 @@ enum SettingsStore {
     static var notificationSettings: NotificationSettings {
         get { defaults.decoded(NotificationSettings.self, forKey: Key.notificationSettings) ?? NotificationSettings() }
         set { defaults.setEncoded(newValue, forKey: Key.notificationSettings) }
+    }
+
+    static var quranReminders: QuranReminderSettings {
+        get { defaults.decoded(QuranReminderSettings.self, forKey: Key.quranReminders) ?? QuranReminderSettings() }
+        set { defaults.setEncoded(newValue, forKey: Key.quranReminders) }
     }
 
     /// Days to shift the Hijri date by, to match local moon sighting.

@@ -99,7 +99,7 @@ struct AppTheme: Codable, Hashable, Identifiable {
                                base: .init(hex: 0x000000), glow: .init(hex: 0x1C1C1E), glow2: .init(hex: 0x0E0E10),
                                accent: .init(hex: 0xF5F5F5), highlight: .init(hex: 0xD4AF37))
 
-    static let presets: [AppTheme] = [.midnight, .emerald, .desert, .amethyst, .maghrib, .onyx]
+    static let presets: [AppTheme] = [.onyx, .midnight, .emerald, .desert, .amethyst, .maghrib]
 
     /// Builds a full theme from the two colours the user picks.
     static func custom(accent: ThemeColor, highlight: ThemeColor) -> AppTheme {
@@ -119,8 +119,8 @@ struct AppTheme: Codable, Hashable, Identifiable {
 final class ThemeManager {
     static let shared = ThemeManager()
 
-    private(set) var theme: AppTheme = .midnight
-    private(set) var selectedID: String = AppTheme.midnight.id
+    private(set) var theme: AppTheme = .onyx
+    private(set) var selectedID: String = AppTheme.onyx.id
     private(set) var customAccent: ThemeColor = AppTheme.midnight.accent
     private(set) var customHighlight: ThemeColor = AppTheme.midnight.highlight
 
@@ -135,7 +135,7 @@ final class ThemeManager {
     /// Re-reads the saved theme (widgets call this, since the app may have changed it).
     func reload() {
         let defaults = AppGroup.defaults
-        selectedID = defaults.string(forKey: Key.selected) ?? AppTheme.midnight.id
+        selectedID = defaults.string(forKey: Key.selected) ?? AppTheme.onyx.id
         customAccent = defaults.decoded(ThemeColor.self, forKey: Key.customAccent) ?? AppTheme.midnight.accent
         customHighlight = defaults.decoded(ThemeColor.self, forKey: Key.customHighlight) ?? AppTheme.midnight.highlight
         recompute()
@@ -158,7 +158,7 @@ final class ThemeManager {
     private func recompute() {
         let newTheme = selectedID == "custom"
             ? AppTheme.custom(accent: customAccent, highlight: customHighlight)
-            : AppTheme.presets.first { $0.id == selectedID } ?? .midnight
+            : AppTheme.presets.first { $0.id == selectedID } ?? .onyx
         if newTheme != theme { theme = newTheme }
     }
 }

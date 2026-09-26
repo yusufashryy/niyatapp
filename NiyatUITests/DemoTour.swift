@@ -70,13 +70,13 @@ final class DemoTour: XCTestCase {
         pause(2)
         snapshot("08 Qibla")
 
-        // Journey
-        openTab("Journey")
+        // Stats
+        openTab("Stats")
         pause(2)
-        snapshot("09 Journey")
+        snapshot("09 Stats")
         app.swipeUp()
         pause()
-        snapshot("09b Journey - stats")
+        snapshot("09b Stats - more")
         app.swipeDown()
 
         // Tasbih

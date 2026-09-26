@@ -91,7 +91,42 @@ final class QuranAccuracyTests: XCTestCase {
     private func loadedStore() async -> QuranStore {
         let store = QuranStore.shared
         await store.load()
+        await store.setEdition(.uthmani)
         return store
+    }
+
+    func testEveryEditionIsCompleteAndAligned() async {
+        let store = await loadedStore()
+        for edition in QuranEdition.allCases {
+            await store.setEdition(edition)
+            XCTAssertEqual(store.edition, edition)
+            let total = (1...114).reduce(0) { $0 + store.verses(for: $1).count }
+            // Every Hafs verse must be covered exactly by the reading's own verses.
+            var covered = Set<Int>()
+            for surah in 1...114 {
+                for verse in store.verses(for: surah) {
+                    XCTAssertFalse(verse.arabic.isEmpty, "\(edition) \(surah):\(verse.number)")
+                    for hafs in verse.hafsNumbers { covered.insert(surah * 1000 + hafs) }
+                }
+            }
+            XCTAssertEqual(covered.count, 6236, "\(edition) must cover every Hafs verse")
+            switch edition.riwayah {
+            case .hafs:
+                XCTAssertEqual(total, 6236, "\(edition)")
+                for (index, expected) in hafsVerseCounts.enumerated() {
+                    XCTAssertEqual(store.verses(for: index + 1).count, expected, "\(edition) surah \(index + 1)")
+                }
+                // The Bismillah is a header, never left inside verse 1.
+                for surah in 2...114 where surah != 9 {
+                    let first = store.verses(for: surah).first?.arabic ?? ""
+                    XCTAssertNil(QuranStore.removingBismillah(from: first, bismillah: store.bismillah), "\(edition) surah \(surah)")
+                }
+            case .warsh, .qalun:
+                XCTAssertEqual(total, 6214, "\(edition) uses the Madinan count")
+                XCTAssertTrue(store.bismillah.isEmpty)
+            }
+        }
+        await store.setEdition(.uthmani)
     }
 
     func testFilesMatchPublishedChecksums() {
@@ -132,6 +167,72 @@ final class QuranAccuracyTests: XCTestCase {
         XCTAssertEqual(store.verses(for: 95).first?.arabic, "\u{648}\u{64E}\u{671}\u{644}\u{62A}\u{651}\u{650}\u{64A}\u{646}\u{650} \u{648}\u{64E}\u{671}\u{644}\u{632}\u{651}\u{64E}\u{64A}\u{652}\u{62A}\u{64F}\u{648}\u{646}\u{650}")
         XCTAssertEqual(store.verses(for: 114).last?.arabic, "\u{645}\u{650}\u{646}\u{64E} \u{671}\u{644}\u{652}\u{62C}\u{650}\u{646}\u{651}\u{64E}\u{629}\u{650} \u{648}\u{64E}\u{671}\u{644}\u{646}\u{651}\u{64E}\u{627}\u{633}\u{650}")
         XCTAssertTrue(store.verses(for: 2)[254].arabic.hasPrefix("\u{671}\u{644}\u{644}\u{651}\u{64E}\u{647}\u{64F} \u{644}\u{64E}\u{627}\u{653} \u{625}\u{650}\u{644}\u{64E}\u{670}\u{647}\u{64E} \u{625}\u{650}\u{644}\u{651}\u{64E}\u{627} \u{647}\u{64F}\u{648}\u{64E}"))
+    }
+}
+
+/// Letter counting for the reward estimate (Tirmidhi 2910).
+final class LetterCountTests: XCTestCase {
+    func testAlifLamMimIsThreeLetters() {
+        // The hadith's own example: Alif is a letter, Lam is a letter and Mim is a letter.
+        XCTAssertEqual(ArabicLetters.count(in: "\u{627}\u{644}\u{653}\u{645}\u{653}"), 3) // الٓمٓ as in Tanzil 2:1
+    }
+
+    func testDiacriticsAreNotLetters() {
+        // بِسْمِ = ba, sin, mim (kasra and sukun are marks)
+        XCTAssertEqual(ArabicLetters.count(in: "\u{628}\u{650}\u{633}\u{652}\u{645}\u{650}"), 3)
+        // Dagger alif, small waw and tatweel are not counted; alif wasla is.
+        XCTAssertEqual(ArabicLetters.count(in: "\u{670}\u{6E5}\u{640}"), 0)
+        XCTAssertEqual(ArabicLetters.count(in: "\u{671}"), 1)
+    }
+}
+
+/// Qur'an goal and streak rules.
+final class QuranProgressTests: XCTestCase {
+    private var savedDays: Data?
+    private var savedGoal: Int = 0
+
+    override func setUp() {
+        savedDays = AppGroup.defaults.data(forKey: "quran.days")
+        savedGoal = AppGroup.defaults.integer(forKey: "quran.dailyGoal")
+        AppGroup.defaults.removeObject(forKey: "quran.days")
+    }
+
+    override func tearDown() {
+        AppGroup.defaults.set(savedDays, forKey: "quran.days")
+        AppGroup.defaults.set(savedGoal, forKey: "quran.dailyGoal")
+    }
+
+    func testGoalCompletesOnceAndNeverDoubleCounts() {
+        let now = Date()
+        QuranProgress.setGoal(2, at: now)
+        XCTAssertFalse(QuranProgress.recordRead(surah: 1, verse: 1, letters: 19, at: now))
+        XCTAssertFalse(QuranProgress.recordRead(surah: 1, verse: 1, letters: 19, at: now), "same verse twice")
+        XCTAssertEqual(QuranProgress.day(now).count, 1)
+        XCTAssertTrue(QuranProgress.recordRead(surah: 1, verse: 2, letters: 17, at: now), "goal reached")
+        XCTAssertFalse(QuranProgress.recordRead(surah: 1, verse: 3, letters: 12, at: now), "celebrate only once")
+        XCTAssertEqual(QuranProgress.day(now).letters, 19 + 17 + 12)
+        XCTAssertEqual(QuranProgress.currentStreak(asOf: now), 1)
+    }
+
+    func testChangingGoalDoesNotRewriteHistory() {
+        let calendar = Calendar.current
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: Date())!
+        QuranProgress.setGoal(1, at: yesterday)
+        QuranProgress.recordRead(surah: 2, verse: 1, letters: 3, at: yesterday)
+        QuranProgress.setGoal(50)
+        XCTAssertTrue(QuranProgress.day(yesterday).isComplete)
+        XCTAssertEqual(QuranProgress.day(yesterday).goal, 1)
+        XCTAssertEqual(QuranProgress.currentStreak(), 1, "yesterday still counts while today is in progress")
+    }
+}
+
+/// Settings from older versions keep working.
+final class SettingsMigrationTests: XCTestCase {
+    func testOldReminderSettingBecomesAlertTimings() throws {
+        let json = #"{"enabledPrayers":["fajr","isha"],"reminderMinutesBefore":10}"#.data(using: .utf8)!
+        let settings = try JSONDecoder().decode(NotificationSettings.self, from: json)
+        XCTAssertEqual(settings.enabledPrayers, [.fajr, .isha])
+        XCTAssertEqual(settings.timings, [.before10, .atTime, .after30])
     }
 }
 

@@ -1,8 +1,9 @@
+import Charts
 import SwiftUI
 
-/// Your salah over time: a calendar of consistency, plus which prayers you
-/// miss most and why.
-struct JourneyView: View {
+/// Salah statistics: this week at a glance, a calendar of consistency, and
+/// which prayers you miss most and why.
+struct SalahStatsSection: View {
     @Environment(AppModel.self) private var model
     @State private var month = Calendar.current.dateInterval(of: .month, for: .now)?.start ?? .now
     @State private var selectedDay: DayDestination?
@@ -10,26 +11,78 @@ struct JourneyView: View {
     private var calendar: Calendar { .current }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    header
-                        .appearAnimation(0)
-                    calendarGrid
-                        .appearAnimation(1)
-                    legend
-                        .appearAnimation(2)
-                    statsSection
+        VStack(alignment: .leading, spacing: 16) {
+            todayAndWeek
+                .appearAnimation(0)
+            header
+                .appearAnimation(1)
+            calendarGrid
+                .appearAnimation(2)
+            legend
+                .appearAnimation(3)
+            statsSection
+        }
+        .sheet(item: $selectedDay) { destination in
+            DayDetailSheet(day: destination.day)
+        }
+        .haptic(.selection, trigger: month)
+    }
+
+    // MARK: Today and this week
+
+    private struct DayBar: Identifiable {
+        let day: Date
+        let status: String
+        let count: Int
+        var id: String { "\(day.timeIntervalSince1970)-\(status)" }
+    }
+
+    private var todayAndWeek: some View {
+        let today = calendar.startOfDay(for: .now)
+        let week = (0..<7).reversed().compactMap { calendar.date(byAdding: .day, value: -$0, to: today) }
+        let bars: [DayBar] = week.flatMap { day -> [DayBar] in
+            let records = PrayerName.obligatory.compactMap { model.record(for: $0, on: day) }
+            return [
+                DayBar(day: day, status: "On time", count: records.filter { $0.status == .onTime }.count),
+                DayBar(day: day, status: "Late", count: records.filter { $0.status == .late }.count),
+            ]
+        }
+        let weekStats = model.stats(for: week)
+        let thirty = (0..<30).compactMap { calendar.date(byAdding: .day, value: -$0, to: today) }
+        let monthStats = model.stats(for: thirty)
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                StatTile(value: "\(model.prayedCount(on: today))/5", label: "Today", color: Palette.accent)
+                StatTile(value: "\(model.streak())", label: "Day streak", color: Palette.highlight)
+                StatTile(value: "\(weekStats.prayed)/\(7 * 5)", label: "This week", color: Palette.accent)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Last 7 days").sectionLabelStyle()
+                    Spacer()
+                    Text("30 days: \(monthStats.prayed) of \(30 * 5) prayed")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 28)
+                Chart(bars) { bar in
+                    BarMark(x: .value("Day", bar.day, unit: .day), y: .value("Prayers", bar.count))
+                        .foregroundStyle(by: .value("Status", bar.status))
+                        .cornerRadius(4)
+                }
+                .chartForegroundStyleScale(["On time": Palette.accent, "Late": Palette.highlight])
+                .chartYScale(domain: 0...5)
+                .chartYAxis { AxisMarks(values: [0, 5]) }
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .day)) { _ in
+                        AxisValueLabel(format: .dateTime.weekday(.narrow))
+                    }
+                }
+                .chartLegend(position: .bottom, alignment: .leading)
+                .frame(height: 150)
             }
-            .niyatBackground()
-            .navigationTitle("Journey")
-            .sheet(item: $selectedDay) { destination in
-                DayDetailSheet(day: destination.day)
-            }
-            .haptic(.selection, trigger: month)
+            .padding(18)
+            .surface(cornerRadius: 26)
         }
     }
 
@@ -164,7 +217,7 @@ struct JourneyView: View {
                     .frame(width: 70, height: 70)
                 Text("Nothing logged this month yet")
                     .font(.headline)
-                Text("Check in after each prayer on the Today tab and your journey will fill in here.")
+                Text("Check in after each prayer on the Today tab and this month will fill in here.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -393,7 +446,7 @@ private struct DayDetailSheet: View {
     }
 }
 
-private struct StatTile: View {
+struct StatTile: View {
     let value: String
     let label: String
     let color: Color
