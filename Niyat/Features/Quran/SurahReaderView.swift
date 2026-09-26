@@ -288,6 +288,10 @@ struct QuranGoalPill: View {
     @State private var goal = QuranGoalModel.shared
     let action: () -> Void
 
+    init(action: @escaping () -> Void) {
+        self.action = action
+    }
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
@@ -315,10 +319,15 @@ struct QuranGoalPill: View {
 }
 
 /// Shown once when the day's goal is reached.
-private struct GoalCelebration: View {
+struct GoalCelebration: View {
     let streak: Int
     let onDismiss: () -> Void
     @State private var burst = false
+
+    init(streak: Int, onDismiss: @escaping () -> Void) {
+        self.streak = streak
+        self.onDismiss = onDismiss
+    }
 
     var body: some View {
         VStack(spacing: 12) {

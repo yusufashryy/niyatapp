@@ -264,3 +264,28 @@ final class PrayerStatsTests: XCTestCase {
         XCTAssertFalse(PrayerStatus.missed.keepsStreak)
     }
 }
+
+final class QuranReminderSettingsTests: XCTestCase {
+    /// Settings saved by an older version (fewer fields) must still load.
+    func testOlderSavedSettingsDecode() throws {
+        let old = #"{"isEnabled":true,"morningMinute":420,"afternoonMinute":900,"sendCompletionMessage":true}"#
+        let settings = try JSONDecoder().decode(QuranReminderSettings.self, from: Data(old.utf8))
+        XCTAssertTrue(settings.isEnabled)
+        XCTAssertEqual(settings.morningMinute, 420)
+        XCTAssertEqual(settings.afternoonMinute, 900)
+        XCTAssertTrue(settings.sendCompletionMessage)
+        XCTAssertTrue(settings.morningEnabled)
+        XCTAssertTrue(settings.afternoonEnabled)
+        XCTAssertFalse(settings.verseOfDayEnabled)
+        XCTAssertFalse(settings.kahfEnabled)
+        XCTAssertEqual(settings.eveningMinute, 21 * 60)
+    }
+
+    func testRoundTrip() throws {
+        var settings = QuranReminderSettings()
+        settings.kahfEnabled = true
+        settings.verseOfDayMinute = 6 * 60 + 30
+        let decoded = try JSONDecoder().decode(QuranReminderSettings.self, from: JSONEncoder().encode(settings))
+        XCTAssertEqual(decoded, settings)
+    }
+}

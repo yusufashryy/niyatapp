@@ -177,22 +177,50 @@ enum QuranProgress {
     }
 }
 
-/// Settings for the daily Qur'an reminders.
+/// Settings for Qur'an notifications (Qur'an › Notifications).
 struct QuranReminderSettings: Codable, Equatable {
+    /// Master switch for every Qur'an notification.
     var isEnabled = false
+
+    /// Morning nudge towards the daily goal (skipped if already done).
+    var morningEnabled = true
     /// Minutes after midnight.
     var morningMinute = 8 * 60
+    /// Afternoon check-in, only if the goal isn't done yet.
+    var afternoonEnabled = true
     var afternoonMinute = 16 * 60
     /// If the goal is already done by the afternoon, send "completed" instead of nothing.
     var sendCompletionMessage = false
+    /// Late-evening "your streak is at risk", only if the goal isn't done yet.
+    var eveningEnabled = false
+    var eveningMinute = 21 * 60
+    /// One verse each day (from the verified daily-verse list), opening at that verse.
+    var verseOfDayEnabled = false
+    var verseOfDayMinute = 7 * 60
+    /// Friday reminder to read Surah Al-Kahf.
+    var kahfEnabled = false
+    var kahfMinute = 10 * 60
 
     init() {}
 
+    // Tolerant decoding: older saved settings simply miss the newer fields.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        isEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .isEnabled)) ?? false
-        morningMinute = (try? c.decodeIfPresent(Int.self, forKey: .morningMinute)) ?? 8 * 60
-        afternoonMinute = (try? c.decodeIfPresent(Int.self, forKey: .afternoonMinute)) ?? 16 * 60
-        sendCompletionMessage = (try? c.decodeIfPresent(Bool.self, forKey: .sendCompletionMessage)) ?? false
+        func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T {
+            ((try? c.decodeIfPresent(T.self, forKey: key)) ?? nil) ?? fallback
+        }
+        let defaults = QuranReminderSettings()
+        isEnabled = value(.isEnabled, defaults.isEnabled)
+        morningEnabled = value(.morningEnabled, defaults.morningEnabled)
+        morningMinute = value(.morningMinute, defaults.morningMinute)
+        afternoonEnabled = value(.afternoonEnabled, defaults.afternoonEnabled)
+        afternoonMinute = value(.afternoonMinute, defaults.afternoonMinute)
+        sendCompletionMessage = value(.sendCompletionMessage, defaults.sendCompletionMessage)
+        eveningEnabled = value(.eveningEnabled, defaults.eveningEnabled)
+        eveningMinute = value(.eveningMinute, defaults.eveningMinute)
+        verseOfDayEnabled = value(.verseOfDayEnabled, defaults.verseOfDayEnabled)
+        verseOfDayMinute = value(.verseOfDayMinute, defaults.verseOfDayMinute)
+        kahfEnabled = value(.kahfEnabled, defaults.kahfEnabled)
+        kahfMinute = value(.kahfMinute, defaults.kahfMinute)
     }
 }

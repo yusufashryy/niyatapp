@@ -18,6 +18,12 @@ All five were obtained through [risan/quran-json](https://github.com/risan/quran
 - **Warsh and Qalun** use the Madinan count. Each verse carries the Hafs verse number(s) it covers, which is how translations and bookmarks line up. The Qur'anpedia licence asks redistributors to keep their copy current. Check for newer dump versions before each release.
 - **Not included:** IndoPak and other scripts. The widely used versions are restricted. A licensed IndoPak text (DigitalKhatt, MIT) exists but numbers Al-Fatiha differently and needs another font, so it's a candidate for later.
 
+## Mushaf pages, juz, hizb and sajdah
+
+The page-by-page view uses Tanzil's Qur'an metadata (in `chapters.json`, same CC BY 3.0 source): where each of the 604 pages of the Madinah mushaf, each of the 30 juz and each of the 240 hizb quarters begins, plus the 15 sajdah verses. The tests check that the pages cover all 6,236 verses exactly once and match known landmarks (Al-Baqarah on page 2, Al-Kahf on page 293, An-Nas on page 604).
+
+Niyat does **not** bundle the printed page images: the King Fahd Complex page scans are copyrighted. Each page is typeset by the app from the verified text, so the verses on each page match the printed mushaf but line breaks can differ. Page divisions are for the Hafs mushaf; with Warsh or Qalun selected, verses are placed by their Hafs equivalents.
+
 ## Translation
 
 ClearQuran English (Talal Itani), CC BY-ND 4.0, verbatim. SHA-256 `2e5d4d9f…250ed`.

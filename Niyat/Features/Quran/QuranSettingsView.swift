@@ -10,11 +10,27 @@ struct QuranSettingsView: View {
     @State private var goal = QuranGoalModel.shared
     @AppStorage("quran.arabicSize") private var arabicSize = 30.0
     @AppStorage("quran.showTranslation") private var showTranslation = true
+    @State private var showMushaf = false
 
     var body: some View {
         @Bindable var model = model
         NavigationStack {
             Form {
+                Section {
+                    Button {
+                        showMushaf = true
+                    } label: {
+                        Label("Read by mushaf page", systemImage: "book.pages")
+                    }
+                    NavigationLink {
+                        QuranNotificationsView()
+                    } label: {
+                        Label("Qur'an notifications", systemImage: "bell.badge")
+                    }
+                } footer: {
+                    Text("Page view follows the 604 pages of the Madinah mushaf (Hafs), using Tanzil's verified page divisions. Niyat typesets the text itself, so line breaks can differ from a printed copy.")
+                }
+
                 Section {
                     Picker("Qira'ah / Riwayah", selection: Binding(
                         get: { store.edition.riwayah },
@@ -80,7 +96,7 @@ struct QuranSettingsView: View {
 
                 Section {
                     GoalPicker(selection: Binding(get: { goal.goal ?? 10 }, set: { goal.setGoal($0) }))
-                    Toggle("Daily Qur'an reminder", isOn: Binding(
+                    Toggle("Qur'an notifications", isOn: Binding(
                         get: { model.quranReminders.isEnabled },
                         set: { isOn in
                             model.quranReminders.isEnabled = isOn
@@ -90,11 +106,7 @@ struct QuranSettingsView: View {
                         }
                     ))
                     if model.quranReminders.isEnabled {
-                        DatePicker("Morning", selection: minuteBinding(\.morningMinute), displayedComponents: .hourAndMinute)
-                        DatePicker("Afternoon check-in", selection: minuteBinding(\.afternoonMinute), displayedComponents: .hourAndMinute)
-                        Toggle("Tell me when I've finished", isOn: Binding(
-                            get: { model.quranReminders.sendCompletionMessage },
-                            set: { model.quranReminders.sendCompletionMessage = $0; model.settingsChanged() }))
+                        NavigationLink("Choose reminders") { QuranNotificationsView() }
                     }
                 } header: {
                     Text("Daily goal")
@@ -111,25 +123,12 @@ struct QuranSettingsView: View {
             }
         }
         .presentationDetents([.large])
+        .fullScreenCover(isPresented: $showMushaf) { MushafPageView() }
     }
 
     private func select(_ edition: QuranEdition) {
         if !edition.riwayah.hasVerseAudio { player.stop() }
         Task { await store.setEdition(edition) }
-    }
-
-    /// Binds a "minutes after midnight" setting to a DatePicker.
-    private func minuteBinding(_ keyPath: WritableKeyPath<QuranReminderSettings, Int>) -> Binding<Date> {
-        Binding(
-            get: {
-                Calendar.current.startOfDay(for: .now).addingTimeInterval(TimeInterval(model.quranReminders[keyPath: keyPath] * 60))
-            },
-            set: { date in
-                let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
-                model.quranReminders[keyPath: keyPath] = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
-                model.settingsChanged()
-            }
-        )
     }
 }
 

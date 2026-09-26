@@ -69,7 +69,9 @@ final class GroupSync {
 
     static var isAvailable: Bool {
         #if GROUPS
-        true
+        // The automated UI tour runs an unsigned build with no iCloud
+        // entitlement, where touching CloudKit crashes the app.
+        !ProcessInfo.processInfo.arguments.contains("-demo")
         #else
         false
         #endif
@@ -127,7 +129,7 @@ final class GroupSync {
     #if GROUPS
     // MARK: - CloudKit
 
-    private let container = CKContainer.default()
+    @ObservationIgnored private lazy var container = CKContainer.default()
     private var privateDB: CKDatabase { container.privateCloudDatabase }
     private var sharedDB: CKDatabase { container.sharedCloudDatabase }
     private static let zonePrefix = "Group-"
@@ -137,6 +139,7 @@ final class GroupSync {
     }
 
     private func checkAccount() async -> Bool {
+        guard Self.isAvailable else { return false }
         let status = try? await container.accountStatus()
         guard status == .available else {
             errorMessage = "Sign in to iCloud in the iPhone Settings app to use Groups."
@@ -253,7 +256,7 @@ final class GroupSync {
     }
 
     func publishNow() async {
-        guard (try? await container.accountStatus()) == .available, let me = try? await myUserID() else { return }
+        guard Self.isAvailable, (try? await container.accountStatus()) == .available, let me = try? await myUserID() else { return }
         let owned = (try? await privateDB.allRecordZones()) ?? []
         for zone in owned where zone.zoneID.zoneName.hasPrefix(Self.zonePrefix) {
             _ = try? await privateDB.modifyRecords(saving: [memberRecord(me: me, zoneID: zone.zoneID)], deleting: [],
