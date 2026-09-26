@@ -74,6 +74,33 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify --renderer github-actions
 
+      # An unsigned .ipa of the basic build, for friends to install with a
+      # sideloading tool (Sideloadly, AltStore), which signs it with their own Apple ID.
+      - name: Build unsigned .ipa for sideloading
+        if: matrix.variant == 'basic'
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Niyat.xcodeproj \
+            -scheme Niyat \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build/ipa \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify --renderer github-actions
+          mkdir -p build/ipa/Payload
+          cp -R build/ipa/Build/Products/Release-iphoneos/Niyat.app build/ipa/Payload/
+          (cd build/ipa && zip -qry ../../Niyat-unsigned.ipa Payload)
+          ls -la Niyat-unsigned.ipa
+
+      - name: Upload .ipa
+        if: matrix.variant == 'basic'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Niyat-unsigned-ipa
+          path: Niyat-unsigned.ipa
+
       # Demo tour: taps through every screen and saves a screenshot of each.
       - name: Run demo tour
         if: matrix.variant == 'full'
