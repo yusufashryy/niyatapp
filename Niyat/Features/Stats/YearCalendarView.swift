@@ -128,6 +128,7 @@ private struct YearData {
         loggedDays == 0 ? "–" : "\(Int((Double(completeDays) / Double(loggedDays) * 100).rounded()))%"
     }
 
+    @MainActor
     init(model: AppModel, year: Int, kind: YearCalendarView.Kind) {
         let prefix = "\(year)-"
         var levels: [String: (fraction: Double, complete: Bool)] = [:]
