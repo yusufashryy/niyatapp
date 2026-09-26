@@ -28,6 +28,7 @@ Niyat works offline. A few optional features connect to outside services:
 | Finding a city, or naming your current location | Apple (Core Location geocoding) | The search text or coordinates, handled under [Apple's Privacy Policy](https://www.apple.com/legal/privacy/) |
 | Qur'an recitation audio | Islamic Network CDN (cdn.islamic.network) | A normal web request for the audio file, which includes your IP address, as with any website |
 | Groups (optional) | Apple iCloud (CloudKit) | The display name and summary you choose to share (prayers completed, Qur'an goal progress), visible only to people in the groups you create or join. Stored in your iCloud account, not by Niyat. |
+| Recite (optional) | Apple speech recognition | While you use Recite, your voice is turned into text by Apple's speech recognition: on your iPhone when it supports this, otherwise by Apple's servers under [Apple's Privacy Policy](https://www.apple.com/legal/privacy/). Niyat never records or saves audio. |
 | Tips (optional) | Apple In-App Purchase | Handled entirely by Apple. Niyat never sees your payment details. |
 | Send feedback (optional) | A private Discord channel read by the developer (or email/GitHub) | Only what you write, an email address if you choose to give one for a reply, plus app version, iOS version and your calculation settings if you leave "Include app details" on. Never your location. |
 

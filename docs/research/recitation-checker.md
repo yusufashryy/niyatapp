@@ -1,6 +1,6 @@
 # Recitation checker: feasibility report
 
-**Status: research only. Nothing here is implemented in Niyat.**
+**Status: version 1 (beta) is in the app** as Qur'an › Recite: live follow-along and word-level checking (skipped and different words) using Apple's on-device speech recognition and the aligner described below (`Niyat/Features/Quran/RecitationCheck/`). Everything from "Wrong harakah" down in the table is still future work, and a Qur'an fine-tuned model (WhisperKit) remains the next step for accuracy.
 
 Goal: a mode, similar in concept to Tarteel, where the user turns on the microphone, recites, and the app follows along and flags mistakes.
 

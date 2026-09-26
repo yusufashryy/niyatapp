@@ -34,7 +34,9 @@
 - The full Qur'an with an English translation, all offline
 - Read verse by verse, or page by page like a printed mushaf (604 pages)
 - Uthmani, simpler and modern scripts, plus the Warsh and Qalun readings
-- Listen to 19 reciters, verse by verse, with no gaps between verses
+- Listen to 20 reciters, verse by verse, with no gaps between verses
+- Duas from the Qur'an: 54 supplications, grouped by theme, with where each comes from
+- Recite (beta): recite aloud and the app follows along word by word, pointing out words to double-check
 - A daily goal in ayat with a streak
 - Reminders: morning, afternoon, streak, verse of the day, and Surah Al-Kahf on Fridays
 

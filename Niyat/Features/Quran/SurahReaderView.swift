@@ -15,8 +15,12 @@ struct SurahReaderView: View {
     @State private var didScroll = false
     @State private var showSettings = false
     @State private var showGoal = false
+    @State private var showRecite = false
     /// Verses currently on screen, for counting what's actually read.
     @State private var visibleVerses: Set<Int> = []
+    /// Where the list is scrolled to, by verse number (0 = the Bismillah).
+    @State private var position = ScrollPosition(idType: Int.self)
+    private static let bismillahID = 0
 
     /// A verse counts as read after it has been on screen this long.
     private let readingDwell: Duration = .seconds(3)
@@ -24,8 +28,7 @@ struct SurahReaderView: View {
     var body: some View {
         let surah = store.surah(surahID)
         let audioAvailable = store.edition.riwayah.hasVerseAudio
-        ScrollViewReader { proxy in
-            ScrollView {
+        ScrollView {
                 LazyVStack(spacing: 12) {
                     if let surah {
                         SurahHeader(surah: surah, verseCount: store.verseCount(for: surah.id), edition: store.edition)
@@ -41,7 +44,7 @@ struct SurahReaderView: View {
                                     RoundedRectangle(cornerRadius: 18)
                                         .fill(Palette.accent.opacity(reciting ? 0.15 : 0))
                                 }
-                                .id("bismillah")
+                                .id(Self.bismillahID)
                                 .appearAnimation(1)
                         }
                     }
@@ -63,27 +66,28 @@ struct SurahReaderView: View {
                         .onDisappear { visibleVerses.remove(verse.id) }
                     }
                 }
+                .scrollTargetLayout()
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
             }
+            .scrollPosition($position, anchor: .center)
             .onAppear {
                 guard !didScroll else { return }
                 didScroll = true
                 // Opened while this surah is being recited: go to that verse.
                 if let current = player.current, current.surah == surahID {
-                    DispatchQueue.main.async { follow(current, proxy: proxy, animated: false) }
+                    DispatchQueue.main.async { follow(current, animated: false) }
                     return
                 }
                 guard let startVerse, startVerse > 1 else { return }
                 let target = store.verse(VerseReference(surah: surahID, verse: startVerse))?.number ?? startVerse
-                DispatchQueue.main.async { proxy.scrollTo(target, anchor: .top) }
+                DispatchQueue.main.async { position.scrollTo(id: target, anchor: .top) }
             }
             // Follow along: keep the verse being recited in the middle of the screen.
             .onChange(of: player.current) { _, current in
                 guard let current, current.surah == surahID else { return }
-                follow(current, proxy: proxy, animated: true)
+                follow(current, animated: true)
             }
-        }
         .niyatBackground()
         .safeAreaInset(edge: .bottom) {
             RecitationMiniPlayer()
@@ -129,14 +133,20 @@ struct SurahReaderView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showSettings = true } label: {
+                Menu {
+                    Button("Recite and check (beta)", systemImage: "mic.fill") { showRecite = true }
+                    Button("Qur'an settings", systemImage: "textformat.size") { showSettings = true }
+                } label: {
                     Image(systemName: "textformat.size")
                 }
-                .accessibilityLabel("Qur'an settings")
+                .accessibilityLabel("More")
             }
         }
         .sheet(isPresented: $showSettings) { QuranSettingsView() }
         .sheet(isPresented: $showGoal) { QuranGoalSheet() }
+        .fullScreenCover(isPresented: $showRecite) {
+            RecitationCheckView(surah: surahID, verse: store.lastRead?.surah == surahID ? store.lastRead?.verse ?? 1 : 1)
+        }
         .onDisappear {
             // Update the afternoon reminder with today's remaining ayat.
             model.refresh()
@@ -144,20 +154,13 @@ struct SurahReaderView: View {
     }
 
     /// Scrolls so the verse being recited sits in the middle of the screen.
-    private func follow(_ item: RecitationItem, proxy: ScrollViewProxy, animated: Bool) {
-        let scroll = {
-            if let verse = item.verse {
-                // Recitation is numbered like Hafs; find the matching card.
-                let target = store.verse(VerseReference(surah: surahID, verse: verse))?.number ?? verse
-                proxy.scrollTo(target, anchor: .center)
-            } else {
-                proxy.scrollTo("bismillah", anchor: .center)
-            }
-        }
+    private func follow(_ item: RecitationItem, animated: Bool) {
+        // Recitation is numbered like Hafs; find the matching card.
+        let target = item.verse.map { store.verse(VerseReference(surah: surahID, verse: $0))?.number ?? $0 } ?? Self.bismillahID
         if animated {
-            withAnimation(.smooth(duration: 0.5), scroll)
+            withAnimation(.smooth(duration: 0.5)) { position.scrollTo(id: target, anchor: .center) }
         } else {
-            scroll()
+            position.scrollTo(id: target, anchor: .center)
         }
     }
 

@@ -39,6 +39,8 @@ Options considered:
 | MP3Quran (mp3quran.net) | No, whole surahs only (includes Warsh reciters) | Redistribution allowed with attribution | Free | Can be cached | Possible later for whole-surah Warsh/Qalun listening; can't sync per verse |
 | Quran.com / Quran Foundation API | Yes | API terms and client credentials; content for personal non-commercial use | Rate limited; account needed | Limited | Not used: account and terms overhead |
 
+**Exception: Yasser Al-Dosari.** Islamic Network doesn't carry him, so his verse-by-verse audio streams from EveryAyah.com (`Yasser_Ad-Dussary_128kbps`, files named `SSSAAA.mp3`). EveryAyah is widely used by Qur'an apps but publishes no licence. If EveryAyah or the reciter's rights holders object, remove this one entry from `Reciter.all`.
+
 Notes on the chosen source:
 - **Riwayah:** it's Hafs only, so recitation is switched off for Warsh and Qalun rather than playing mismatched audio.
 - **Bismillah:** before verse 1 of a surah (except 1 and 9), the player plays verse 1:1 (the Bismillah) first.
@@ -61,3 +63,12 @@ Great-circle initial bearing to the Kaaba (21.4225° N, 39.8262° E). The app's 
 ## Hijri date
 
 Apple's Umm al-Qura calendar (`Calendar(identifier: .islamicUmmAlQura)`), with a ±2-day adjustment for local moon sighting. Arabic month names come from the system, not from hand-typed text.
+
+
+## Duas from the Qur'an
+
+Qur'an › Duas lists 54 supplications from the Qur'an. Only the verse references are stored (`QuranicDuas.swift`); the Arabic and English are read from the same bundled Tanzil and ClearQuran files as the reader, so nothing is retyped. The short note on each ("Prophet Musa", "The youths of the cave") says who makes the dua, as stated in or directly around the verse. A test checks every reference exists and that its text contains "Rabb" (Lord), "a'udhu" (I seek refuge) or, for Yunus, "la ilaha illa anta".
+
+## Recitation checker (beta)
+
+Qur'an › Recite listens while you recite and follows along word by word. It uses Apple's Speech framework for Arabic (`ar-SA`), on the device whenever the iPhone supports it. What it hears is compared with Tanzil's Imla'i (modern spelling) Hafs text, after removing harakat and folding spelling variants. It checks words only: no tajwid or pronunciation judgement, and highlighted words are shown as "worth double-checking", never as errors. See `docs/research/recitation-checker.md`.

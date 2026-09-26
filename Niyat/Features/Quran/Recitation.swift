@@ -4,19 +4,36 @@ import MediaPlayer
 import Observation
 import SwiftUI
 
-/// A reciter available from the Islamic Network audio CDN (cdn.islamic.network),
-/// which allows free non-commercial use; each recitation's copyright stays with
-/// its reciter. Audio is streamed verse by verse, never bundled.
+/// A reciter whose verse-by-verse audio is streamed, never bundled. Each
+/// recitation's copyright stays with its reciter.
+///
+/// Most come from the Islamic Network CDN (cdn.islamic.network), which allows
+/// free non-commercial use. A few reciters it doesn't carry come from
+/// EveryAyah.com (see docs/SOURCES.md).
 struct Reciter: Identifiable, Hashable {
-    let id: String          // Islamic Network edition, e.g. "ar.alafasy"
+    enum Source: Hashable {
+        /// Islamic Network, numbered 1...6236 across the Qur'an.
+        case islamicNetwork
+        /// EveryAyah, one folder per reciter, files named SSSAAA.mp3.
+        case everyAyah(folder: String)
+    }
+
+    let id: String          // Islamic Network edition (e.g. "ar.alafasy") or our own id
     let name: String
     let arabicName: String
     let style: String
     let bitrate: Int
     var isTranslation = false
+    var source = Source.islamicNetwork
 
-    func url(forGlobalAyah number: Int) -> URL {
-        URL(string: "https://cdn.islamic.network/quran/audio/\(bitrate)/\(id)/\(number).mp3")!
+    /// `globalAyah` is 1...6236; `surah`/`verse` locate the same verse (Hafs).
+    func url(globalAyah: Int, surah: Int, verse: Int) -> URL {
+        switch source {
+        case .islamicNetwork:
+            return URL(string: "https://cdn.islamic.network/quran/audio/\(bitrate)/\(id)/\(globalAyah).mp3")!
+        case .everyAyah(let folder):
+            return URL(string: String(format: "https://everyayah.com/data/%@/%03d%03d.mp3", folder, surah, verse))!
+        }
     }
 
     static let all: [Reciter] = [
@@ -39,6 +56,8 @@ struct Reciter: Identifiable, Hashable {
         Reciter(id: "ar.abdullahbasfar", name: "Abdullah Basfar", arabicName: "عبد الله بصفر", style: "Murattal", bitrate: 64),
         Reciter(id: "ar.aymanswoaid", name: "Ayman Suwayd", arabicName: "أيمن سويد", style: "Teaching", bitrate: 64),
         Reciter(id: "ar.ibrahimakhbar", name: "Ibrahim Al-Akhdar", arabicName: "إبراهيم الأخضر", style: "Murattal", bitrate: 32),
+        Reciter(id: "everyayah.yasseraldosari", name: "Yasser Al-Dosari", arabicName: "ياسر الدوسري", style: "Murattal", bitrate: 128,
+                source: .everyAyah(folder: "Yasser_Ad-Dussary_128kbps")),
         Reciter(id: "en.walk", name: "Ibrahim Walk", arabicName: "", style: "English translation", bitrate: 192, isTranslation: true),
         Reciter(id: "ur.khan", name: "Shamshad Ali Khan", arabicName: "", style: "Urdu translation", bitrate: 64, isTranslation: true),
     ]
@@ -237,7 +256,7 @@ final class RecitationPlayer {
     }
 
     private func enqueue(_ item: RecitationItem) {
-        let asset = AVURLAsset(url: reciter.url(forGlobalAyah: globalAyahNumber(for: item)))
+        let asset = AVURLAsset(url: url(for: item))
         let playerItem = AVPlayerItem(asset: asset)
         playerItem.preferredForwardBufferDuration = 10
         let key = ObjectIdentifier(playerItem)
@@ -305,6 +324,16 @@ final class RecitationPlayer {
         } else {
             player.remove(failed)
             topUp()
+        }
+    }
+
+    private func url(for item: RecitationItem) -> URL {
+        switch item {
+        case .bismillah:
+            // Al-Fatiha 1:1 is the Bismillah.
+            return reciter.url(globalAyah: 1, surah: 1, verse: 1)
+        case .verse(let surah, let verse):
+            return reciter.url(globalAyah: globalAyahNumber(for: item), surah: surah, verse: verse)
         }
     }
 
