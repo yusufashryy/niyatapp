@@ -179,12 +179,16 @@ struct SurahFrame: View {
         }
         .overlay {
             GeometryReader { geo in
+                let size = fontSize * 1.1
                 Text("سورة " + (surah?.name ?? ""))
-                    .font(.quran(size: fontSize * 0.95))
+                    .font(.quran(size: size))
                     .foregroundStyle(Color(colors.label))
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
-                    .frame(width: geo.size.width * 0.38, height: geo.size.height)
+                    .frame(width: geo.size.width * 0.4, height: geo.size.height)
+                    // Amiri Quran's line is tall (room for stacked marks), so
+                    // its letters sit low in the line: lift them to the middle.
+                    .offset(y: -0.37 * size)
                     .position(x: geo.size.width / 2, y: geo.size.height / 2)
             }
         }
