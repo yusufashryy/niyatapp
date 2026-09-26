@@ -377,11 +377,14 @@ final class TajweedTests: XCTestCase {
                     total += 1
                     XCTAssertLessThanOrEqual(mark.range.upperBound, scalars.count, "\(surah.id):\(verse.number)")
                     guard mark.range.upperBound <= scalars.count else { continue }
-                    let span = String(String.UnicodeScalarView(scalars[mark.range]))
+                    // Compare code points: a letter with its harakah is one Character in Swift.
+                    let span = scalars[mark.range]
+                    func has(_ letters: String) -> Bool { span.contains { letters.unicodeScalars.contains($0) } }
+                    let label = "\(surah.id):\(verse.number) \(String(String.UnicodeScalarView(span)))"
                     switch mark.rule {
-                    case .hamzatWasl: XCTAssertTrue(span.contains("ٱ"), "\(surah.id):\(verse.number) \(span)")
-                    case .lamShamsiyyah: XCTAssertTrue(span.contains("ل"), "\(surah.id):\(verse.number) \(span)")
-                    case .qalqalah: XCTAssertTrue(span.contains { "قطبجد".contains($0) }, "\(surah.id):\(verse.number) \(span)")
+                    case .hamzatWasl: XCTAssertTrue(has("ٱ"), label)
+                    case .lamShamsiyyah: XCTAssertTrue(has("ل"), label)
+                    case .qalqalah: XCTAssertTrue(has("قطبجد"), label)
                     default: break
                     }
                 }
