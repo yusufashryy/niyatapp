@@ -94,10 +94,10 @@ struct FeedbackView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending || sent)
+                .haptic(.success, trigger: sent)
                 if let errorMessage {
                     Text(errorMessage).font(.footnote).foregroundStyle(.orange)
                 }
-                .haptic(.success, trigger: sent)
             }
         }
         .scrollContentBackground(.hidden)
