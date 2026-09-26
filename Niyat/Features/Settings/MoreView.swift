@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct MoreView: View {
+    @State private var showTutorial = false
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -20,6 +22,11 @@ struct MoreView: View {
                     .appearAnimation(0)
 
                     VStack(spacing: 0) {
+                        Button { showTutorial = true } label: {
+                            rowLabel("How to use Niyat", systemImage: "questionmark.circle.fill")
+                        }
+                        .buttonStyle(.pressable)
+                        Divider().overlay(Palette.hairline).padding(.leading, 56)
                         row("Settings", systemImage: "gearshape.fill") { SettingsView() }
                         Divider().overlay(Palette.hairline).padding(.leading, 56)
                         row("Themes", systemImage: "paintpalette.fill") { ThemePickerView() }
@@ -49,6 +56,7 @@ struct MoreView: View {
             }
             .niyatBackground()
             .navigationTitle("More")
+            .fullScreenCover(isPresented: $showTutorial) { TutorialView() }
         }
     }
 
@@ -80,21 +88,25 @@ struct MoreView: View {
     private func row<Destination: View>(_ title: String, systemImage: String,
                                         @ViewBuilder destination: () -> Destination) -> some View {
         NavigationLink(destination: destination) {
-            HStack(spacing: 14) {
-                Image(systemName: systemImage)
-                    .foregroundStyle(Palette.accent)
-                    .frame(width: 28)
-                Text(title).foregroundStyle(.white)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.bold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 16)
-            .contentShape(.rect)
+            rowLabel(title, systemImage: systemImage)
         }
         .buttonStyle(.pressable)
+    }
+
+    private func rowLabel(_ title: String, systemImage: String) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: systemImage)
+                .foregroundStyle(Palette.accent)
+                .frame(width: 28)
+            Text(title).foregroundStyle(.white)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
+        .contentShape(.rect)
     }
 }
 

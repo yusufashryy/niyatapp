@@ -6,6 +6,8 @@ struct SettingsView: View {
     @State private var notificationsAuthorized = true
     @AppStorage(Haptics.settingKey) private var hapticsEnabled = true
     @State private var testMessage: String?
+    @State private var confirmErase = false
+    @AppStorage("hasOnboarded") private var hasOnboarded = false
 
     var body: some View {
         @Bindable var model = model
@@ -129,7 +131,30 @@ struct SettingsView: View {
             } footer: {
                 Text("Shift by a day or two to match the moon sighting where you live.")
             }
+
+            Section {
+                Button(role: .destructive) {
+                    confirmErase = true
+                } label: {
+                    Label("Erase all data", systemImage: "trash.fill")
+                        .foregroundStyle(.red)
+                }
+            } header: {
+                Text("Your data")
+            } footer: {
+                Text("Everything Niyat stores lives on this iPhone. Erasing removes your prayer log, Qur'an progress, bookmarks, tasbih counts, theme and settings, cancels scheduled alerts, and starts the app fresh. Groups live in iCloud: leave them from Groups first if you want them gone too.")
+            }
         }
+        .confirmationDialog("Erase all data?", isPresented: $confirmErase, titleVisibility: .visible) {
+            Button("Erase everything", role: .destructive) {
+                DataReset.eraseEverything(model: model)
+                withAnimation(.smooth(duration: 0.6)) { hasOnboarded = false }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your prayer log, Qur'an progress, streaks and settings will be deleted from this iPhone. This can't be undone.")
+        }
+        .haptic(.warning, trigger: confirmErase)
         .scrollContentBackground(.hidden)
         .niyatBackground()
         .navigationTitle("Settings")

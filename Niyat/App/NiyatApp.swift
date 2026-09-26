@@ -69,6 +69,8 @@ enum AppTab: Hashable {
 struct MainTabView: View {
     @State private var selection: AppTab = .today
     @State private var deepLink = DeepLink.shared
+    @AppStorage(TutorialView.seenKey) private var tutorialSeen = false
+    @State private var showTutorial = false
 
     var body: some View {
         // On iOS 26+ the tab bar is Liquid Glass and shrinks while scrolling.
@@ -82,7 +84,10 @@ struct MainTabView: View {
         .tabBarMinimizeBehavior(.onScrollDown)
         .haptic(.selection, trigger: selection)
         .onChange(of: deepLink.pending, initial: true) { _, destination in
-            if destination == .quranContinueReading { selection = .quran }
+            if destination?.isQuran == true { selection = .quran }
         }
+        // First launch after onboarding: a quick walkthrough.
+        .onAppear { if !tutorialSeen { showTutorial = true } }
+        .fullScreenCover(isPresented: $showTutorial) { TutorialView() }
     }
 }

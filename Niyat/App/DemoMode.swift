@@ -9,6 +9,10 @@ import Foundation
 enum DemoMode {
     static func prepareIfRequested() {
         let arguments = ProcessInfo.processInfo.arguments
+        // The walkthrough would cover the screens the tour photographs.
+        if arguments.contains("-demo") || arguments.contains("-demoOnboarding") {
+            UserDefaults.standard.set(true, forKey: TutorialView.seenKey)
+        }
         if arguments.contains("-demoOnboarding") {
             UserDefaults.standard.set(false, forKey: "hasOnboarded")
             SettingsStore.location = nil

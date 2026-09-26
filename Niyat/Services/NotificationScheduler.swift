@@ -24,6 +24,8 @@ enum NotificationScheduler {
         static let prayer = "prayer"
         static let dayKey = "dayKey"
         static let kind = "kind"
+        static let surah = "surah"
+        static let verse = "verse"
     }
 
     /// Registers the notification buttons. Call once at launch.
@@ -137,47 +139,101 @@ enum NotificationScheduler {
     // MARK: Qur'an reminders
 
     private static func quranReminderRequests(settings: QuranReminderSettings, now: Date) -> [(date: Date, request: UNNotificationRequest)] {
-        guard let goal = QuranProgress.dailyGoal else { return [] }
         let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
         var result: [(date: Date, request: UNNotificationRequest)] = []
-        for offset in 0..<3 {
-            guard let day = calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: now)) else { continue }
-            let progress = offset == 0 ? QuranProgress.day(now) : QuranDay(goal: goal)
-            let remaining = max(0, goal - progress.count)
+        func at(_ day: Date, _ minute: Int) -> Date { day.addingTimeInterval(TimeInterval(minute * 60)) }
 
-            let morning = day.addingTimeInterval(TimeInterval(settings.morningMinute * 60))
-            if morning > now, remaining > 0 {
-                let content = UNMutableNotificationContent()
-                content.title = "Your Qur'an goal is waiting"
-                content.body = remaining == goal ? "\(goal) ayat today. Bismillah." : "\(remaining) ayat to go today."
-                result.append((morning, quranRequest(id: "quran.morning.\(offset)", content: content, date: morning)))
-            }
+        // Goal reminders: a few days ahead. Future days assume nothing is read
+        // yet; reading reschedules them, so finished days go quiet.
+        if let goal = QuranProgress.dailyGoal {
+            let streak = QuranProgress.currentStreak(asOf: now)
+            for offset in 0..<3 {
+                guard let day = calendar.date(byAdding: .day, value: offset, to: today) else { continue }
+                let progress = offset == 0 ? QuranProgress.day(now) : QuranDay(goal: goal)
+                let remaining = max(0, goal - progress.count)
 
-            let afternoon = day.addingTimeInterval(TimeInterval(settings.afternoonMinute * 60))
-            if afternoon > now {
-                let content = UNMutableNotificationContent()
-                if remaining > 0 {
-                    content.title = "Keep going"
-                    content.body = remaining == goal
-                        ? "There's still time for today's \(goal) ayat."
-                        : "You're \(remaining) \(remaining == 1 ? "ayah" : "ayat") away from today's Qur'an goal."
-                } else if settings.sendCompletionMessage {
-                    content.title = "Today's Qur'an goal completed"
-                    content.body = "Alhamdulillah. May Allah accept it from you."
-                } else {
-                    continue
+                let morning = at(day, settings.morningMinute)
+                if settings.morningEnabled, morning > now, remaining > 0 {
+                    let content = UNMutableNotificationContent()
+                    content.title = "Your Qur'an goal is waiting"
+                    content.body = remaining == goal ? "\(goal) ayat today. Bismillah." : "\(remaining) ayat to go today."
+                    result.append((morning, quranRequest(id: "quran.morning.\(offset)", content: content, date: morning)))
                 }
-                result.append((afternoon, quranRequest(id: "quran.afternoon.\(offset)", content: content, date: afternoon)))
+
+                let afternoon = at(day, settings.afternoonMinute)
+                if settings.afternoonEnabled, afternoon > now {
+                    let content = UNMutableNotificationContent()
+                    if remaining > 0 {
+                        content.title = "Keep going"
+                        content.body = remaining == goal
+                            ? "There's still time for today's \(goal) ayat."
+                            : "You're \(remaining) \(remaining == 1 ? "ayah" : "ayat") away from today's Qur'an goal."
+                        result.append((afternoon, quranRequest(id: "quran.afternoon.\(offset)", content: content, date: afternoon)))
+                    } else if settings.sendCompletionMessage {
+                        content.title = "Today's Qur'an goal completed"
+                        content.body = "Alhamdulillah. May Allah accept it from you."
+                        result.append((afternoon, quranRequest(id: "quran.afternoon.\(offset)", content: content, date: afternoon)))
+                    }
+                }
+
+                let evening = at(day, settings.eveningMinute)
+                if settings.eveningEnabled, evening > now, remaining > 0 {
+                    let content = UNMutableNotificationContent()
+                    // Tomorrow's streak is today's +1 if today gets done.
+                    let atRisk = offset == 0 ? streak : streak + offset - 1
+                    content.title = atRisk > 0 ? "Keep your \(atRisk)-day streak" : "A few ayat before bed?"
+                    content.body = "\(remaining) \(remaining == 1 ? "ayah" : "ayat") left today. Even a little counts."
+                    result.append((evening, quranRequest(id: "quran.evening.\(offset)", content: content, date: evening)))
+                }
+            }
+        }
+
+        // Verse of the day: a week ahead, each opening at that verse.
+        if settings.verseOfDayEnabled {
+            for offset in 0..<7 {
+                guard let day = calendar.date(byAdding: .day, value: offset, to: today) else { continue }
+                let date = at(day, settings.verseOfDayMinute)
+                guard date > now else { continue }
+                let verse = DailyVerse.forDay(day)
+                let content = UNMutableNotificationContent()
+                content.title = "Verse of the day · \(verse.reference)"
+                content.body = verse.english
+                result.append((date, quranRequest(id: "quran.verse.\(offset)", content: content, date: date,
+                                                  opening: VerseReference(surah: verse.surah, verse: verse.ayah))))
+            }
+        }
+
+        // Surah Al-Kahf on the next two Fridays.
+        if settings.kahfEnabled {
+            var fridays = 0
+            for offset in 0..<14 where fridays < 2 {
+                guard let day = calendar.date(byAdding: .day, value: offset, to: today),
+                      calendar.component(.weekday, from: day) == 6 else { continue }
+                fridays += 1
+                let date = at(day, settings.kahfMinute)
+                guard date > now else { continue }
+                let content = UNMutableNotificationContent()
+                content.title = "Jumu'ah Mubarak"
+                content.body = "It's Friday. Tap to read Surah Al-Kahf."
+                result.append((date, quranRequest(id: "quran.kahf.\(offset)", content: content, date: date,
+                                                  opening: VerseReference(surah: 18, verse: 1))))
             }
         }
         return result
     }
 
-    private static func quranRequest(id: String, content: UNMutableNotificationContent, date: Date) -> UNNotificationRequest {
+    private static func quranRequest(id: String, content: UNMutableNotificationContent, date: Date,
+                                     opening verse: VerseReference? = nil) -> UNNotificationRequest {
         content.sound = .default
         content.threadIdentifier = "quran"
         content.categoryIdentifier = Category.quranReminder
-        content.userInfo = [UserInfoKey.kind: "quran"]
+        var info: [String: Any] = [UserInfoKey.kind: "quran"]
+        if let verse {
+            info[UserInfoKey.surah] = verse.surah
+            info[UserInfoKey.verse] = verse.verse
+        }
+        content.userInfo = info
         return UNNotificationRequest(identifier: id, content: content, trigger: trigger(at: date))
     }
 
@@ -271,7 +327,14 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
         }
 
         if kind == "quran", response.actionIdentifier == UNNotificationDefaultActionIdentifier {
-            await MainActor.run { DeepLink.shared.pending = .quranContinueReading }
+            let destination: DeepLink.Destination
+            if let surah = info[NotificationScheduler.UserInfoKey.surah] as? Int,
+               let verse = info[NotificationScheduler.UserInfoKey.verse] as? Int {
+                destination = .quranVerse(surah: surah, verse: verse)
+            } else {
+                destination = .quranContinueReading
+            }
+            await MainActor.run { DeepLink.shared.pending = destination }
         }
     }
 }

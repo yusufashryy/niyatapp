@@ -110,6 +110,34 @@ final class QuranStoreTests: XCTestCase {
         }
     }
 
+    /// Tanzil's Madinah-mushaf page divisions: 604 pages covering every verse once.
+    func testMushafPagesCoverTheWholeQuran() async {
+        let store = QuranStore.shared
+        await store.load()
+        await store.setEdition(.uthmani)
+        XCTAssertEqual(store.pageStarts.count, 604)
+        XCTAssertEqual(store.juzStarts.count, 30)
+        XCTAssertEqual(store.hizbStarts.count, 240)
+        XCTAssertEqual(store.sajdahVerses.count, 15)
+        var seen = Set<Int>()
+        for page in 1...604 {
+            let verses = store.verses(onPage: page)
+            XCTAssertFalse(verses.isEmpty, "Page \(page)")
+            for verse in verses {
+                XCTAssertTrue(seen.insert(verse.id).inserted, "\(verse.surah):\(verse.number) on two pages")
+                XCTAssertEqual(store.page(containing: verse.hafsReference), page)
+            }
+        }
+        XCTAssertEqual(seen.count, 6236)
+        // Well-known landmarks of the Madinah mushaf.
+        XCTAssertEqual(store.verses(onPage: 1).count, 7)
+        XCTAssertEqual(store.page(containing: VerseReference(surah: 2, verse: 1)), 2)
+        XCTAssertEqual(store.page(containing: VerseReference(surah: 18, verse: 1)), 293)
+        XCTAssertEqual(store.page(containing: VerseReference(surah: 114, verse: 6)), 604)
+        XCTAssertEqual(store.juz(containing: VerseReference(surah: 2, verse: 142)), 2)
+        XCTAssertEqual(store.juz(containing: VerseReference(surah: 78, verse: 1)), 30)
+    }
+
     func testDailyVersesAreVerbatim() async {
         let store = QuranStore.shared
         await store.load()

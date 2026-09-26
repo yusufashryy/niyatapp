@@ -125,6 +125,12 @@ final class QuranStore {
         UserDefaults.standard.setEncoded(reference, forKey: "quran.lastRead")
     }
 
+    /// Re-reads bookmarks and reading position (after "Erase all data").
+    func reloadUserData() {
+        lastRead = UserDefaults.standard.decoded(VerseReference.self, forKey: "quran.lastRead")
+        bookmarks = UserDefaults.standard.decoded([VerseReference].self, forKey: "quran.bookmarks") ?? []
+    }
+
     private func saveBookmarks() {
         UserDefaults.standard.setEncoded(bookmarks, forKey: "quran.bookmarks")
     }
@@ -148,6 +154,12 @@ final class QuranStore {
             let loaded = try await Task.detached(priority: .userInitiated) { try Self.readBundle(edition: newEdition) }.value
             surahs = loaded.surahs
             versesBySurah = loaded.verses
+            if let indexes = loaded.indexes {
+                pageStarts = indexes.pages.map { VerseReference(surah: $0.sura, verse: $0.aya) }
+                juzStarts = indexes.juzs.map { VerseReference(surah: $0.sura, verse: $0.aya) }
+                hizbStarts = indexes.hizbs.map { VerseReference(surah: $0.sura, verse: $0.aya) }
+                sajdahVerses = Set(indexes.sajdas.map { VerseReference(surah: $0.sura, verse: $0.aya) })
+            }
             bismillah = loaded.bismillah
             edition = newEdition
             isLoaded = true
@@ -166,6 +178,61 @@ final class QuranStore {
 
     private struct ChapterFile: Decodable {
         let chapters: [Surah]
+        let indexes: Indexes?
+
+        struct Indexes: Decodable {
+            let juzs: [Marker]
+            let hizbs: [Marker]
+            let pages: [Marker]
+            let sajdas: [Marker]
+        }
+
+        struct Marker: Decodable {
+            let index: Int
+            let sura: Int
+            let aya: Int
+        }
+    }
+
+    /// Where each Madinah-mushaf page, juz and hizb quarter starts (Tanzil
+    /// metadata, Hafs numbering), plus the sajdah verses.
+    private(set) var pageStarts: [VerseReference] = []
+    private(set) var juzStarts: [VerseReference] = []
+    private(set) var hizbStarts: [VerseReference] = []
+    private(set) var sajdahVerses: Set<VerseReference> = []
+
+    /// The 1-based mushaf page containing a Hafs verse.
+    func page(containing reference: VerseReference) -> Int {
+        let key = reference.surah * 1000 + reference.verse
+        var low = 0, high = pageStarts.count - 1, found = 0
+        while low <= high {
+            let mid = (low + high) / 2
+            if pageStarts[mid].surah * 1000 + pageStarts[mid].verse <= key { found = mid; low = mid + 1 } else { high = mid - 1 }
+        }
+        return found + 1
+    }
+
+    /// Juz (1...30) containing a Hafs verse.
+    func juz(containing reference: VerseReference) -> Int {
+        let key = reference.surah * 1000 + reference.verse
+        return (juzStarts.lastIndex { $0.surah * 1000 + $0.verse <= key } ?? 0) + 1
+    }
+
+    /// Hafs verses on a mushaf page, in order.
+    func verses(onPage page: Int) -> [Verse] {
+        guard page >= 1, page <= pageStarts.count else { return [] }
+        let start = pageStarts[page - 1]
+        let end = page < pageStarts.count ? pageStarts[page] : nil
+        var result: [Verse] = []
+        for surah in start.surah...(end?.surah ?? 114) {
+            for verse in verses(for: surah) {
+                let key = verse.hafsReference.id
+                if key < start.surah * 1000 + start.verse { continue }
+                if let end, key >= end.surah * 1000 + end.verse { break }
+                result.append(verse)
+            }
+        }
+        return result
     }
 
     private enum BundleError: Error { case missing(String) }
@@ -207,7 +274,7 @@ final class QuranStore {
     }
 
     private nonisolated static func readBundle(edition: QuranEdition) throws
-        -> (surahs: [Surah], verses: [Int: [Verse]], bismillah: String) {
+        -> (surahs: [Surah], verses: [Int: [Verse]], bismillah: String, indexes: ChapterFile.Indexes?) {
         func data(_ name: String) throws -> Data {
             guard let url = Bundle.main.url(forResource: name, withExtension: "json") else {
                 throw BundleError.missing(name)
@@ -215,7 +282,8 @@ final class QuranStore {
             return try Data(contentsOf: url)
         }
         let decoder = JSONDecoder()
-        let chapters = try decoder.decode(ChapterFile.self, from: data("chapters")).chapters
+        let chapterFile = try decoder.decode(ChapterFile.self, from: data("chapters"))
+        let chapters = chapterFile.chapters
         let arabic = try decoder.decode([String: [RawVerse]].self, from: data(edition.fileName))
         let english = try decoder.decode([String: [RawVerse]].self, from: data("translation-en-clearquran"))
 
@@ -245,6 +313,6 @@ final class QuranStore {
                              translation: translation, hafsNumbers: hafsNumbers)
             }
         }
-        return (chapters, verses, bismillah)
+        return (chapters, verses, bismillah, chapterFile.indexes)
     }
 }

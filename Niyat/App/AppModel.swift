@@ -26,6 +26,16 @@ final class AppModel {
         }
     }
 
+    /// Re-reads everything from storage (after "Erase all data").
+    func reloadFromStorage() {
+        location = SettingsStore.location
+        prayerSettings = SettingsStore.prayerSettings
+        notificationSettings = SettingsStore.notificationSettings
+        hijriAdjustment = SettingsStore.hijriAdjustment
+        quranReminders = SettingsStore.quranReminders
+        records = PrayerLog.load()
+    }
+
     func reloadJournal() {
         let fresh = PrayerLog.load()
         if fresh != records { records = fresh }

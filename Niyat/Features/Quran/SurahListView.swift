@@ -8,6 +8,8 @@ struct SurahListView: View {
     @State private var deepLink = DeepLink.shared
     @State private var showSettings = false
     @State private var showGoal = false
+    @State private var showMushaf = false
+    @State private var showNotifications = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -29,19 +31,35 @@ struct SurahListView: View {
             .searchable(text: $searchText, prompt: "Surah name or number")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
+                    Button { showMushaf = true } label: { Image(systemName: "book.pages") }
+                        .accessibilityLabel("Mushaf pages")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showNotifications = true } label: { Image(systemName: "bell.badge") }
+                        .accessibilityLabel("Qur'an notifications")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "gearshape.fill") }
                         .accessibilityLabel("Qur'an settings")
                 }
             }
             .sheet(isPresented: $showSettings) { QuranSettingsView() }
             .sheet(isPresented: $showGoal) { QuranGoalSheet() }
+            .sheet(isPresented: $showNotifications) {
+                NavigationStack { QuranNotificationsView(showsDone: true) }
+            }
+            .fullScreenCover(isPresented: $showMushaf) { MushafPageView() }
             .task { await store.load() }
             .onAppear { goal.refresh() }
             // A Qur'an reminder was tapped: go straight to where you left off.
             .onChange(of: deepLink.pending, initial: true) { _, destination in
-                guard destination == .quranContinueReading else { return }
+                let target: VerseReference
+                switch destination {
+                case .quranContinueReading: target = store.lastRead ?? VerseReference(surah: 1, verse: 1)
+                case .quranVerse(let surah, let verse): target = VerseReference(surah: surah, verse: verse)
+                case nil: return
+                }
                 deepLink.pending = nil
-                let target = store.lastRead ?? VerseReference(surah: 1, verse: 1)
                 path = [ReaderDestination(surah: target.surah, verse: target.verse)]
             }
         }
