@@ -59,6 +59,15 @@ final class DemoTour: XCTestCase {
         XCTAssertTrue(app.staticTexts["Al-Faatiha"].firstMatch.waitForExistence(timeout: 10))
         pause()
         snapshot("05 Quran - surahs")
+        let mushaf = app.buttons["Mushaf pages"]
+        if mushaf.waitForExistence(timeout: 2) {
+            mushaf.tap()
+            pause(3)
+            snapshot("07 Mushaf")
+            let close = app.buttons["Close"].firstMatch
+            if close.waitForExistence(timeout: 2) { close.tap() }
+            pause()
+        }
         app.staticTexts["Al-Faatiha"].firstMatch.tap()
         pause(2)
         snapshot("06 Quran - Al-Fatiha")
@@ -78,6 +87,15 @@ final class DemoTour: XCTestCase {
         pause()
         snapshot("09b Stats - more")
         app.swipeDown()
+        pause()
+        let year = app.staticTexts["Year view"].firstMatch
+        if year.waitForExistence(timeout: 2) {
+            year.tap()
+            pause(2)
+            snapshot("09c Year")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            pause()
+        }
 
         // Tasbih
         openTab("More")
