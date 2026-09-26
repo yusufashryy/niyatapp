@@ -1,7 +1,10 @@
+import StoreKit
 import SwiftUI
 
 struct MoreView: View {
     @State private var showTutorial = false
+    @Environment(\.openURL) private var openURL
+    @Environment(\.requestReview) private var requestReview
 
     var body: some View {
         NavigationStack {
@@ -38,6 +41,25 @@ struct MoreView: View {
                     .surface(cornerRadius: 22)
                     .appearAnimation(1)
 
+                    VStack(spacing: 0) {
+                        row("Support Niyat", systemImage: "heart.fill") { SupportView() }
+                        Divider().overlay(Palette.hairline).padding(.leading, 56)
+                        row("Send feedback", systemImage: "envelope.fill") { FeedbackView() }
+                        Divider().overlay(Palette.hairline).padding(.leading, 56)
+                        Button {
+                            if let url = ReviewPrompter.writeReviewURL {
+                                openURL(url)
+                            } else {
+                                requestReview()
+                            }
+                        } label: {
+                            rowLabel("Rate Niyat", systemImage: "star.fill")
+                        }
+                        .buttonStyle(.pressable)
+                    }
+                    .surface(cornerRadius: 22)
+                    .appearAnimation(2)
+
                     VStack(spacing: 10) {
                         Text("إِنَّمَا ٱلْأَعْمَالُ بِٱلنِّيَّاتِ")
                             .font(.calligraphy(size: 30))
@@ -50,7 +72,7 @@ struct MoreView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.top, 24)
-                    .appearAnimation(2)
+                    .appearAnimation(3)
                 }
                 .padding(16)
             }

@@ -106,7 +106,9 @@ final class AppModel {
 
     /// Saves how a prayer went. Pass nil to clear it.
     func setRecord(_ record: PrayerRecord?, for prayer: PrayerName, on day: Date) {
+        let wasComplete = isComplete(day)
         records[PrayerLog.key(prayer, on: day)] = record
+        if !wasComplete, isComplete(day) { ReviewPrompter.shared.recordHappyMoment() }
         PrayerLog.save(records)
         if record != nil { NotificationScheduler.prayerLogged(prayer, dayKey: PrayerLog.dayKey(for: day)) }
         WidgetCenter.shared.reloadAllTimelines()

@@ -13,4 +13,12 @@ APP_GROUP_ID = group.$(BUNDLE_ID_PREFIX).niyat
 // Your Apple team ID. Set it in Local.xcconfig.
 DEVELOPMENT_TEAM =
 
+// After the app is on the App Store: its numeric Apple ID (App Store Connect ›
+// App Information), used by More › Rate Niyat. Leave empty until then.
+APP_STORE_ID =
+
+// Where More › Send feedback emails go. Empty = open a GitHub issue instead.
+// Tip: use a separate address rather than a personal one, because it ships in the app.
+FEEDBACK_EMAIL =
+
 #include? "Local.xcconfig"
