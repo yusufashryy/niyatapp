@@ -80,6 +80,15 @@ final class RecitationPlayer {
     private(set) var errorMessage: String?
     /// Repeat the current verse instead of moving on.
     var repeatVerse = false
+    /// Carry on to the next verse automatically (off = stop after each verse).
+    var continuous: Bool {
+        get { continuousValue }
+        set {
+            continuousValue = newValue
+            UserDefaults.standard.set(newValue, forKey: "quran.continuous")
+        }
+    }
+    private var continuousValue: Bool = UserDefaults.standard.object(forKey: "quran.continuous") as? Bool ?? true
 
     private(set) var reciter: Reciter = Reciter.with(id: UserDefaults.standard.string(forKey: "quran.reciter") ?? "")
 
@@ -135,6 +144,13 @@ final class RecitationPlayer {
         advance()
     }
 
+    /// Plays the current verse again from the start.
+    func replay() {
+        guard current != nil else { return }
+        player.seek(to: .zero)
+        player.play()
+    }
+
     func previous() {
         guard case .verse(let surah, let verse)? = current, verse > 1 else { return }
         play(surah: surah, from: verse - 1, verseCounts: verseCounts)
@@ -183,6 +199,10 @@ final class RecitationPlayer {
         if repeatVerse, let current, current.verse != nil {
             player.seek(to: .zero)
             player.play()
+        } else if !continuous, current?.verse != nil {
+            // Stop after this verse, but remember where we are.
+            player.pause()
+            queue.removeAll()
         } else {
             advance()
         }
@@ -291,9 +311,14 @@ struct RecitationMiniPlayer: View {
                 .accessibilityLabel(player.repeatVerse ? "Stop repeating verse" : "Repeat verse")
 
                 Button { player.previous() } label: {
-                    Image(systemName: "backward.fill").frame(width: 32, height: 32)
+                    Image(systemName: "backward.fill").frame(width: 30, height: 32)
                 }
                 .accessibilityLabel("Previous verse")
+
+                Button { player.replay() } label: {
+                    Image(systemName: "gobackward").frame(width: 30, height: 32)
+                }
+                .accessibilityLabel("Replay verse")
 
                 Button { player.togglePlayPause() } label: {
                     Group {
@@ -342,6 +367,8 @@ struct RecitationMiniPlayer: View {
 // MARK: - Reciter picker
 
 struct ReciterPicker: View {
+    /// true when pushed inside Qur'an settings (no own navigation stack).
+    var embedded = false
     @Environment(\.dismiss) private var dismiss
     @State private var player = RecitationPlayer.shared
     @State private var search = ""
@@ -353,7 +380,20 @@ struct ReciterPicker: View {
     }
 
     var body: some View {
-        NavigationStack {
+        if embedded {
+            list
+        } else {
+            NavigationStack {
+                list
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                    }
+            }
+            .presentationDetents([.medium, .large])
+        }
+    }
+
+    private var list: some View {
             List {
                 Section {
                     ForEach(filtered.filter { !$0.isTranslation }) { reciter in row(reciter) }
@@ -375,12 +415,7 @@ struct ReciterPicker: View {
             .searchable(text: $search, prompt: "Search reciters")
             .navigationTitle("Reciter")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
-            }
-        }
-        .presentationDetents([.medium, .large])
-        .haptic(.selection, trigger: player.reciter)
+            .haptic(.selection, trigger: player.reciter)
     }
 
     private func row(_ reciter: Reciter) -> some View {

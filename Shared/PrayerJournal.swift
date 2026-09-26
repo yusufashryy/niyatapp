@@ -1,4 +1,10 @@
 import Foundation
+import SwiftUI
+
+extension Notification.Name {
+    /// Posted when the journal changes outside the app's UI (notification action, widget).
+    static let prayerJournalChanged = Notification.Name("prayerJournalChanged")
+}
 
 /// How a prayer went.
 enum PrayerStatus: String, Codable, CaseIterable, Identifiable {
@@ -30,7 +36,7 @@ enum PrayerStatus: String, Codable, CaseIterable, Identifiable {
     /// Keeps a streak going. Excused covers menstruation, illness and the like.
     var keepsStreak: Bool { self != .missed }
 
-    /// Late and missed prayers ask why, so the Journey tab can show patterns.
+    /// Late and missed prayers ask why, so the Stats tab can show patterns.
     var asksForReason: Bool { self == .late || self == .missed }
 }
 
@@ -104,9 +110,26 @@ enum PrayerLog {
     static func save(_ records: [String: PrayerRecord]) {
         AppGroup.defaults.setEncoded(records, forKey: storageKey)
     }
+
+    /// Marks a prayer as prayed on time unless it's already logged. Used by the
+    /// notification "Log Prayer" button and the widget. Returns false if it was
+    /// already logged, so nothing is ever counted twice.
+    @discardableResult
+    static func logIfNeeded(_ prayer: PrayerName, dayKey: String) -> Bool {
+        var records = load()
+        let key = "\(dayKey)|\(prayer.rawValue)"
+        guard records[key] == nil else { return false }
+        records[key] = PrayerRecord(status: .onTime)
+        save(records)
+        return true
+    }
+
+    static func dayKey(for day: Date) -> String {
+        dayFormatter.string(from: day)
+    }
 }
 
-/// Numbers for the Journey tab, worked out from the journal.
+/// Numbers for the Stats tab, worked out from the journal.
 struct PrayerStats: Equatable {
     var logged = 0
     var onTime = 0
@@ -148,6 +171,18 @@ struct PrayerStats: Equatable {
                     if let reason = record.reason { reasons[reason, default: 0] += 1 }
                 }
             }
+        }
+    }
+}
+
+extension PrayerStatus {
+    /// Colour used for this status in rows, the dial, the calendar and widgets.
+    var color: Color {
+        switch self {
+        case .onTime: Palette.accent
+        case .late: Palette.highlight
+        case .missed: Color(red: 0.97, green: 0.45, blue: 0.45)
+        case .excused: Color.white.opacity(0.55)
         }
     }
 }

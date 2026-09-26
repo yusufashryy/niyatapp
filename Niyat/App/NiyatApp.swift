@@ -4,6 +4,9 @@ import UserNotifications
 @main
 struct NiyatApp: App {
     @State private var model: AppModel
+    #if GROUPS
+    @UIApplicationDelegateAdaptor(GroupsAppDelegate.self) private var appDelegate
+    #endif
 
     init() {
         #if DEBUG
@@ -11,6 +14,7 @@ struct NiyatApp: App {
         #endif
         _model = State(initialValue: AppModel())
         UNUserNotificationCenter.current().delegate = NotificationPresenter.shared
+        NotificationScheduler.registerCategories()
     }
 
     var body: some Scene {
@@ -44,6 +48,10 @@ struct RootView: View {
         }
         // Reading Palette here means the whole app re-tints when the theme changes.
         .tint(Palette.accent)
+        // Widget taps, e.g. the Qur'an Goal widget opens niyat://quran.
+        .onOpenURL { url in
+            if url.host() == "quran" { DeepLink.shared.pending = .quranContinueReading }
+        }
         .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
             case .active: model.refresh()
@@ -55,11 +63,12 @@ struct RootView: View {
 }
 
 enum AppTab: Hashable {
-    case today, quran, qibla, journey, more
+    case today, quran, qibla, stats, more
 }
 
 struct MainTabView: View {
     @State private var selection: AppTab = .today
+    @State private var deepLink = DeepLink.shared
 
     var body: some View {
         // On iOS 26+ the tab bar is Liquid Glass and shrinks while scrolling.
@@ -67,10 +76,13 @@ struct MainTabView: View {
             Tab("Today", systemImage: "sun.horizon.fill", value: .today) { TodayView() }
             Tab("Quran", systemImage: "book.closed.fill", value: .quran) { SurahListView() }
             Tab("Qibla", systemImage: "location.north.circle.fill", value: .qibla) { QiblaView() }
-            Tab("Journey", systemImage: "calendar", value: .journey) { JourneyView() }
+            Tab("Stats", systemImage: "chart.bar.xaxis", value: .stats) { StatsView() }
             Tab("More", systemImage: "circle.grid.2x2.fill", value: .more) { MoreView() }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .haptic(.selection, trigger: selection)
+        .onChange(of: deepLink.pending, initial: true) { _, destination in
+            if destination == .quranContinueReading { selection = .quran }
+        }
     }
 }

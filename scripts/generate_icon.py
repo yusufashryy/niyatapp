@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Draws the app icon: a gold crescent and star glowing on near-black.
+"""Draws the Niyat app icon in the Onyx colourway.
 
-Writes the three variants iOS uses: default, dark, and tinted (grayscale,
-which iOS recolours to match the user's Home Screen tint). Needs Pillow.
+A thin gold ring (the prayer dial) with five points for the five prayers, the
+next one glowing, around an eight-pointed star (Rub el Hizb). Writes the
+default, dark and tinted variants iOS uses. Needs Pillow.
 """
 import math
 from pathlib import Path
@@ -11,57 +12,82 @@ from PIL import Image, ImageDraw, ImageFilter, ImageOps
 SIZE = 1024
 SCALE = 3
 S = SIZE * SCALE
+C = S / 2
 OUT = Path(__file__).resolve().parent.parent / "Niyat/Resources/Assets.xcassets/AppIcon.appiconset"
 
-INK = (4, 6, 9)
-EMERALD = (3, 70, 55)
-GOLD = (248, 202, 88)
+GOLD = (222, 184, 98)
+GOLD_LIGHT = (246, 222, 160)
 
 
-def radial(center, radius, color, strength):
-    mask = Image.new("L", (S, S), 0)
-    cx, cy = center
-    ImageDraw.Draw(mask).ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=strength)
-    mask = mask.filter(ImageFilter.GaussianBlur(radius * 0.45))
-    return Image.new("RGB", (S, S), color), mask
+def star_points(cx, cy, r, inner_ratio=0.765, rotation=0.0):
+    pts = []
+    for i in range(16):
+        a = i * math.pi / 8 - math.pi / 2 + rotation
+        rr = r if i % 2 == 0 else r * inner_ratio
+        pts.append((cx + rr * math.cos(a), cy + rr * math.sin(a)))
+    return pts
 
 
-def crescent_mask():
-    mask = Image.new("L", (S, S), 0)
-    d = ImageDraw.Draw(mask)
-    cx, cy, r = S * 0.46, S * 0.52, S * 0.29
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
-    ox, oy, orad = cx + r * 0.45, cy - r * 0.2, r * 0.84
-    d.ellipse([ox - orad, oy - orad, ox + orad, oy + orad], fill=0)
-    sx, sy, outer = S * 0.67, S * 0.40, S * 0.078
-    inner = outer * 0.42
-    points = []
-    for i in range(10):
-        ang = -math.pi / 2 + i * math.pi / 5
-        rad = outer if i % 2 == 0 else inner
-        points.append((sx + rad * math.cos(ang), sy + rad * math.sin(ang)))
-    d.polygon(points, fill=255)
-    return mask
+def ring_point(fraction, r):
+    # Same mapping as the app's prayer dial: midnight at the bottom, noon at the top.
+    a = fraction * 2 * math.pi + math.pi / 2
+    return C + r * math.cos(a), C + r * math.sin(a)
 
 
-def draw(background):
-    img = Image.new("RGB", (S, S), background)
-    if background != (0, 0, 0):
-        for center, radius, color, strength in [
-            ((S * 0.2, S * 0.15), S * 0.75, EMERALD, 255),
-            ((S * 0.9, S * 0.95), S * 0.55, (8, 20, 48), 200),
-        ]:
-            layer, mask = radial(center, radius, color, strength)
-            img = Image.composite(layer, img, mask)
-    shape = crescent_mask()
-    glow = shape.filter(ImageFilter.GaussianBlur(S * 0.03)).point(lambda v: int(v * 0.7))
-    img = Image.composite(Image.new("RGB", (S, S), (190, 140, 40)), img, glow)
-    img.paste(Image.new("RGB", (S, S), GOLD), (0, 0), shape)
+def draw_art(mask_only=False):
+    """Returns an L-mode mask of all the gold line art, plus a separate glow mask."""
+    art = Image.new("L", (S, S), 0)
+    d = ImageDraw.Draw(art)
+    ring_r = S * 0.335
+    w = int(S * 0.012)
+
+    # The dial ring.
+    d.ellipse([C - ring_r, C - ring_r, C + ring_r, C + ring_r], outline=255, width=w)
+
+    # Eight-pointed star, outline, with a smaller solid star inside.
+    pts = star_points(C, C, S * 0.19)
+    d.line(pts + pts[:2], fill=255, width=w, joint="curve")
+    d.polygon(star_points(C, C, S * 0.085, rotation=math.pi / 8), fill=255)
+
+    # Five prayers on the ring (roughly Fajr, Dhuhr, Asr, Maghrib, Isha).
+    prayers = [0.22, 0.53, 0.66, 0.78, 0.86]
+    glow = Image.new("L", (S, S), 0)
+    gd = ImageDraw.Draw(glow)
+    for i, f in enumerate(prayers):
+        x, y = ring_point(f, ring_r)
+        r = S * (0.03 if i == 1 else 0.02)
+        d.ellipse([x - r, y - r, x + r, y + r], fill=255)
+        if i == 1:
+            gr = S * 0.09
+            gd.ellipse([x - gr, y - gr, x + gr, y + gr], fill=255)
+    glow = glow.filter(ImageFilter.GaussianBlur(S * 0.04))
+    return art, glow
+
+
+def compose(background_top, background_bottom, transparent=False):
+    img = Image.new("RGB", (S, S))
+    px = img.load()
+    for y in range(S):
+        t = y / S
+        row = tuple(int(background_top[i] + (background_bottom[i] - background_top[i]) * t) for i in range(3))
+        for x in range(S):
+            px[x, y] = row
+    # A very soft warm light behind the centre.
+    halo = Image.new("L", (S, S), 0)
+    ImageDraw.Draw(halo).ellipse([C - S * 0.3, C - S * 0.3, C + S * 0.3, C + S * 0.3], fill=40)
+    halo = halo.filter(ImageFilter.GaussianBlur(S * 0.12))
+    img = Image.composite(Image.new("RGB", (S, S), (70, 55, 25)), img, halo)
+
+    art, glow = draw_art()
+    img = Image.composite(Image.new("RGB", (S, S), GOLD_LIGHT), img, glow.point(lambda v: int(v * 0.45)))
+    soft = art.filter(ImageFilter.GaussianBlur(S * 0.006)).point(lambda v: int(v * 0.6))
+    img = Image.composite(Image.new("RGB", (S, S), (150, 115, 50)), img, soft)
+    img = Image.composite(Image.new("RGB", (S, S), GOLD), img, art)
     return img.resize((SIZE, SIZE), Image.LANCZOS)
 
 
-draw(INK).save(OUT / "AppIcon.png", optimize=True)
-draw((0, 0, 0)).save(OUT / "AppIcon-Dark.png", optimize=True)
-tinted = ImageOps.grayscale(draw((0, 0, 0))).point(lambda v: min(255, int(v * 1.25)))
+compose((22, 22, 24), (4, 4, 5)).save(OUT / "AppIcon.png", optimize=True)
+compose((0, 0, 0), (0, 0, 0)).save(OUT / "AppIcon-Dark.png", optimize=True)
+tinted = ImageOps.grayscale(compose((0, 0, 0), (0, 0, 0))).point(lambda v: min(255, int(v * 1.3)))
 tinted.convert("RGB").save(OUT / "AppIcon-Tinted.png", optimize=True)
 print("Wrote icons to", OUT)

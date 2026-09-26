@@ -2,6 +2,7 @@
 #   - Prayer Lock: blocks chosen apps at prayer time (Apple's Screen Time API,
 #     "Family Controls" capability)
 #   - Time Sensitive notifications: prayer alerts break through Focus modes
+#   - Groups: private accountability circles through iCloud (CloudKit) sharing
 #
 # Turned on with `make full`, which runs `NIYAT_FULL=true xcodegen`.
 # Merged into project.yml: lists are appended, dictionaries are combined.
@@ -17,9 +18,12 @@ targets:
       properties:
         com.apple.developer.family-controls: true
         com.apple.developer.usernotifications.time-sensitive: true
+        # Groups: iCloud (CloudKit) sharing between members.
+        com.apple.developer.icloud-container-identifiers: [iCloud.$(BUNDLE_ID_PREFIX).niyat]
+        com.apple.developer.icloud-services: [CloudKit]
     settings:
       base:
-        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) SCREEN_TIME
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) SCREEN_TIME GROUPS
 
   # Runs in the background when a prayer window starts/ends and locks/unlocks apps.
   FocusMonitor:

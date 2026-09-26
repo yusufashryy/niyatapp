@@ -1,11 +1,41 @@
 import Foundation
 import UserNotifications
+import WidgetKit
 
-/// Schedules the adhan alerts. iOS only keeps 64 pending notifications per app, so
-/// we schedule as many days ahead as fit and top them up every time the app opens
-/// (and in background refreshes).
+/// Schedules prayer alerts (up to four per prayer) and the daily Qur'an
+/// reminders. iOS keeps at most 64 pending notifications per app, so we schedule
+/// the soonest ones and top them up every time the app opens or refreshes in the
+/// background.
 enum NotificationScheduler {
     private static let maxPending = 60
+
+    enum Category {
+        /// Prayer alerts at or after the prayer time, with a "Log Prayer" button.
+        static let loggablePrayer = "PRAYER_LOGGABLE"
+        static let prayer = "PRAYER"
+        static let quranReminder = "QURAN_REMINDER"
+    }
+
+    enum Action {
+        static let logPrayer = "LOG_PRAYER"
+    }
+
+    enum UserInfoKey {
+        static let prayer = "prayer"
+        static let dayKey = "dayKey"
+        static let kind = "kind"
+    }
+
+    /// Registers the notification buttons. Call once at launch.
+    static func registerCategories() {
+        let log = UNNotificationAction(identifier: Action.logPrayer, title: "Log Prayer",
+                                       options: [], icon: UNNotificationActionIcon(systemImageName: "checkmark.circle"))
+        UNUserNotificationCenter.current().setNotificationCategories([
+            UNNotificationCategory(identifier: Category.loggablePrayer, actions: [log], intentIdentifiers: []),
+            UNNotificationCategory(identifier: Category.prayer, actions: [], intentIdentifiers: []),
+            UNNotificationCategory(identifier: Category.quranReminder, actions: [], intentIdentifiers: []),
+        ])
+    }
 
     @discardableResult
     static func requestAuthorization() async -> Bool {
@@ -18,59 +48,168 @@ enum NotificationScheduler {
     }
 
     static func reschedule(location: SavedLocation?, prayerSettings: PrayerSettings,
-                           notificationSettings: NotificationSettings) async {
+                           notificationSettings: NotificationSettings,
+                           quranReminders: QuranReminderSettings = SettingsStore.quranReminders) async {
         let center = UNUserNotificationCenter.current()
         center.removeAllPendingNotificationRequests()
-        guard let location, !notificationSettings.enabledPrayers.isEmpty, await isAuthorized() else { return }
+        guard await isAuthorized() else { return }
 
         let now = Date()
-        let reminder = notificationSettings.reminderMinutesBefore
+        var candidates: [(date: Date, request: UNNotificationRequest)] = []
+
+        if let location, !notificationSettings.enabledPrayers.isEmpty, !notificationSettings.timings.isEmpty {
+            let records = PrayerLog.load()
+            let upcoming = PrayerCalculator.upcoming(after: now.addingTimeInterval(-3600), count: 6 * 14, includeSunrise: true,
+                                                     location: location, settings: prayerSettings)
+            let calendar = PrayerCalculator.calendar(for: location)
+            for time in upcoming where notificationSettings.enabledPrayers.contains(time.name) {
+                let dayKey = PrayerLog.dayKey(for: calendar.startOfDay(for: time.date))
+                let alreadyLogged = records["\(dayKey)|\(time.name.rawValue)"] != nil
+                let timings: [AlertTiming] = time.name.isObligatory ? notificationSettings.timings.sorted() : [.atTime]
+                for timing in timings {
+                    // No point nagging about a prayer that's already logged.
+                    if timing == .after30, alreadyLogged { continue }
+                    let date = time.date.addingTimeInterval(TimeInterval(timing.minutes * 60))
+                    guard date > now else { continue }
+                    candidates.append((date, prayerRequest(for: time, timing: timing, dayKey: dayKey, location: location)))
+                }
+            }
+        }
+
+        if quranReminders.isEnabled {
+            candidates += quranReminderRequests(settings: quranReminders, now: now)
+        }
+
+        candidates.sort { $0.date < $1.date }
         // Reserve one slot for the "open the app" nudge.
         let budget = maxPending - 1
-        var requests: [UNNotificationRequest] = []
-
-        var lastScheduled: Date?
-        var ranOutOfSlots = false
-
-        // Up to 3 weeks of times; usually the 60-slot budget runs out first.
-        let upcoming = PrayerCalculator.upcoming(after: now, count: 6 * 21, includeSunrise: true,
-                                                 location: location, settings: prayerSettings)
-        for time in upcoming where notificationSettings.enabledPrayers.contains(time.name) {
-            var batch = [prayerRequest(for: time, location: location)]
-            if reminder > 0, time.name.isObligatory {
-                let reminderDate = time.date.addingTimeInterval(TimeInterval(-reminder * 60))
-                if reminderDate > now { batch.append(reminderRequest(for: time, at: reminderDate, minutes: reminder)) }
-            }
-            guard requests.count + batch.count <= budget else {
-                ranOutOfSlots = true
-                break
-            }
-            requests.append(contentsOf: batch)
-            lastScheduled = time.date
+        var requests = candidates.prefix(budget).map(\.request)
+        if candidates.count > budget, let last = candidates.prefix(budget).last?.date {
+            requests.append(refreshNudge(at: last.addingTimeInterval(30 * 60)))
         }
-
-        if ranOutOfSlots, let lastScheduled {
-            requests.append(refreshNudge(at: lastScheduled.addingTimeInterval(30 * 60)))
-        }
-
         for request in requests {
             try? await center.add(request)
         }
     }
 
-    /// Sends a sample adhan alert in a few seconds, to check notifications work.
-    /// Lock the phone after tapping to see it as you would at prayer time.
-    static func sendTest(location: SavedLocation?, next: PrayerTime?) async -> Bool {
+    /// Called after a prayer is logged: removes its "30 minutes after" reminder.
+    static func prayerLogged(_ prayer: PrayerName, dayKey: String) {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: [identifier(prayer: prayer, dayKey: dayKey, timing: .after30)])
+    }
+
+    private static func identifier(prayer: PrayerName, dayKey: String, timing: AlertTiming) -> String {
+        "prayer.\(dayKey).\(prayer.rawValue).\(timing.rawValue)"
+    }
+
+    private static func trigger(at date: Date) -> UNCalendarNotificationTrigger {
+        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        return UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+    }
+
+    private static func prayerRequest(for time: PrayerTime, timing: AlertTiming, dayKey: String,
+                                      location: SavedLocation) -> UNNotificationRequest {
+        let content = UNMutableNotificationContent()
+        let name = time.name.displayName(on: time.date)
+        switch (time.name, timing) {
+        case (.sunrise, _):
+            content.title = "Sunrise"
+            content.body = "Fajr time has ended in \(location.name)."
+        case (_, .before30), (_, .before10):
+            content.title = "\(name) in \(-timing.minutes) minutes"
+            content.body = "\(name) begins at \(time.date.shortTime). Time to get ready."
+        case (_, .atTime):
+            content.title = "\(name) · \(time.name.arabicName)"
+            content.body = "It's time for \(name) in \(location.name)."
+            content.interruptionLevel = .timeSensitive
+        case (_, .after30):
+            content.title = "Have you prayed \(name)?"
+            content.body = "\(name) began 30 minutes ago. Tap Log Prayer once you've prayed."
+        }
+        content.sound = .default
+        content.threadIdentifier = "prayer.\(dayKey)"
+        content.userInfo = [UserInfoKey.prayer: time.name.rawValue, UserInfoKey.dayKey: dayKey, UserInfoKey.kind: "prayer"]
+        content.categoryIdentifier = time.name.isObligatory && timing.offersLogging ? Category.loggablePrayer : Category.prayer
+        return UNNotificationRequest(identifier: identifier(prayer: time.name, dayKey: dayKey, timing: timing),
+                                     content: content, trigger: trigger(at: time.date.addingTimeInterval(TimeInterval(timing.minutes * 60))))
+    }
+
+    // MARK: Qur'an reminders
+
+    private static func quranReminderRequests(settings: QuranReminderSettings, now: Date) -> [(date: Date, request: UNNotificationRequest)] {
+        guard let goal = QuranProgress.dailyGoal else { return [] }
+        let calendar = Calendar.current
+        var result: [(date: Date, request: UNNotificationRequest)] = []
+        for offset in 0..<3 {
+            guard let day = calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: now)) else { continue }
+            let progress = offset == 0 ? QuranProgress.day(now) : QuranDay(goal: goal)
+            let remaining = max(0, goal - progress.count)
+
+            let morning = day.addingTimeInterval(TimeInterval(settings.morningMinute * 60))
+            if morning > now, remaining > 0 {
+                let content = UNMutableNotificationContent()
+                content.title = "Your Qur'an goal is waiting"
+                content.body = remaining == goal ? "\(goal) ayat today. Bismillah." : "\(remaining) ayat to go today."
+                result.append((morning, quranRequest(id: "quran.morning.\(offset)", content: content, date: morning)))
+            }
+
+            let afternoon = day.addingTimeInterval(TimeInterval(settings.afternoonMinute * 60))
+            if afternoon > now {
+                let content = UNMutableNotificationContent()
+                if remaining > 0 {
+                    content.title = "Keep going"
+                    content.body = remaining == goal
+                        ? "There's still time for today's \(goal) ayat."
+                        : "You're \(remaining) \(remaining == 1 ? "ayah" : "ayat") away from today's Qur'an goal."
+                } else if settings.sendCompletionMessage {
+                    content.title = "Today's Qur'an goal completed"
+                    content.body = "Alhamdulillah. May Allah accept it from you."
+                } else {
+                    continue
+                }
+                result.append((afternoon, quranRequest(id: "quran.afternoon.\(offset)", content: content, date: afternoon)))
+            }
+        }
+        return result
+    }
+
+    private static func quranRequest(id: String, content: UNMutableNotificationContent, date: Date) -> UNNotificationRequest {
+        content.sound = .default
+        content.threadIdentifier = "quran"
+        content.categoryIdentifier = Category.quranReminder
+        content.userInfo = [UserInfoKey.kind: "quran"]
+        return UNNotificationRequest(identifier: id, content: content, trigger: trigger(at: date))
+    }
+
+    private static func refreshNudge(at date: Date) -> UNNotificationRequest {
+        let content = UNMutableNotificationContent()
+        content.title = "Keep your prayer alerts coming"
+        content.body = "Open Niyat so it can schedule the next few days of alerts."
+        content.sound = .default
+        return UNNotificationRequest(identifier: "refresh-nudge", content: content, trigger: trigger(at: date))
+    }
+
+    // MARK: Testing
+
+    /// Sends a sample alert in 5 seconds. It's for the prayer whose time is
+    /// current, with the real "Log Prayer" button, so the whole flow can be tried.
+    static func sendTest(location: SavedLocation?, current: PrayerTime?, next: PrayerTime?) async -> Bool {
         let allowed = await requestAuthorization()
         guard allowed else { return false }
         let content = UNMutableNotificationContent()
-        if let next {
-            let name = next.name.displayName(on: next.date)
-            content.title = "\(name) · \(next.name.arabicName)"
-            content.body = "Test alert. The real one will say: It's time for \(name) in \(location?.name ?? "your city")."
+        if let current, current.name.isObligatory, let location {
+            let name = current.name.displayName(on: current.date)
+            let dayKey = PrayerLog.dayKey(for: PrayerCalculator.calendar(for: location).startOfDay(for: current.date))
+            content.title = "\(name) · \(current.name.arabicName) (test)"
+            content.body = "Long-press or pull down this alert and tap Log Prayer to try logging \(name) from here."
+            content.categoryIdentifier = Category.loggablePrayer
+            content.userInfo = [UserInfoKey.prayer: current.name.rawValue, UserInfoKey.dayKey: dayKey, UserInfoKey.kind: "prayer"]
+        } else if let next {
+            content.title = "Niyat test alert"
+            content.body = "Adhan alerts are working. Next: \(next.name.displayName(on: next.date)) at \(next.date.shortTime)."
         } else {
             content.title = "Niyat test alert"
-            content.body = "Adhan notifications are working."
+            content.body = "Adhan alerts are working."
         }
         content.sound = .default
         content.interruptionLevel = .timeSensitive
@@ -99,53 +238,40 @@ enum NotificationScheduler {
             }
             .sorted { $0.date < $1.date }
     }
-
-    private static func trigger(at date: Date) -> UNCalendarNotificationTrigger {
-        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-        return UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
-    }
-
-    private static func prayerRequest(for time: PrayerTime, location: SavedLocation) -> UNNotificationRequest {
-        let content = UNMutableNotificationContent()
-        let name = time.name.displayName(on: time.date)
-        if time.name == .sunrise {
-            content.title = "Sunrise"
-            content.body = "Fajr time has ended in \(location.name)."
-        } else {
-            content.title = "\(name) · \(time.name.arabicName)"
-            content.body = "It's time for \(name) in \(location.name)."
-        }
-        content.sound = .default
-        content.interruptionLevel = .timeSensitive
-        content.threadIdentifier = "prayer"
-        return UNNotificationRequest(identifier: "prayer.\(time.id)", content: content, trigger: trigger(at: time.date))
-    }
-
-    private static func reminderRequest(for time: PrayerTime, at date: Date, minutes: Int) -> UNNotificationRequest {
-        let content = UNMutableNotificationContent()
-        let name = time.name.displayName(on: time.date)
-        content.title = "\(name) in \(minutes) minutes"
-        content.body = "Get ready for \(name) at \(time.date.shortTime)."
-        content.sound = .default
-        content.threadIdentifier = "reminder"
-        return UNNotificationRequest(identifier: "reminder.\(time.id)", content: content, trigger: trigger(at: date))
-    }
-
-    private static func refreshNudge(at date: Date) -> UNNotificationRequest {
-        let content = UNMutableNotificationContent()
-        content.title = "Keep your prayer alerts coming"
-        content.body = "Open Niyat so it can schedule the next few days of adhan notifications."
-        content.sound = .default
-        return UNNotificationRequest(identifier: "refresh-nudge", content: content, trigger: trigger(at: date))
-    }
 }
 
-/// Shows adhan alerts even while Niyat is open (iOS hides them by default).
+/// Shows alerts while Niyat is open, handles the "Log Prayer" button, and opens
+/// the Qur'an when a Qur'an reminder is tapped.
 final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationPresenter()
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async
         -> UNNotificationPresentationOptions {
         [.banner, .list, .sound]
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        let info = response.notification.request.content.userInfo
+        let kind = info[NotificationScheduler.UserInfoKey.kind] as? String
+
+        if response.actionIdentifier == NotificationScheduler.Action.logPrayer,
+           let raw = info[NotificationScheduler.UserInfoKey.prayer] as? String,
+           let prayer = PrayerName(rawValue: raw),
+           let dayKey = info[NotificationScheduler.UserInfoKey.dayKey] as? String {
+            // logIfNeeded won't overwrite an existing log, so tapping twice (or
+            // on both the adhan and the follow-up alert) never double-counts.
+            if PrayerLog.logIfNeeded(prayer, dayKey: dayKey) {
+                NotificationScheduler.prayerLogged(prayer, dayKey: dayKey)
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+            await MainActor.run {
+                NotificationCenter.default.post(name: .prayerJournalChanged, object: nil)
+            }
+            return
+        }
+
+        if kind == "quran", response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+            await MainActor.run { DeepLink.shared.pending = .quranContinueReading }
+        }
     }
 }

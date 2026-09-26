@@ -4,6 +4,10 @@ struct SurahListView: View {
     @State private var store = QuranStore.shared
     @State private var searchText = ""
     @State private var path: [ReaderDestination] = []
+    @State private var goal = QuranGoalModel.shared
+    @State private var deepLink = DeepLink.shared
+    @State private var showSettings = false
+    @State private var showGoal = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -23,7 +27,23 @@ struct SurahListView: View {
                 SurahReaderView(surahID: destination.surah, startVerse: destination.verse)
             }
             .searchable(text: $searchText, prompt: "Surah name or number")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showSettings = true } label: { Image(systemName: "gearshape.fill") }
+                        .accessibilityLabel("Qur'an settings")
+                }
+            }
+            .sheet(isPresented: $showSettings) { QuranSettingsView() }
+            .sheet(isPresented: $showGoal) { QuranGoalSheet() }
             .task { await store.load() }
+            .onAppear { goal.refresh() }
+            // A Qur'an reminder was tapped: go straight to where you left off.
+            .onChange(of: deepLink.pending, initial: true) { _, destination in
+                guard destination == .quranContinueReading else { return }
+                deepLink.pending = nil
+                let target = store.lastRead ?? VerseReference(surah: 1, verse: 1)
+                path = [ReaderDestination(surah: target.surah, verse: target.verse)]
+            }
         }
     }
 
@@ -41,6 +61,10 @@ struct SurahListView: View {
     private var list: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
+                if searchText.isEmpty {
+                    QuranGoalCard { showGoal = true }
+                        .appearAnimation(0)
+                }
                 if searchText.isEmpty, let lastRead = store.lastRead, let surah = store.surah(lastRead.surah) {
                     NavigationLink(value: ReaderDestination(surah: surah.id, verse: lastRead.verse)) {
                         ContinueReadingCard(surah: surah, verse: lastRead.verse)
@@ -83,7 +107,7 @@ struct SurahListView: View {
 
                 ForEach(Array(filteredSurahs.enumerated()), id: \.element.id) { index, surah in
                     NavigationLink(value: ReaderDestination(surah: surah.id, verse: nil)) {
-                        SurahRow(surah: surah)
+                        SurahRow(surah: surah, verseCount: store.verseCount(for: surah.id))
                     }
                     .buttonStyle(.pressable)
                     .scrollFade()
@@ -117,7 +141,7 @@ private struct ContinueReadingCard: View {
                     .foregroundStyle(Palette.accent)
                 Text(surah.transliteration)
                     .font(.title3.weight(.bold))
-                Text("Verse \(verse) of \(surah.totalVerses)")
+                Text("Verse \(verse)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -139,6 +163,7 @@ private struct ContinueReadingCard: View {
 
 private struct SurahRow: View {
     let surah: Surah
+    let verseCount: Int
 
     var body: some View {
         HStack(spacing: 14) {
@@ -154,7 +179,7 @@ private struct SurahRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(surah.transliteration)
                     .font(.headline)
-                Text("\(surah.translation) · \(surah.totalVerses) verses · \(surah.revelationPlace)")
+                Text("\(surah.translation) · \(verseCount) verses · \(surah.revelationPlace)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -170,5 +195,68 @@ private struct SurahRow: View {
         .padding(.vertical, 12)
         .surface(cornerRadius: 20)
         .contentShape(.rect)
+    }
+}
+
+/// Today's goal at the top of the Qur'an tab.
+private struct QuranGoalCard: View {
+    @State private var goal = QuranGoalModel.shared
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 12) {
+                if let target = goal.goal {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Today").sectionLabelStyle()
+                        Spacer()
+                        Label("\(goal.streak)-day streak", systemImage: "flame.fill")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(goal.streak > 0 ? Palette.highlight : .secondary)
+                    }
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("\(goal.today.count)")
+                            .font(.display(30, weight: .heavy))
+                            .contentTransition(.numericText(value: Double(goal.today.count)))
+                        Text("/ \(target) ayat")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                        if goal.today.isComplete {
+                            Image(systemName: "checkmark.seal.fill").foregroundStyle(Palette.highlight)
+                        }
+                        Spacer()
+                    }
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(.white.opacity(0.1))
+                            Capsule()
+                                .fill(LinearGradient(colors: [Palette.accent, Palette.highlight], startPoint: .leading, endPoint: .trailing))
+                                .frame(width: geo.size.width * goal.progress)
+                                .animation(.smooth(duration: 0.6), value: goal.progress)
+                        }
+                    }
+                    .frame(height: 8)
+                } else {
+                    HStack(spacing: 14) {
+                        Image(systemName: "target")
+                            .font(.title2)
+                            .foregroundStyle(Palette.highlight)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Set a daily Qur'an goal").font(.headline)
+                            Text("A few ayat a day, every day. Track it and build a streak.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                    }
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(18)
+            .glassPanel(cornerRadius: 26, tint: Palette.glow.opacity(0.3), interactive: true)
+        }
+        .buttonStyle(.pressable)
+        .onAppear { goal.refresh() }
     }
 }

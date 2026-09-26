@@ -99,6 +99,7 @@ final class QuranStoreTests: XCTestCase {
     func testBundledQuranIsComplete() async {
         let store = QuranStore.shared
         await store.load()
+        await store.setEdition(.uthmani)
         XCTAssertNil(store.loadError)
         XCTAssertEqual(store.surahs.count, 114)
         let total = store.surahs.reduce(0) { $0 + store.verses(for: $1.id).count }
@@ -112,6 +113,7 @@ final class QuranStoreTests: XCTestCase {
     func testDailyVersesAreVerbatim() async {
         let store = QuranStore.shared
         await store.load()
+        await store.setEdition(.uthmani)
         for daily in DailyVerse.all {
             let verse = store.verse(VerseReference(surah: daily.surah, verse: daily.ayah))
             XCTAssertEqual(verse?.arabic, daily.arabic)

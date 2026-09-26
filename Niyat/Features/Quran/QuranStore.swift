@@ -24,13 +24,24 @@ struct Surah: Identifiable, Hashable, Decodable {
 
 struct Verse: Identifiable, Hashable {
     let surah: Int
+    /// The verse number in the selected reading's own count.
     let number: Int
     /// The verse as shown in a mushaf. For verse 1 of most surahs the bundled
     /// Tanzil text starts with the Bismillah; we show that as a header instead.
     let arabic: String
+    /// English translation (ClearQuran, keyed to Hafs numbering and lined up
+    /// through `hafsNumbers` for other readings).
     let translation: String
+    /// The Hafs verse number(s) this verse corresponds to. For Hafs it's just
+    /// `[number]`; Warsh and Qalun sometimes split or join verses.
+    let hafsNumbers: [Int]
 
     var id: Int { surah * 1000 + number }
+    /// Hafs reference used for bookmarks, reading position and progress, so they
+    /// survive switching script or reading.
+    var hafsReference: VerseReference { VerseReference(surah: surah, verse: hafsNumbers.first ?? number) }
+    /// Letters in the displayed Arabic, for the recitation-reward estimate.
+    var letterCount: Int { ArabicLetters.count(in: arabic) }
 }
 
 struct VerseReference: Codable, Hashable, Identifiable {
@@ -40,8 +51,8 @@ struct VerseReference: Codable, Hashable, Identifiable {
     var id: Int { surah * 1000 + verse }
 }
 
-/// Loads the bundled Quran text (Tanzil Uthmani) and English translation
-/// (ClearQuran). Everything is offline.
+/// Loads the bundled, verified Qur'an texts and the English translation.
+/// Everything is offline.
 @MainActor
 @Observable
 final class QuranStore {
@@ -50,9 +61,11 @@ final class QuranStore {
     private(set) var surahs: [Surah] = []
     private(set) var isLoaded = false
     private(set) var loadError: String?
-    /// The Bismillah exactly as written in the bundled text (Al-Fatiha 1:1).
+    /// The text being shown. Changing it never touches bookmarks or progress.
+    private(set) var edition: QuranEdition
+    /// The Bismillah exactly as written in the selected Hafs text (Al-Fatiha 1:1).
     private(set) var bismillah = ""
-    /// nil while checking; true if the bundled files match the published checksums.
+    /// nil while checking; true if every bundled file matches its published checksum.
     private(set) var isVerified: Bool?
     private var versesBySurah: [Int: [Verse]] = [:]
 
@@ -60,6 +73,7 @@ final class QuranStore {
     private(set) var bookmarks: [VerseReference]
 
     private init() {
+        edition = UserDefaults.standard.string(forKey: "quran.edition").flatMap(QuranEdition.init(rawValue:)) ?? .default
         lastRead = UserDefaults.standard.decoded(VerseReference.self, forKey: "quran.lastRead")
         bookmarks = UserDefaults.standard.decoded([VerseReference].self, forKey: "quran.bookmarks") ?? []
     }
@@ -68,22 +82,33 @@ final class QuranStore {
 
     func surah(_ id: Int) -> Surah? { surahs.first { $0.id == id } }
 
+    /// Verse count in the selected reading (differs from Hafs for Warsh/Qalun).
+    func verseCount(for surah: Int) -> Int { versesBySurah[surah]?.count ?? self.surah(surah)?.totalVerses ?? 0 }
+
+    /// Hafs verse counts per surah, used for recitation audio numbering.
+    var hafsVerseCounts: [Int] { surahs.map(\.totalVerses) }
+
+    /// Whether to show the Bismillah above a surah. Only for Hafs texts, where
+    /// the verified text contains it; the Warsh/Qalun sources don't include it.
+    func showsBismillahHeader(for surah: Surah) -> Bool {
+        edition.riwayah == .hafs && surah.hasBismillahHeader && !bismillah.isEmpty
+    }
+
+    /// The verse in the current reading that contains a Hafs verse.
     func verse(_ reference: VerseReference) -> Verse? {
-        let verses = verses(for: reference.surah)
-        let index = reference.verse - 1
-        return verses.indices.contains(index) ? verses[index] : nil
+        verses(for: reference.surah).first { $0.hafsNumbers.contains(reference.verse) }
     }
 
     func isBookmarked(_ verse: Verse) -> Bool {
-        bookmarks.contains(VerseReference(surah: verse.surah, verse: verse.number))
+        verse.hafsNumbers.contains { bookmarks.contains(VerseReference(surah: verse.surah, verse: $0)) }
     }
 
     func toggleBookmark(_ verse: Verse) {
-        let reference = VerseReference(surah: verse.surah, verse: verse.number)
-        if let index = bookmarks.firstIndex(of: reference) {
-            bookmarks.remove(at: index)
+        let matching = bookmarks.filter { $0.surah == verse.surah && verse.hafsNumbers.contains($0.verse) }
+        if matching.isEmpty {
+            bookmarks.append(verse.hafsReference)
         } else {
-            bookmarks.append(reference)
+            bookmarks.removeAll { matching.contains($0) }
         }
         saveBookmarks()
     }
@@ -93,8 +118,8 @@ final class QuranStore {
         saveBookmarks()
     }
 
-    func markRead(surah: Int, verse: Int) {
-        let reference = VerseReference(surah: surah, verse: verse)
+    func markRead(_ verse: Verse) {
+        let reference = verse.hafsReference
         guard reference != lastRead else { return }
         lastRead = reference
         UserDefaults.standard.setEncoded(reference, forKey: "quran.lastRead")
@@ -106,15 +131,29 @@ final class QuranStore {
 
     func load() async {
         guard !isLoaded else { return }
+        await load(edition: edition)
+        isVerified = await Task.detached(priority: .utility) { Self.verifyChecksums() }.value
+    }
+
+    /// Switches to another verified text. Bookmarks, reading position and
+    /// progress are stored by Hafs reference, so they carry over.
+    func setEdition(_ newEdition: QuranEdition) async {
+        guard newEdition != edition || !isLoaded else { return }
+        UserDefaults.standard.set(newEdition.rawValue, forKey: "quran.edition")
+        await load(edition: newEdition)
+    }
+
+    private func load(edition newEdition: QuranEdition) async {
         do {
-            let loaded = try await Task.detached(priority: .userInitiated) { try Self.readBundle() }.value
+            let loaded = try await Task.detached(priority: .userInitiated) { try Self.readBundle(edition: newEdition) }.value
             surahs = loaded.surahs
             versesBySurah = loaded.verses
             bismillah = loaded.bismillah
+            edition = newEdition
             isLoaded = true
-            isVerified = await Task.detached(priority: .utility) { Self.verifyChecksums() }.value
+            loadError = nil
         } catch {
-            loadError = "Couldn't load the Quran text: \(error.localizedDescription)"
+            loadError = "Couldn't load the Qur'an text: \(error.localizedDescription)"
         }
     }
 
@@ -122,6 +161,7 @@ final class QuranStore {
         let chapter: Int
         let verse: Int
         let text: String
+        let number_in_hafs: [Int]?
     }
 
     private struct ChapterFile: Decodable {
@@ -130,14 +170,16 @@ final class QuranStore {
 
     private enum BundleError: Error { case missing(String) }
 
-    /// SHA-256 of the bundled files, as published with the source data
-    /// (risan/quran-json, from Tanzil and ClearQuran). If a file is changed or
-    /// corrupted in any way, the hash won't match.
-    static let expectedChecksums: [String: String] = [
-        "quran-uthmani": "adaebb377c60eba1bab6ef652959c7a0b4ccb4d0ca42145945c14ecdbeb4b761",
-        "translation-en-clearquran": "2e5d4d9fc7ee9cad5ed3fc0691d8e398c6f943a9ab7fe49ac515961abf5250ed",
-        "chapters": "5b18adae945fcb6f9fbb865dd7dc596f89a63607a4e6617ca9e37f7f10d3386b",
-    ]
+    /// SHA-256 of every bundled Qur'an file, as published with its source dataset.
+    /// If a file is changed or corrupted in any way, the hash won't match.
+    static let expectedChecksums: [String: String] = {
+        var sums = [
+            "translation-en-clearquran": "2e5d4d9fc7ee9cad5ed3fc0691d8e398c6f943a9ab7fe49ac515961abf5250ed",
+            "chapters": "5b18adae945fcb6f9fbb865dd7dc596f89a63607a4e6617ca9e37f7f10d3386b",
+        ]
+        for edition in QuranEdition.allCases { sums[edition.fileName] = edition.sha256 }
+        return sums
+    }()
 
     nonisolated static func verifyChecksums() -> Bool {
         expectedChecksums.allSatisfy { name, expected in
@@ -154,7 +196,7 @@ final class QuranStore {
     nonisolated static func removingBismillah(from text: String, bismillah: String) -> String? {
         let words = text.split(separator: " ", omittingEmptySubsequences: false)
         let bismillahWords = bismillah.split(separator: " ")
-        guard words.count > bismillahWords.count else { return nil }
+        guard !bismillahWords.isEmpty, words.count > bismillahWords.count else { return nil }
         func normalized(_ word: Substring) -> String {
             String(String.UnicodeScalarView(word.unicodeScalars.filter { $0.value != 0x0651 }))
         }
@@ -164,7 +206,8 @@ final class QuranStore {
         return words.dropFirst(bismillahWords.count).joined(separator: " ")
     }
 
-    private nonisolated static func readBundle() throws -> (surahs: [Surah], verses: [Int: [Verse]], bismillah: String) {
+    private nonisolated static func readBundle(edition: QuranEdition) throws
+        -> (surahs: [Surah], verses: [Int: [Verse]], bismillah: String) {
         func data(_ name: String) throws -> Data {
             guard let url = Bundle.main.url(forResource: name, withExtension: "json") else {
                 throw BundleError.missing(name)
@@ -173,22 +216,33 @@ final class QuranStore {
         }
         let decoder = JSONDecoder()
         let chapters = try decoder.decode(ChapterFile.self, from: data("chapters")).chapters
-        let arabic = try decoder.decode([String: [RawVerse]].self, from: data("quran-uthmani"))
+        let arabic = try decoder.decode([String: [RawVerse]].self, from: data(edition.fileName))
         let english = try decoder.decode([String: [RawVerse]].self, from: data("translation-en-clearquran"))
 
-        let bismillah = arabic["1"]?.first?.text ?? ""
+        // Hafs texts carry the Bismillah as 1:1 and prefix it to verse 1 elsewhere.
+        let bismillah = edition.riwayah == .hafs ? (arabic["1"]?.first?.text ?? "") : ""
         var verses: [Int: [Verse]] = [:]
         for chapter in chapters {
             let arabicVerses = arabic[String(chapter.id)] ?? []
-            let englishVerses = english[String(chapter.id)] ?? []
-            verses[chapter.id] = arabicVerses.enumerated().map { index, verse in
-                var text = verse.text
-                if chapter.hasBismillahHeader, verse.verse == 1,
+            let englishByHafs = Dictionary((english[String(chapter.id)] ?? []).map { ($0.verse, $0.text) },
+                                           uniquingKeysWith: { first, _ in first })
+            var translated = Set<Int>()
+            verses[chapter.id] = arabicVerses.map { raw in
+                var text = raw.text
+                if edition.riwayah == .hafs, chapter.hasBismillahHeader, raw.verse == 1,
                    let stripped = removingBismillah(from: text, bismillah: bismillah) {
                     text = stripped
                 }
-                return Verse(surah: chapter.id, number: verse.verse, arabic: text,
-                             translation: englishVerses.indices.contains(index) ? englishVerses[index].text : "")
+                let hafsNumbers = raw.number_in_hafs ?? [raw.verse]
+                // Each Hafs translation is shown once, on the first verse that
+                // covers it; a verse that continues one says so.
+                let newNumbers = hafsNumbers.filter { !translated.contains($0) }
+                translated.formUnion(newNumbers)
+                let translation = newNumbers.isEmpty
+                    ? "(Continues the previous verse.)"
+                    : newNumbers.compactMap { englishByHafs[$0] }.joined(separator: " ")
+                return Verse(surah: chapter.id, number: raw.verse, arabic: text,
+                             translation: translation, hafsNumbers: hafsNumbers)
             }
         }
         return (chapters, verses, bismillah)

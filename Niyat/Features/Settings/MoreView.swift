@@ -11,6 +11,12 @@ struct MoreView: View {
                             tile("Prayer Lock", systemImage: "lock.shield.fill", tint: Palette.highlight) { FocusView() }
                         }
                     }
+                    GlassEffectContainer(spacing: 12) {
+                        HStack(spacing: 12) {
+                            tile("Groups", systemImage: "person.3.fill", tint: Palette.highlight) { GroupsView() }
+                            tile("Qibla", systemImage: "location.north.circle.fill", tint: Palette.accent) { QiblaView() }
+                        }
+                    }
                     .appearAnimation(0)
 
                     VStack(spacing: 0) {
