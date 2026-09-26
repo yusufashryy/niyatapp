@@ -203,9 +203,6 @@ private struct QiblaDial: View {
         ZStack {
             // Rotating face: ticks and N/E/S/W.
             ZStack {
-                Circle()
-                    .fill(.clear)
-                    .glassEffect(.regular.tint(Palette.glow.opacity(0.25)), in: .circle)
                 Rosette(color: Palette.accent.opacity(0.12), lineWidth: 1)
                     .padding(64)
                 ForEach(0..<72, id: \.self) { tick in

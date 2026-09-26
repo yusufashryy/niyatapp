@@ -11,7 +11,8 @@ struct QuranSettingsView: View {
     @AppStorage("quran.arabicSize") private var arabicSize = 30.0
     @AppStorage("quran.showTranslation") private var showTranslation = true
     @AppStorage("quran.tajweed") private var tajweedOn = true
-    @AppStorage("quran.readingLayout") private var readingLayout = "pages"
+    @AppStorage("quran.readingLayout") private var readingLayout = "verses"
+    @AppStorage(QuranLineSpacing.key) private var lineHeight = QuranLineSpacing.standard
     @State private var showMushaf = false
 
     var body: some View {
@@ -77,6 +78,10 @@ struct QuranSettingsView: View {
                     VStack(alignment: .leading) {
                         LabeledContent("Arabic size", value: "\(Int(arabicSize))")
                         Slider(value: $arabicSize, in: 20...48, step: 2)
+                    }
+                    VStack(alignment: .leading) {
+                        LabeledContent("Line spacing", value: lineHeight <= QuranLineSpacing.standard + 0.01 ? "Tight, like print" : String(format: "%.1f×", lineHeight))
+                        Slider(value: $lineHeight, in: QuranLineSpacing.range, step: 0.1)
                     }
                     Text("بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ")
                         .font(.quran(size: arabicSize))

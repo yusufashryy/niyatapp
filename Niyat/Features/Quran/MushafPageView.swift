@@ -46,7 +46,14 @@ struct MushafPageView: View {
             }
             .background {
                 if options.layout == .screen {
-                    options.style.colors.paper.ignoresSafeArea()
+                    ZStack(alignment: .leading) {
+                        options.style.colors.paper.ignoresSafeArea()
+                        // The page edge, as in a bound mushaf.
+                        Rectangle()
+                            .fill(options.style.colors.gold.opacity(0.8))
+                            .frame(width: 1.5)
+                            .padding(.leading, 6)
+                    }
                 } else {
                     AmbientBackground().ignoresSafeArea()
                 }
@@ -54,6 +61,13 @@ struct MushafPageView: View {
             .toolbarColorScheme(options.style.isLight && options.layout == .screen ? .light : .dark, for: .navigationBar)
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 8) {
+                    if showChrome, selected == nil, player.current == nil {
+                        HStack {
+                            PageNumberBadge(page: page, colors: options.style.colors)
+                            Spacer()
+                        }
+                        .transition(.opacity)
+                    }
                     if let selected {
                         MushafVerseActions(verse: selected, options: options,
                                            canPlay: store.edition.riwayah.hasVerseAudio,
@@ -78,29 +92,13 @@ struct MushafPageView: View {
                 }
             }
             .animation(.bouncy, value: goal.celebration)
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarVisibility(showChrome ? .visible : .hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark").foregroundStyle(barIconColor)
-                    }
-                    .accessibilityLabel("Close")
-                }
-                ToolbarItem(placement: .principal) {
-                    MushafHeader(page: page, colors: options.style.colors)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button("Go to page, juz or surah", systemImage: "list.number") { showJump = true }
-                        Button("Page settings", systemImage: "textformat.size") { showOptions = true }
-                    } label: {
-                        Image(systemName: "ellipsis").foregroundStyle(barIconColor)
-                    }
-                    .accessibilityLabel("Page options")
+            .toolbarVisibility(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .top) {
+                if showChrome {
+                    topBar.transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
+            .animation(.smooth, value: showChrome)
             .sheet(isPresented: $showJump) {
                 MushafJumpSheet(page: $page, pageCount: store.pageStarts.count)
             }
@@ -130,6 +128,52 @@ struct MushafPageView: View {
                 await store.load()
                 await TajweedStore.shared.load()
             }
+        }
+    }
+
+    /// Top row, like a printed mushaf app: close, bookmark and juz on the
+    /// left, go-to in the middle, the surah and page options on the right.
+    private var topBar: some View {
+        let colors = options.style.colors
+        let first = store.verses(onPage: page).first
+        let start = store.pageStarts.isEmpty ? VerseReference(surah: 1, verse: 1) : store.pageStarts[min(page, store.pageStarts.count) - 1]
+        return HStack(spacing: 14) {
+            Button { dismiss() } label: {
+                Image(systemName: "xmark").font(.system(size: 15, weight: .semibold))
+            }
+            .accessibilityLabel("Close")
+            Button {
+                if let first { store.toggleBookmark(first) }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: first.map(store.isBookmarked) == true ? "bookmark.fill" : "bookmark")
+                        .foregroundStyle(colors.gold)
+                    Text("Juz' \(store.juz(containing: start))")
+                }
+            }
+            .accessibilityLabel("Bookmark this page")
+            Spacer()
+            Button { showJump = true } label: {
+                Image(systemName: "square.grid.2x2").foregroundStyle(colors.gold)
+            }
+            .accessibilityLabel("Go to page, juz or surah")
+            Spacer()
+            Text(store.surah(start.surah)?.transliteration ?? "")
+                .lineLimit(1)
+            Menu {
+                Button("Go to page, juz or surah", systemImage: "list.number") { showJump = true }
+                Button("Page settings", systemImage: "textformat.size") { showOptions = true }
+            } label: {
+                Image(systemName: "ellipsis").font(.system(size: 17, weight: .semibold))
+            }
+            .accessibilityLabel("Page options")
+        }
+        .font(.system(size: 17, weight: .medium))
+        .foregroundStyle(options.layout == .screen ? colors.label : .white)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 8)
+        .background {
+            (options.layout == .screen ? colors.paper : Color.clear).ignoresSafeArea()
         }
     }
 
@@ -234,7 +278,7 @@ struct MushafOptions: Codable, Equatable {
     }
 
     var layout = Layout.screen
-    var style = MushafStyle.paper
+    var style = MushafStyle.black
     var border = Border.illuminated
     /// 1 = fit the page like print; larger scrolls within the page.
     var textScale = 1.0
@@ -245,7 +289,8 @@ struct MushafOptions: Codable, Equatable {
     var keepScreenOn = false
     var showHeader = true
 
-    private static let key = "quran.mushafOptions"
+    // v2: the default look changed to the black page with gold ornaments.
+    private static let key = "quran.mushafOptions.v2"
 
     static func load() -> MushafOptions {
         UserDefaults.standard.decoded(MushafOptions.self, forKey: key) ?? MushafOptions()
@@ -347,10 +392,10 @@ enum MushafStyle: String, Codable, CaseIterable, Identifiable {
                          marker: UIColor(Palette.highlight),
                          label: Palette.highlight)
         case .black:
-            // Pure black with silver ornaments: easy on the eyes at night and on OLED screens.
-            .printed(paper: (0.07, 0.07, 0.08), shade: (0, 0, 0), band: (0.14, 0.14, 0.15),
-                     gold: (0.62, 0.62, 0.64), green: (0.45, 0.45, 0.47), rose: (0.55, 0.55, 0.58),
-                     ink: (0.96, 0.96, 0.96), marker: (0.72, 0.72, 0.74), label: (0.85, 0.85, 0.86))
+            // Black page, white text, gold ornaments: the classic look of phone mushafs.
+            .printed(paper: (0, 0, 0), shade: (0, 0, 0), band: (0.05, 0.05, 0.04),
+                     gold: (0.85, 0.68, 0.30), green: (0.85, 0.68, 0.30), rose: (0.72, 0.55, 0.22),
+                     ink: (0.97, 0.97, 0.95), marker: (0.85, 0.68, 0.30), label: (0.97, 0.97, 0.95))
         }
     }
 }
@@ -382,6 +427,7 @@ struct MushafColors {
 private struct MushafOptionsSheet: View {
     @Binding var options: MushafOptions
     @AppStorage("quran.tajweed") private var tajweedOn = true
+    @AppStorage(QuranLineSpacing.key) private var lineSpacing = QuranLineSpacing.standard
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -441,6 +487,10 @@ private struct MushafOptionsSheet: View {
                     VStack(alignment: .leading) {
                         LabeledContent("Text size", value: options.textScale <= 1.001 ? "Fit page" : "\(Int(options.textScale * 100))%")
                         Slider(value: $options.textScale, in: 1...1.6, step: 0.1)
+                    }
+                    VStack(alignment: .leading) {
+                        LabeledContent("Line spacing", value: lineSpacing <= QuranLineSpacing.standard + 0.01 ? "Tight, like print" : String(format: "%.1f×", lineSpacing))
+                        Slider(value: $lineSpacing, in: QuranLineSpacing.range, step: 0.1)
                     }
                 } footer: {
                     Text("At \"Fit page\" each page fills its frame like a printed mushaf. Bigger text scrolls within the page.")
@@ -590,6 +640,8 @@ private struct MushafPage: View {
     private var colors: MushafColors { options.style.colors }
 
     @AppStorage("quran.tajweed") private var tajweedOn = true
+    /// Read so pages redraw when the line spacing setting changes.
+    @AppStorage(QuranLineSpacing.key) private var lineSpacing = QuranLineSpacing.standard
     @State private var tajweedStore = TajweedStore.shared
 
     /// Tajweed colours are for the Uthmani (Hafs) text they were made for.
@@ -601,7 +653,7 @@ private struct MushafPage: View {
         let verses = store.verses(onPage: number)
         GeometryReader { geo in
             let size = options.layout == .screen ? geo.size : Self.pageSize(in: geo.size)
-            let pageLayout = makeLayout(verses, size: size)
+            let pageLayout = makeLayout(verses, size: size, lineSpacing: lineSpacing)
             ScrollView(.vertical) {
                 page(verses, layout: pageLayout)
                     .frame(width: size.width, height: pageLayout.pageHeight)
@@ -644,7 +696,7 @@ private struct MushafPage: View {
             : CGSize(width: width, height: width / aspect)
     }
 
-    private func makeLayout(_ verses: [Verse], size: CGSize) -> Layout {
+    private func makeLayout(_ verses: [Verse], size: CGSize, lineSpacing: Double) -> Layout {
         let segments = MushafTypesetter.segments(for: verses, store: store)
         let textWidth: CGFloat
         let textHeight: CGFloat
@@ -685,11 +737,6 @@ private struct MushafPage: View {
         VStack(spacing: Self.spacing) {
             segmentViews(layout)
             Spacer(minLength: 0)
-            Text(MushafTypesetter.arabicDigits(number))
-                .font(.quran(size: 15))
-                .foregroundStyle(colors.label)
-                .frame(height: Self.footerHeight)
-                .accessibilityLabel("Page \(number)")
         }
         .padding(.horizontal, Self.screenMargin)
         .padding(.top, Self.screenTop)
@@ -705,7 +752,8 @@ private struct MushafPage: View {
                     .onTapGesture { onTap(nil) }
             case .bismillah:
                 MushafTextView(text: MushafTypesetter.centered(store.bismillah, size: fontSize, color: colors.ink,
-                                                               tajweedBismillah: showsTajweed, dark: !options.style.isLight)) { _ in
+                                                               tajweedBismillah: showsTajweed, dark: !options.style.isLight),
+                               topRoom: MushafTypesetter.topRoom(fontSize)) { _ in
                     onTap(nil)
                 }
             case .verses(let verses):
@@ -714,6 +762,7 @@ private struct MushafPage: View {
                                                              selected: selected,
                                                              reciting: options.highlightRecitation ? reciting : nil,
                                                              tajweed: showsTajweed, dark: !options.style.isLight),
+                               topRoom: MushafTypesetter.topRoom(fontSize),
                                focus: reciting.flatMap { id in verses.contains { $0.id == id } ? id : nil },
                                onScroll: scrollToVerse) { id in
                     onTap(id.flatMap { id in verses.first { $0.id == id } })
@@ -807,7 +856,7 @@ private enum MushafTypesetter {
     /// filling its frame. Capped so short pages (Al-Fatiha) don't get huge.
     static func fittingSize(page: Int, segments: [MushafSegment], store: QuranStore,
                             width: CGFloat, height: CGFloat, maxSize: CGFloat) -> CGFloat {
-        let key = "\(page)-\(Int(width))-\(Int(height))-\(Int(maxSize))-\(store.edition.rawValue)"
+        let key = "\(page)-\(Int(width))-\(Int(height))-\(Int(maxSize))-\(lineHeight)-\(store.edition.rawValue)"
         if let cached = sizeCache[key] { return cached }
         var low: CGFloat = 9
         var high = maxSize
@@ -829,10 +878,10 @@ private enum MushafTypesetter {
         for segment in segments {
             switch segment.kind {
             case .banner: total += bannerHeight(size)
-            case .bismillah: total += height(centered(store.bismillah, size: size, color: colors.ink), width: width)
+            case .bismillah: total += height(centered(store.bismillah, size: size, color: colors.ink), width: width) + topRoom(size)
             case .verses(let verses):
                 total += height(self.verses(verses, size: size, colors: colors, sajdahs: store.sajdahVerses,
-                                            selected: nil, reciting: nil), width: width)
+                                            selected: nil, reciting: nil), width: width) + topRoom(size)
             }
         }
         return total
@@ -843,19 +892,14 @@ private enum MushafTypesetter {
                                options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil).height) + 2
     }
 
-    /// Lines sit close together like a printed mushaf. Amiri Quran's natural
-    /// line is 2.45× its size (room for stacked marks); print is closer to 1.8×.
-    static let lineHeight: CGFloat = 1.8
+    /// Lines sit close together like a printed mushaf (see QuranLineSpacing).
+    static var lineHeight: CGFloat { QuranLineSpacing.current }
+
+    /// Room above a block of text for the first line's tallest marks.
+    static func topRoom(_ size: CGFloat) -> CGFloat { QuranLineSpacing.topRoom(for: size, lineHeight: lineHeight) }
 
     private static func paragraph(_ alignment: NSTextAlignment, size: CGFloat) -> NSParagraphStyle {
-        let style = NSMutableParagraphStyle()
-        style.alignment = alignment
-        style.baseWritingDirection = .rightToLeft
-        style.lineBreakMode = .byWordWrapping
-        style.minimumLineHeight = size * lineHeight
-        style.maximumLineHeight = size * lineHeight
-        style.lineSpacing = 0
-        return style
+        QuranLineSpacing.paragraph(alignment, size: size, lineHeight: lineHeight)
     }
 
     static func centered(_ text: String, size: CGFloat, color: UIColor, tajweedBismillah: Bool = false, dark: Bool = false) -> NSAttributedString {
@@ -918,13 +962,14 @@ private enum MushafTypesetter {
 /// A run of verses that reports where the reciting verse is on the page.
 private struct VerseTextBlock: View {
     let text: NSAttributedString
+    let topRoom: CGFloat
     let focus: Int?
     let onScroll: (CGFloat) -> Void
     let onTap: (Int?) -> Void
     @State private var top: CGFloat = 0
 
     var body: some View {
-        MushafTextView(text: text, focus: focus, onFocus: { rect in onScroll(top + rect.minY) }, onTap: onTap)
+        MushafTextView(text: text, topRoom: topRoom, focus: focus, onFocus: { rect in onScroll(top + rect.minY) }, onTap: onTap)
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.frame(in: .named(MushafPage.pageSpace)).minY
             } action: { top = $0 }
@@ -935,6 +980,8 @@ private struct VerseTextBlock: View {
 /// can't justify lines or report where it was tapped.)
 private struct MushafTextView: UIViewRepresentable {
     let text: NSAttributedString
+    /// Room above the first line for tall marks (lines are tighter than the font's own).
+    var topRoom: CGFloat = 0
     /// A verse to bring into view (the one being recited), and where it is
     /// reported: its rectangle inside this text.
     var focus: Int? = nil
@@ -965,6 +1012,7 @@ private struct MushafTextView: UIViewRepresentable {
 
     func updateUIView(_ view: UITextView, context: Context) {
         context.coordinator.onTap = onTap
+        view.textContainerInset = UIEdgeInsets(top: topRoom, left: 0, bottom: 0, right: 0)
         if view.attributedText != text { view.attributedText = text }
         guard focus != context.coordinator.lastFocus else { return }
         context.coordinator.lastFocus = focus
@@ -981,13 +1029,14 @@ private struct MushafTextView: UIViewRepresentable {
             guard let range else { return }
             view.layoutManager.ensureLayout(for: view.textContainer)
             let glyphs = view.layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            onFocus(view.layoutManager.boundingRect(forGlyphRange: glyphs, in: view.textContainer))
+            onFocus(view.layoutManager.boundingRect(forGlyphRange: glyphs, in: view.textContainer)
+                .offsetBy(dx: 0, dy: view.textContainerInset.top))
         }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
         let width = proposal.width ?? 320
-        return CGSize(width: width, height: MushafTypesetter.height(text, width: width))
+        return CGSize(width: width, height: MushafTypesetter.height(text, width: width) + topRoom)
     }
 
     final class Coordinator: NSObject {
@@ -996,7 +1045,8 @@ private struct MushafTextView: UIViewRepresentable {
 
         @objc func tapped(_ gesture: UITapGestureRecognizer) {
             guard let view = gesture.view as? UITextView else { return }
-            let point = gesture.location(in: view)
+            var point = gesture.location(in: view)
+            point.y -= view.textContainerInset.top
             let manager = view.layoutManager
             let glyph = manager.glyphIndex(for: point, in: view.textContainer)
             let rect = manager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: view.textContainer)
@@ -1172,6 +1222,23 @@ private struct SurahBanner: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Surah \(surah.transliteration)")
+    }
+}
+
+/// The page number at the bottom left, as in the reference layout.
+private struct PageNumberBadge: View {
+    let page: Int
+    let colors: MushafColors
+
+    var body: some View {
+        Text("\(page)")
+            .font(.system(size: 16, weight: .semibold).monospacedDigit())
+            .foregroundStyle(colors.label)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 5)
+            .background(colors.band, in: .capsule)
+            .overlay { Capsule().strokeBorder(colors.gold.opacity(0.8), lineWidth: 1) }
+            .accessibilityLabel("Page \(page)")
     }
 }
 
