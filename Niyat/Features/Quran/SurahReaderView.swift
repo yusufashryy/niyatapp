@@ -145,6 +145,7 @@ struct SurahReaderView: View {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button { highlights.setHidden(!highlights.isHidden) } label: {
                     Image(systemName: highlights.isHidden ? "eye.slash.fill" : "eye.slash")
+                        .foregroundStyle(highlights.isHidden ? Palette.accent : Color.primary)
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .accessibilityLabel(highlights.isHidden ? "Show the text" : "Hide the text to recite from memory")
