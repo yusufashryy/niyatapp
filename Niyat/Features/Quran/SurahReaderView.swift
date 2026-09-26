@@ -7,8 +7,11 @@ struct SurahReaderView: View {
     let startVerse: Int?
 
     @Environment(AppModel.self) private var model
+    @Environment(\.colorSchemeContrast) private var contrast
     @State private var store = QuranStore.shared
     @State private var player = RecitationPlayer.shared
+    @State private var live = LiveRecitation.shared
+    @State private var highlights = WordHighlights.shared
     @State private var goal = QuranGoalModel.shared
     @AppStorage("quran.arabicSize") private var arabicSize = 30.0
     @AppStorage("quran.showTranslation") private var showTranslation = true
@@ -18,7 +21,8 @@ struct SurahReaderView: View {
     @State private var didScroll = false
     @State private var showSettings = false
     @State private var showGoal = false
-    @State private var showRecite = false
+    @State private var showReview = false
+    @State private var showIntro = false
     /// Verses currently on screen, for counting what's actually read.
     @State private var visibleVerses: Set<Int> = []
     /// Where the list is scrolled to, by Verse.id (0 = the Bismillah).
@@ -36,19 +40,16 @@ struct SurahReaderView: View {
                     if let surah {
                         SurahHeader(surah: surah, verseCount: store.verseCount(for: surah.id), edition: store.edition)
                             .padding(.bottom, 6)
-                        if store.showsBismillahHeader(for: surah) {
+                        if store.showsBismillahHeader(for: surah), let opening = store.verses(for: 1).first {
                             let reciting = player.current == .bismillah(surah: surah.id)
-                            Group {
-                                if showsTajweed {
-                                    Text(TajweedStore.shared.attributed(store.bismillah, surah: 1, verse: 1,
-                                                                        base: Palette.highlight, dark: true))
-                                } else {
-                                    Text(store.bismillah).foregroundStyle(Palette.highlight)
-                                }
-                            }
-                                .font(.quran(size: 28))
+                            let words = QuranWords.shared.words(for: opening, edition: store.edition)
+                            QuranTextView(pieces: [QuranTextPiece(words: words, range: 0...max(words.words.count - 1, 0),
+                                                                  showsVerseEnd: false)],
+                                          style: textStyle(size: 28, ink: UIColor(Palette.highlight)),
+                                          layout: .centredLine)
+                                .frame(height: 64)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
+                                .padding(.vertical, 4)
                                 .background {
                                     RoundedRectangle(cornerRadius: 18)
                                         .fill(Palette.accent.opacity(reciting ? 0.15 : 0))
@@ -58,8 +59,9 @@ struct SurahReaderView: View {
                         }
                     }
                     ForEach(store.verses(for: surahID)) { verse in
-                        VerseCard(verse: verse, arabicSize: arabicSize, showTranslation: showTranslation,
-                                  tajweed: showsTajweed, lineHeight: CGFloat(lineHeight),
+                        VerseCard(verse: verse, words: QuranWords.shared.words(for: verse, edition: store.edition),
+                                  style: textStyle(size: arabicSize, ink: .white),
+                                  showTranslation: showTranslation,
                                   isBookmarked: store.isBookmarked(verse),
                                   isReciting: player.current == .verse(surah: surahID, verse: verse.number),
                                   showsPlay: audioAvailable,
@@ -98,11 +100,23 @@ struct SurahReaderView: View {
                 guard let current, current.surah == surahID else { return }
                 follow(current, animated: true)
             }
+            // Reciting yourself: the same, verse by verse.
+            .onChange(of: highlights.activeVerse) { _, verse in
+                guard live.isListening, let verse, verse.surah == surahID else { return }
+                withAnimation(.smooth(duration: 0.5)) { position.scrollTo(id: verse.surah * 1000 + verse.verse, anchor: .center) }
+            }
         .niyatBackground()
         .safeAreaInset(edge: .bottom) {
-            RecitationMiniPlayer()
-                .padding(.bottom, 6)
-                .animation(.smooth, value: player.current)
+            VStack(spacing: 8) {
+                if live.isListening || highlights.flaggedCount > 0 {
+                    recitationBar.transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                RecitationMiniPlayer()
+            }
+            .padding(.bottom, 6)
+            .animation(.smooth, value: player.current)
+            .animation(.smooth, value: live.isListening)
+            .animation(.smooth, value: highlights.flaggedCount > 0)
         }
         .overlay(alignment: .top) {
             if let error = player.errorMessage {
@@ -127,8 +141,20 @@ struct SurahReaderView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 QuranGoalPill { showGoal = true }
             }
-            if audioAvailable {
-                ToolbarItem(placement: .topBarTrailing) {
+            // Memorisation (eye) sits immediately left of the microphone, next to play.
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button { highlights.setHidden(!highlights.isHidden) } label: {
+                    Image(systemName: highlights.isHidden ? "eye.slash.fill" : "eye.slash")
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .accessibilityLabel(highlights.isHidden ? "Show the text" : "Hide the text to recite from memory")
+                Button(action: toggleListening) {
+                    Image(systemName: live.isListening ? "mic.fill" : "mic")
+                        .foregroundStyle(live.isListening ? Palette.accent : Color.primary)
+                        .symbolEffect(.pulse, options: .repeating, isActive: live.isListening)
+                }
+                .accessibilityLabel(live.isListening ? "Stop listening" : "Recite: follow along as I recite")
+                if audioAvailable {
                     Button {
                         if player.current?.surah == surahID {
                             player.togglePlayPause()
@@ -143,25 +169,132 @@ struct SurahReaderView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button("Recite and check (beta)", systemImage: "mic.fill") { showRecite = true }
-                    Button("Qur'an settings", systemImage: "textformat.size") { showSettings = true }
-                } label: {
+                Button { showSettings = true } label: {
                     Image(systemName: "textformat.size")
                 }
-                .accessibilityLabel("More")
+                .accessibilityLabel("Qur'an settings")
             }
         }
+        .haptic(.selection, trigger: highlights.isHidden)
+        .haptic(.impact(weight: .light), trigger: live.isListening)
         .sheet(isPresented: $showSettings) { QuranSettingsView() }
         .sheet(isPresented: $showGoal) { QuranGoalSheet() }
+        .sheet(isPresented: $showReview) {
+            RecitationReviewSheet(onListen: audioAvailable ? { key in play(only: key) } : nil) { key in
+                withAnimation(.smooth) { position.scrollTo(id: key.surah * 1000 + key.verse, anchor: .center) }
+            }
+        }
+        .sheet(isPresented: $showIntro) {
+            ReciteIntroSheet(edition: store.edition) { startListening() }
+        }
+        .alert("Recite with Niyat", isPresented: unavailableBinding) {
+            Button("OK", role: .cancel) { live.acknowledge() }
+        } message: {
+            if case .unavailable(let message) = live.status { Text(message) }
+        }
         .task { await tajweedStore.load() }
-        .fullScreenCover(isPresented: $showRecite) {
-            RecitationCheckView(surah: surahID, verse: store.lastRead?.surah == surahID ? store.lastRead?.verse ?? 1 : 1)
+        .onChange(of: live.isListening) { _, listening in
+            UIApplication.shared.isIdleTimerDisabled = listening
         }
         .onDisappear {
+            // Leaving the surah ends listening, memorisation and the review.
+            live.stop()
+            live.clearReview()
+            highlights.setHidden(false)
+            UIApplication.shared.isIdleTimerDisabled = false
             // Update the afternoon reminder with today's remaining ayat.
             model.refresh()
         }
+    }
+
+    /// Live recitation's status, with the review and a stop button.
+    private var recitationBar: some View {
+        HStack(spacing: 10) {
+            if live.isListening {
+                LiveRecitationStatus()
+            } else {
+                Text("Recitation finished")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            if highlights.flaggedCount > 0 {
+                Button { showReview = true } label: {
+                    Label("Review \(highlights.flaggedCount)", systemImage: "text.badge.checkmark")
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                }
+                .buttonStyle(.pressable)
+                .foregroundStyle(Palette.highlight)
+            }
+            if live.isListening {
+                Button { live.stop() } label: {
+                    Label("Stop", systemImage: "stop.fill").font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.pressable)
+                .foregroundStyle(.white)
+            } else {
+                Button { live.clearReview() } label: {
+                    Image(systemName: "xmark").font(.footnote.weight(.bold)).frame(width: 28, height: 28)
+                }
+                .buttonStyle(.pressable)
+                .foregroundStyle(.white)
+                .accessibilityLabel("Clear marks")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .glassEffect(.regular.tint(Palette.glow.opacity(0.4)), in: .capsule)
+        .padding(.horizontal, 12)
+    }
+
+    private var unavailableBinding: Binding<Bool> {
+        Binding(get: {
+            if case .unavailable = live.status { return true }
+            return false
+        }, set: { shown in
+            if !shown { live.acknowledge() }
+        })
+    }
+
+    /// How Qur'an text is drawn in the reader.
+    private func textStyle(size: Double, ink: UIColor) -> QuranTextStyle {
+        var style = QuranTextStyle()
+        style.fontSize = CGFloat(size)
+        style.lineHeight = CGFloat(lineHeight)
+        style.ink = ink
+        style.marker = UIColor(Palette.highlight)
+        style.tajweed = showsTajweed
+        style.dark = true
+        style.highContrast = contrast == .increased
+        return style
+    }
+
+    // MARK: Live recitation
+
+    private func toggleListening() {
+        if live.isListening {
+            live.stop()
+        } else if UserDefaults.standard.bool(forKey: ReciteIntroSheet.seenKey) {
+            startListening()
+        } else {
+            showIntro = true
+        }
+    }
+
+    /// Listens across the whole surah, starting the search at the verse at
+    /// the top of the screen.
+    private func startListening() {
+        let verses = store.verses(for: surahID)
+        let words = verses.map { QuranWords.shared.words(for: $0, edition: store.edition) }
+        let top = visibleVerses.min() ?? store.lastRead.flatMap { $0.surah == surahID ? surahID * 1000 + $0.verse : nil }
+        var start = 0
+        if let top {
+            for (verse, verseWords) in zip(verses, words) {
+                if verse.id >= top { break }
+                start += verseWords.words.count
+            }
+        }
+        Task { await live.start(verses: words, edition: store.edition, at: start, searchingAhead: 300) }
     }
 
     /// Scrolls so the verse being recited sits in the middle of the screen.
@@ -183,7 +316,15 @@ struct SurahReaderView: View {
     }
 
     private func play(from verse: Int) {
+        live.stop()
         player.play(surah: surahID, from: verse, verseCounts: store.hafsVerseCounts)
+    }
+
+    /// Plays one verse (from the review).
+    private func play(only key: VerseKey) {
+        guard let verse = store.verses(for: key.surah).first(where: { $0.number == key.verse }) else { return }
+        live.stop()
+        player.play(surah: surahID, from: verse.hafsReference.verse, verseCounts: store.hafsVerseCounts, only: true)
     }
 
     /// Counts the verse towards today's goal if it's still on screen after a few seconds.
@@ -238,10 +379,9 @@ private struct SurahHeader: View {
 
 private struct VerseCard: View {
     let verse: Verse
-    let arabicSize: Double
+    let words: VerseWords
+    let style: QuranTextStyle
     let showTranslation: Bool
-    let tajweed: Bool
-    let lineHeight: CGFloat
     let isBookmarked: Bool
     let isReciting: Bool
     let showsPlay: Bool
@@ -288,8 +428,7 @@ private struct VerseCard: View {
                 .accessibilityLabel(isBookmarked ? "Remove bookmark" : "Bookmark")
             }
 
-            ArabicVerseText(text: verse.arabic, size: arabicSize, color: .white, lineHeight: lineHeight,
-                            tajweed: tajweed ? (surah: verse.surah, verse: verse.number) : nil)
+            QuranTextView(pieces: [QuranTextPiece(verse: words)], style: style)
                 .frame(maxWidth: .infinity)
 
             if showTranslation, !verse.translation.isEmpty {

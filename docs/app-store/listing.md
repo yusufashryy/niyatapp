@@ -28,8 +28,10 @@ TRACK YOUR SALAH
 QUR'AN
 • The full Qur'an with verified text from the Tanzil Project, checked against published checksums
 • Uthmani, simplified Uthmani and modern (Imla'i) scripts, plus the Warsh and Qalun readings
-• Mushaf view: read page by page following the 604 pages of the Madinah mushaf
-• Verse-by-verse recitation from well-known reciters, following along as you listen
+• Mushaf view: the 604 pages of the Madinah mushaf, with the same 15 lines on every page as the printed copy
+• Verse-by-verse recitation from well-known reciters, with the text following the reciter word by word
+• Recite with the app: it follows you word by word and marks words to double-check (words only, not tajweed)
+• Memorise: hide the text and recite from memory while the app follows along
 • A daily goal in ayat with a streak, gentle reminders, a verse of the day and a Friday reminder for Surah Al-Kahf
 • English translation (The Clear Quran)
 

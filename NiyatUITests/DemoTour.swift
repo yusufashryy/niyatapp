@@ -23,7 +23,8 @@ final class DemoTour: XCTestCase {
     }
 
     func test2Tour() {
-        app.launchArguments = ["-demo"]
+        // Open the mushaf at page 255 (the start of Surah Ibrahim).
+        app.launchArguments = ["-demo", "-quran.mushafPage", "255"]
         app.launch()
         pause(2.5)
         snapshot("03 Today")
@@ -64,6 +65,22 @@ final class DemoTour: XCTestCase {
             mushaf.tap()
             pause(3)
             snapshot("07 Mushaf")
+            // Tap a verse: its band and options.
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.42)).tap()
+            pause(1.5)
+            snapshot("07b Mushaf - verse")
+            let closeVerse = app.buttons["Close verse options"].firstMatch
+            if closeVerse.waitForExistence(timeout: 2) { closeVerse.tap() }
+            pause()
+            // Memorisation: the words are hidden in place.
+            let hide = app.buttons["Hide the text to recite from memory"].firstMatch
+            if hide.waitForExistence(timeout: 2) {
+                hide.tap()
+                pause(1.5)
+                snapshot("07c Mushaf - memorisation")
+                app.buttons["Show the text"].firstMatch.tap()
+                pause()
+            }
             let close = app.buttons["Close"].firstMatch
             if close.waitForExistence(timeout: 2) { close.tap() }
             pause()
@@ -71,6 +88,14 @@ final class DemoTour: XCTestCase {
         app.staticTexts["Al-Faatiha"].firstMatch.tap()
         pause(2)
         snapshot("06 Quran - Al-Fatiha")
+        let hideVerses = app.buttons["Hide the text to recite from memory"].firstMatch
+        if hideVerses.waitForExistence(timeout: 2) {
+            hideVerses.tap()
+            pause(1.5)
+            snapshot("06b Quran - memorisation")
+            app.buttons["Show the text"].firstMatch.tap()
+            pause()
+        }
         app.navigationBars.buttons.element(boundBy: 0).tap()
         pause()
 

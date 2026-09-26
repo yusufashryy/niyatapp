@@ -1,6 +1,17 @@
 # Recitation checker: feasibility report
 
-**Status: version 1 (beta) is in the app** as Qur'an › Recite: live follow-along and word-level checking (skipped and different words) using Apple's on-device speech recognition and the aligner described below (`Niyat/Features/Quran/RecitationCheck/`). Everything from "Wrong harakah" down in the table is still future work, and a Qur'an fine-tuned model (WhisperKit) remains the next step for accuracy.
+**Status: live recitation is part of the Qur'an reader.** The microphone button (in the verse-by-verse reader and on the mushaf pages) follows the recitation word by word, finds the place when you start anywhere, turns pages, and marks words to review (skipped, sounded different, couldn't tell). The eye button hides the text to recite from memory, and tracking carries on underneath. It uses Apple's speech recognition (on the device when the iPhone supports Arabic there) and the aligner in `Niyat/Features/Quran/RecitationCheck/RecitationTracker.swift`. Harakat, tajweed and pronunciation are not assessed; a Qur'an-trained model (e.g. WhisperKit) remains the next step for accuracy.
+
+### How it's built
+
+- **One word model** (`Words/QuranWords.swift`): every verse is split into words without changing a character. A word is identified by surah, ayah and index (`WordID`) and carries its exact display text (a range of the verified text) and a normalised form used only for matching. Tajweed marks (`TajweedStore`) and reciter timings (`WordTimings`) attach to the same words by position.
+- **One renderer** (`Words/QuranTextCanvas.swift`) draws both the verse cards and the mushaf lines with CoreText, and reads one shared highlight state (`WordHighlights`): the current word (grey), the verse band, review marks and memorisation placeholders. A new word redraws only the lines showing its verse, never the page.
+- **Tracker** (pure Swift, unit-tested): semi-global alignment of what was heard against the words around the place, with a small cost for starting away from where the reader is looking. It searches for the place before following, allows repeats and restarts, and judges words only when an utterance ends, with the recogniser's confidence. Low confidence gives "couldn't tell", never an error.
+- **Reciter sync** (`ReciterWordSync.swift`): each ayah's recording is aligned on the device with the same aligner; used only when 60% of words were placed, else the whole ayah is highlighted.
+
+### Room for tajweed later
+
+Tajweed checking (madd, ghunnah, qalqalah, ikhfa, idgham, iqlab, makharij) needs a model trained on expert-labelled recitation, which the app doesn't have. The pieces are in place for it: the tracker gives each word's position in the recitation, `TajweedStore` gives which rules apply to which letters of that word, and review marks (`WordMark`) are a separate layer from the text. A future pronunciation model would add mark kinds per rule for the words it can judge, and nothing is marked for rules it can't.
 
 Goal: a mode, similar in concept to Tarteel, where the user turns on the microphone, recites, and the app follows along and flags mistakes.
 

@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// A tajweed rule that can be coloured in the text.
 ///
@@ -116,7 +115,12 @@ enum TajweedRule: String, CaseIterable, Identifiable {
         }
     }
 
-    func color(dark: Bool) -> Color { dark ? darkColor : lightColor }
+    /// With Increase Contrast on, colours are deeper on paper and brighter on
+    /// dark pages.
+    func color(dark: Bool, highContrast: Bool = false) -> Color {
+        let base = dark ? darkColor : lightColor
+        return highContrast ? base.mix(with: dark ? .white : .black, by: 0.3) : base
+    }
 
     /// Rules shown together in the colour guide.
     enum Group: String, CaseIterable, Identifiable {
@@ -203,32 +207,6 @@ final class TajweedStore {
             let lower = mark.range.lowerBound - shift, upper = mark.range.upperBound - shift
             guard upper > 0 else { return nil }
             return Mark(rule: mark.rule, range: max(lower, 0)..<upper)
-        }
-    }
-
-    /// The verse text with tajweed letters coloured, for SwiftUI Text.
-    func attributed(_ text: String, surah: Int, verse: Int, base: Color, dark: Bool) -> AttributedString {
-        var result = AttributedString(text)
-        result.foregroundColor = base
-        let scalars = result.unicodeScalars
-        let count = text.unicodeScalars.count
-        for mark in marks(surah: surah, verse: verse, displayed: text) where mark.range.upperBound <= count {
-            let lower = scalars.index(scalars.startIndex, offsetBy: mark.range.lowerBound)
-            let upper = scalars.index(scalars.startIndex, offsetBy: mark.range.upperBound)
-            result[lower..<upper].foregroundColor = mark.rule.color(dark: dark)
-        }
-        return result
-    }
-
-    /// Colours an NSAttributedString in place (the mushaf pages). `location`
-    /// is where the verse text starts inside `string` (UTF-16; Qur'an text is
-    /// all in the Basic Multilingual Plane, so code points = UTF-16 units).
-    func colour(_ string: NSMutableAttributedString, verseText: String, at location: Int,
-                surah: Int, verse: Int, dark: Bool) {
-        let count = verseText.utf16.count
-        for mark in marks(surah: surah, verse: verse, displayed: verseText) where mark.range.upperBound <= count {
-            string.addAttribute(.foregroundColor, value: UIColor(mark.rule.color(dark: dark)),
-                                range: NSRange(location: location + mark.range.lowerBound, length: mark.range.count))
         }
     }
 }

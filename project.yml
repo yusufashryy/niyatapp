@@ -64,7 +64,7 @@ targets:
         UIBackgroundModes: [fetch, audio]
         BGTaskSchedulerPermittedIdentifiers: [$(PRODUCT_BUNDLE_IDENTIFIER).refresh]
         NSMicrophoneUsageDescription: Niyat listens while you recite so it can follow along and point out words to double-check. Nothing is recorded or saved.
-        NSSpeechRecognitionUsageDescription: Niyat uses Apple's speech recognition to follow your recitation word by word. When your iPhone supports it, this happens entirely on the device.
+        NSSpeechRecognitionUsageDescription: Niyat uses Apple's speech recognition to follow your recitation word by word, and to line up reciters' recordings with the text. When your iPhone supports it, this happens entirely on the device.
         NSLocationWhenInUseUsageDescription: Niyat uses your location to calculate accurate prayer times and the Qibla direction. Your location never leaves your phone.
         ITSAppUsesNonExemptEncryption: false
         CKSharingSupported: true

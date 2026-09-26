@@ -138,6 +138,7 @@ final class RecitationPlayer {
     @ObservationIgnored private var currentItemObservation: NSKeyValueObservation?
     @ObservationIgnored private var timeControlObservation: NSKeyValueObservation?
     @ObservationIgnored private var statusObservations: [ObjectIdentifier: NSKeyValueObservation] = [:]
+    @ObservationIgnored private var timeObserver: Any?
     @ObservationIgnored private var verseCounts: [Int] = []
     /// Keep going into the next surah (the mushaf view) rather than stopping
     /// at the end of this one (the surah reader).
@@ -163,6 +164,14 @@ final class RecitationPlayer {
                                                              queue: .main) { [weak self] note in
             let finished = note.object as? AVPlayerItem
             Task { @MainActor in self?.itemFinished(finished) }
+        }
+        // 20 times a second: which word the reciter is on (see ReciterWordSync).
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 20), queue: .main) { [weak self] time in
+            MainActor.assumeIsolated {
+                guard let self, let playing = self.player.currentItem,
+                      let item = self.itemsByPlayerItem[ObjectIdentifier(playing)] else { return }
+                ReciterWordSync.shared.playback(at: time.seconds, of: item)
+            }
         }
     }
 
@@ -230,6 +239,7 @@ final class RecitationPlayer {
         current = nil
         isPlaying = false
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        ReciterWordSync.shared.itemChanged(to: nil, upcoming: [])
     }
 
     private func resetQueue() {
@@ -256,7 +266,7 @@ final class RecitationPlayer {
     }
 
     private func enqueue(_ item: RecitationItem) {
-        let asset = AVURLAsset(url: url(for: item))
+        let asset = AVURLAsset(url: audioURL(for: item))
         let playerItem = AVPlayerItem(asset: asset)
         playerItem.preferredForwardBufferDuration = 10
         let key = ObjectIdentifier(playerItem)
@@ -288,6 +298,8 @@ final class RecitationPlayer {
         itemsByPlayerItem = itemsByPlayerItem.filter { live.contains($0.key) }
         statusObservations = statusObservations.filter { live.contains($0.key) }
         topUp()
+        let upcoming = player.items().dropFirst().compactMap { itemsByPlayerItem[ObjectIdentifier($0)] }
+        ReciterWordSync.shared.itemChanged(to: current, upcoming: Array(upcoming))
         updateNowPlaying()
     }
 
@@ -327,7 +339,8 @@ final class RecitationPlayer {
         }
     }
 
-    private func url(for item: RecitationItem) -> URL {
+    /// The recording of one verse (or the Bismillah) by the selected reciter.
+    func audioURL(for item: RecitationItem) -> URL {
         switch item {
         case .bismillah:
             // Al-Fatiha 1:1 is the Bismillah.

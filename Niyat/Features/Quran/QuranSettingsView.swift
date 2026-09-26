@@ -1,3 +1,4 @@
+import Speech
 import SwiftUI
 
 /// Qur'an › Settings: reading, script, recitation and daily goal, in one sheet
@@ -13,6 +14,9 @@ struct QuranSettingsView: View {
     @AppStorage("quran.tajweed") private var tajweedOn = true
     @AppStorage("quran.readingLayout") private var readingLayout = "verses"
     @AppStorage(QuranLineSpacing.key) private var lineHeight = QuranLineSpacing.standard
+    @AppStorage(ReciterWordSync.settingKey) private var wordSync = true
+    @State private var speechStatus = SFSpeechRecognizer.authorizationStatus()
+    @State private var speechOnDevice = SFSpeechRecognizer(locale: Locale(identifier: "ar-SA"))?.supportsOnDeviceRecognition ?? false
     @State private var showMushaf = false
 
     var body: some View {
@@ -35,7 +39,7 @@ struct QuranSettingsView: View {
                         Label("Qur'an notifications", systemImage: "bell.badge")
                     }
                 } footer: {
-                    Text("Page view follows the 604 pages of the Madinah mushaf (Hafs), using Tanzil's verified page divisions. Niyat typesets the text itself, so line breaks can differ from a printed copy.")
+                    Text("Mushaf pages follow the 604 pages of the Madinah mushaf (Hafs), line for line: every page has the same 15 lines as the printed copy, drawn from Niyat's verified text.")
                 }
 
                 Section {
@@ -103,6 +107,17 @@ struct QuranSettingsView: View {
                         }
                         Toggle("Continue to the next verse", isOn: Binding(
                             get: { player.continuous }, set: { player.continuous = $0 }))
+                        Toggle("Follow the reciter word by word", isOn: Binding(
+                            get: { wordSync && speechStatus == .authorized && speechOnDevice },
+                            set: { on in
+                                wordSync = on
+                                ReciterWordSync.shared.reset()
+                                guard on, speechStatus == .notDetermined else { return }
+                                SFSpeechRecognizer.requestAuthorization { status in
+                                    Task { @MainActor in speechStatus = status }
+                                }
+                            }))
+                            .disabled(!speechOnDevice || speechStatus == .denied || speechStatus == .restricted)
                     } else {
                         Label("No verified verse-by-verse audio for \(store.edition.riwayah.title) yet, so recitation is off to keep text and audio in sync.",
                               systemImage: "speaker.slash")
@@ -111,6 +126,8 @@ struct QuranSettingsView: View {
                     }
                 } header: {
                     Text("Recitation")
+                } footer: {
+                    if store.edition.riwayah.hasVerseAudio { Text(wordSyncFooter) }
                 }
 
                 Section {
@@ -143,6 +160,17 @@ struct QuranSettingsView: View {
         }
         .presentationDetents([.large])
         .fullScreenCover(isPresented: $showMushaf) { MushafPageView() }
+    }
+
+    private var wordSyncFooter: String {
+        let what = "Highlights each word as the reciter says it."
+        if !speechOnDevice {
+            return what + " This iPhone can't recognise Arabic speech on the device, so the whole ayah is highlighted instead."
+        }
+        if speechStatus == .denied || speechStatus == .restricted {
+            return what + " Allow Speech Recognition for Niyat in the Settings app to use it."
+        }
+        return what + " The recitations don't come with word timings, so Niyat lines each ayah's audio up with the text on your iPhone, with Apple's speech recognition. Ayat it can't line up confidently are highlighted as a whole. Nothing leaves your iPhone."
     }
 
     private func select(_ edition: QuranEdition) {

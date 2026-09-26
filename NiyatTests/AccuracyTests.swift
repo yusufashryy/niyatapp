@@ -290,45 +290,6 @@ final class QuranReminderSettingsTests: XCTestCase {
     }
 }
 
-final class RecitationMatcherTests: XCTestCase {
-    private func states(_ expected: String, _ heard: String) -> [RecitationMatcher.WordState] {
-        RecitationMatcher.align(expected: RecitationMatcher.words(expected).map(RecitationMatcher.normalize),
-                                heard: RecitationMatcher.words(heard).map(RecitationMatcher.normalize))
-    }
-
-    private let verse = "الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ"
-
-    func testNormalizeIgnoresHarakatAndSpellingVariants() {
-        XCTAssertEqual(RecitationMatcher.normalize("الرَّحْمَٰنِ"), RecitationMatcher.normalize("الرحمن"))
-        XCTAssertEqual(RecitationMatcher.normalize("إِيَّاكَ"), RecitationMatcher.normalize("اياك"))
-        XCTAssertEqual(RecitationMatcher.normalize("رَحْمَةً"), RecitationMatcher.normalize("رحمه"))
-    }
-
-    func testFollowsAlong() {
-        XCTAssertEqual(states(verse, ""), [.pending, .pending, .pending, .pending])
-        XCTAssertEqual(states(verse, "الحمد لله"), [.matched, .matched, .pending, .pending])
-        XCTAssertEqual(states(verse, "الحمد لله رب العالمين"), [.matched, .matched, .matched, .matched])
-    }
-
-    func testExtraAndRepeatedWordsAreNotMistakes() {
-        XCTAssertEqual(states(verse, "اعوذ بالله الحمد لله رب العالمين"), [.matched, .matched, .matched, .matched])
-        XCTAssertEqual(states(verse, "الحمد لله الحمد لله رب العالمين"), [.matched, .matched, .matched, .matched])
-    }
-
-    func testSmallRecognitionDifferencesAreForgiven() {
-        XCTAssertEqual(states(verse, "الحمد لله رب العلمين"), [.matched, .matched, .matched, .matched])
-    }
-
-    func testSkippedAndDifferentWords() {
-        XCTAssertEqual(states(verse, "الحمد لله العالمين"), [.matched, .matched, .skipped, .matched])
-        XCTAssertEqual(states(verse, "الحمد لله رب الناس"), [.matched, .matched, .matched, .different])
-    }
-
-    func testUnrelatedSpeechIsIgnored() {
-        XCTAssertEqual(states(verse, "كلام اخر تماما"), [.pending, .pending, .pending, .pending])
-    }
-}
-
 final class QuranicDuaTests: XCTestCase {
     /// Every dua points at real verses, and the text there is a supplication.
     @MainActor
@@ -343,8 +304,9 @@ final class QuranicDuaTests: XCTestCase {
                 let text = dua.verses.compactMap { store.verse(VerseReference(surah: dua.surah, verse: $0))?.arabic }
                     .joined(separator: " ")
                 let letters = RecitationMatcher.normalize(text)
-                // "Rabb" (Lord) or "a'udhu" (I seek refuge) or Yunus's "la ilaha illa anta".
-                XCTAssertTrue(letters.contains("رب") || letters.contains("اعوذ") || letters.contains("لاالهالاانت"),
+                // "Rabb" (Lord) or "a'udhu" (I seek refuge) or Yunus's "la ilaha illa anta"
+                // (the dagger alif of إِلَٰهَ is read as an alif).
+                XCTAssertTrue(letters.contains("رب") || letters.contains("اعوذ") || letters.contains("لاالاهالاانت"),
                               "\(dua.reference) doesn't look like a dua")
             }
         }
