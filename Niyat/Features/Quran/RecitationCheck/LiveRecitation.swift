@@ -125,6 +125,8 @@ final class LiveRecitation {
             status = .unavailable("Allow the Microphone for Niyat in the Settings app to recite with the app.")
             return
         }
+        // Stopped (or the page closed) while permission was being asked.
+        guard status == .starting else { return }
 
         self.edition = edition
         prepare(verses: verses, at: start, searchingAhead: searchingAhead)
