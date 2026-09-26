@@ -120,8 +120,12 @@ enum NotificationScheduler {
 
     /// Called after a prayer is logged: removes its "30 minutes after" reminder.
     static func prayerLogged(_ prayer: PrayerName, dayKey: String) {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(
-            withIdentifiers: [identifier(prayer: prayer, dayKey: dayKey, timing: .after30)])
+        let identifiers = [identifier(prayer: prayer, dayKey: dayKey, timing: .after30)]
+        // This call waits for iOS's notification service; off the main thread
+        // so a slow service can never freeze the app (it did, in testing).
+        DispatchQueue.global(qos: .utility).async {
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
+        }
     }
 
     private static func identifier(prayer: PrayerName, dayKey: String, timing: AlertTiming) -> String {
