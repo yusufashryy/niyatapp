@@ -4,11 +4,8 @@ import SwiftUI
 /// onboarding and any time from More › How to use Niyat.
 struct TutorialView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(AppModel.self) private var model
     @AppStorage(TutorialView.seenKey) private var seen = false
     @State private var page = 0
-    @State private var notificationsAllowed: Bool?
-    @State private var testSent = false
 
     static let seenKey = "tutorial.seen"
 
@@ -17,6 +14,10 @@ struct TutorialView: View {
             TutorialPage(icon: "hand.wave.fill", title: "Welcome to Niyat",
                          subtitle: "A one-minute tour. Swipe to go through it, or skip and come back any time from More › How to use Niyat.",
                          points: []),
+            TutorialPage(icon: "clock.fill", title: "Prayer times",
+                         subtitle: "Times are calculated on your phone for where you are. If they don't match your local mosque, change the method here or later in Settings.",
+                         points: [],
+                         action: .prayerTimes),
             TutorialPage(icon: "sun.horizon.fill", title: "Today",
                          subtitle: "Your day at a glance.",
                          points: [
@@ -28,9 +29,9 @@ struct TutorialView: View {
             TutorialPage(icon: "bell.badge.fill", title: "Prayer notifications",
                          subtitle: "Niyat can remind you before, at, and after each prayer.",
                          points: [
-                             TutorialPoint("clock.fill", "Choose your alerts in More › Settings › Alert times: 30 or 10 minutes before, at the adhan, and a check 30 minutes after."),
                              TutorialPoint("hand.point.up.left.fill", "Press and hold a prayer alert, then tap Log Prayer. It's logged without opening the app, and never counted twice."),
                              TutorialPoint("arrow.clockwise", "iOS only lets apps queue so many alerts, so open Niyat every couple of days to keep them coming."),
+                             TutorialPoint("gearshape.fill", "Set it up below. You can change it any time in More › Settings."),
                          ],
                          action: .notifications),
             TutorialPage(icon: "book.closed.fill", title: "Qur'an",
@@ -40,7 +41,8 @@ struct TutorialView: View {
                              TutorialPoint("speaker.wave.2.fill", "Tap the speaker on any verse to hear it, or play to recite on. Choose your reciter with the gear."),
                              TutorialPoint("book.pages.fill", "The book icon opens the page-by-page mushaf view. Swipe right-to-left like a printed copy."),
                              TutorialPoint("bell.badge.fill", "The bell sets Qur'an reminders: morning, afternoon, streak, verse of the day and Surah Al-Kahf on Fridays."),
-                         ]),
+                         ],
+                         action: .quran),
             TutorialPage(icon: "location.north.circle.fill", title: "Qibla",
                          subtitle: "Find the direction of the Ka'bah.",
                          points: [
@@ -68,8 +70,9 @@ struct TutorialView: View {
                              TutorialPoint("swatchpalette.fill", "Themes: Onyx, Midnight, Emerald and more, or build your own colours."),
                              TutorialPoint("circle.hexagongrid.fill", "Tasbih: a counter for your dhikr."),
                              TutorialPoint("gearshape.fill", "Settings: calculation method, Asr time, haptics, and erase all data."),
+                             TutorialPoint("heart.fill", "Support Niyat and Send feedback: optional tips, and a direct line for ideas or anything that looks wrong."),
                          ],
-                         action: .finish),
+                         action: .style),
         ]
     }
 
@@ -132,7 +135,6 @@ struct TutorialView: View {
             }
         }
         .foregroundStyle(.white)
-        .task { notificationsAllowed = await NotificationScheduler.isAuthorized() }
     }
 
     private func pageView(_ content: TutorialPage) -> some View {
@@ -174,48 +176,12 @@ struct TutorialView: View {
                 .surface(cornerRadius: 22)
             }
 
-            if content.action == .notifications {
-                notificationActions
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var notificationActions: some View {
-        VStack(spacing: 10) {
-            if notificationsAllowed != true {
-                Button {
-                    Task {
-                        notificationsAllowed = await NotificationScheduler.requestAuthorization()
-                        model.refresh()
-                    }
-                } label: {
-                    Label("Allow notifications", systemImage: "bell.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glass)
-                .controlSize(.large)
-            }
-            Button {
-                Task {
-                    testSent = await NotificationScheduler.sendTest(location: model.location,
-                                                                    current: model.currentPrayer(at: .now),
-                                                                    next: model.nextPrayer(after: .now))
-                    notificationsAllowed = testSent ? true : notificationsAllowed
-                }
-            } label: {
-                Label(testSent ? "Sent! Lock your phone and wait 5 seconds" : "Try it: send a test alert",
-                      systemImage: testSent ? "checkmark.circle.fill" : "paperplane.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.glass)
-            .controlSize(.large)
-            .haptic(.success, trigger: testSent)
-            if notificationsAllowed == false {
-                Text("If nothing happens, turn notifications on in the Settings app › Notifications › Niyat.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+            switch content.action {
+            case .prayerTimes: TutorialPrayerSetup()
+            case .notifications: TutorialNotificationSetup()
+            case .quran: TutorialQuranSetup()
+            case .style: TutorialStyleSetup()
+            case nil: EmptyView()
             }
         }
     }
@@ -227,7 +193,7 @@ struct TutorialView: View {
 }
 
 private struct TutorialPage {
-    enum Action { case notifications, finish }
+    enum Action { case prayerTimes, notifications, quran, style }
 
     let icon: String
     let title: String

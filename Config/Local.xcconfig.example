@@ -7,3 +7,6 @@ DEVELOPMENT_TEAM = ABCDE12345
 
 // Anything unique that you own, in reverse-domain style.
 BUNDLE_ID_PREFIX = com.yourname
+
+// Optional: where More › Send feedback emails go (otherwise it opens a GitHub issue).
+// FEEDBACK_EMAIL = feedback@example.com

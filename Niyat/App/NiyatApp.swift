@@ -1,3 +1,4 @@
+import StoreKit
 import SwiftUI
 import UserNotifications
 
@@ -15,6 +16,7 @@ struct NiyatApp: App {
         _model = State(initialValue: AppModel())
         UNUserNotificationCenter.current().delegate = NotificationPresenter.shared
         NotificationScheduler.registerCategories()
+        TipJar.shared.startListening()
     }
 
     var body: some Scene {
@@ -71,6 +73,9 @@ struct MainTabView: View {
     @State private var deepLink = DeepLink.shared
     @AppStorage(TutorialView.seenKey) private var tutorialSeen = false
     @State private var showTutorial = false
+    @State private var prompter = ReviewPrompter.shared
+    @State private var showFeedback = false
+    @Environment(\.requestReview) private var requestReview
 
     var body: some View {
         // On iOS 26+ the tab bar is Liquid Glass and shrinks while scrolling.
@@ -87,7 +92,30 @@ struct MainTabView: View {
             if destination?.isQuran == true { selection = .quran }
         }
         // First launch after onboarding: a quick walkthrough.
-        .onAppear { if !tutorialSeen { showTutorial = true } }
+        .onAppear {
+            if !tutorialSeen { showTutorial = true } else { prompter.appOpened() }
+        }
         .fullScreenCover(isPresented: $showTutorial) { TutorialView() }
+        // Apple's own rating prompt, a moment after a happy event (see ReviewPrompter).
+        .onChange(of: prompter.askForReview) { _, ask in
+            guard ask else { return }
+            prompter.askForReview = false
+            Task {
+                try? await Task.sleep(for: .seconds(3))
+                requestReview()
+            }
+        }
+        .alert("How's Niyat working for you?", isPresented: $prompter.offerFeedback) {
+            Button("Send feedback") { showFeedback = true }
+            Button("Not now", role: .cancel) {}
+        } message: {
+            Text("Niyat is built by one person. Ideas, bugs, or anything that looks inaccurate: we read every message.")
+        }
+        .sheet(isPresented: $showFeedback) {
+            NavigationStack {
+                FeedbackView()
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { showFeedback = false } } }
+            }
+        }
     }
 }

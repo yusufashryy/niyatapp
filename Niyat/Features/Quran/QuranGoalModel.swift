@@ -44,6 +44,7 @@ final class QuranGoalModel {
         refresh()
         if justCompleted {
             celebration = streak
+            ReviewPrompter.shared.recordHappyMoment()
             WidgetCenter.shared.reloadAllTimelines()
         }
         GroupSync.shared.publishSoon()

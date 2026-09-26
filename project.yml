@@ -60,12 +60,16 @@ targets:
           - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
             CFBundleURLSchemes: [niyat]
         NiyatAppGroup: $(APP_GROUP_ID)
+        NiyatAppStoreID: $(APP_STORE_ID)
+        NiyatFeedbackEmail: $(FEEDBACK_EMAIL)
     entitlements:
       path: Niyat/Support/Niyat.entitlements
       properties:
         com.apple.security.application-groups: [$(APP_GROUP_ID)]
     scheme:
       testTargets: [NiyatTests, NiyatUITests]
+      # Test the Support Niyat tips in Xcode without App Store Connect.
+      storeKitConfiguration: Config/Niyat.storekit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).Niyat
