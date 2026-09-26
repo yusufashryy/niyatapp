@@ -78,6 +78,9 @@ struct RecitationTracker {
         searchRange = max(0, expected - 5)..<min(tokens.count, expected + ahead)
     }
 
+    /// Where the reciter is, or where they're expected to start.
+    var focus: Int { position ?? expected }
+
     /// The result to show for a word, if it has been passed.
     func result(at index: Int) -> Result? {
         if let kind = provisional[index] { return kind == .matched ? .correct : nil }
