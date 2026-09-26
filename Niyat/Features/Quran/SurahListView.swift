@@ -11,8 +11,8 @@ struct SurahListView: View {
     @State private var showMushaf = false
     @State private var showNotifications = false
     @State private var showRecite = false
-    /// "pages" opens surahs in the mushaf view; "verses" in the verse-by-verse reader.
-    @AppStorage("quran.readingLayout") private var readingLayout = "pages"
+    /// "verses" (default) opens surahs verse by verse; "pages" in the mushaf view.
+    @AppStorage("quran.readingLayout") private var readingLayout = "verses"
     @AppStorage("quran.mushafPage") private var mushafPage = 1
 
     var body: some View {

@@ -13,6 +13,7 @@ struct SurahReaderView: View {
     @AppStorage("quran.arabicSize") private var arabicSize = 30.0
     @AppStorage("quran.showTranslation") private var showTranslation = true
     @AppStorage("quran.tajweed") private var tajweedOn = true
+    @AppStorage(QuranLineSpacing.key) private var lineHeight = QuranLineSpacing.standard
     @State private var tajweedStore = TajweedStore.shared
     @State private var didScroll = false
     @State private var showSettings = false
@@ -31,7 +32,7 @@ struct SurahReaderView: View {
         let surah = store.surah(surahID)
         let audioAvailable = store.edition.riwayah.hasVerseAudio
         ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: 8) {
                     if let surah {
                         SurahHeader(surah: surah, verseCount: store.verseCount(for: surah.id), edition: store.edition)
                             .padding(.bottom, 6)
@@ -58,7 +59,7 @@ struct SurahReaderView: View {
                     }
                     ForEach(store.verses(for: surahID)) { verse in
                         VerseCard(verse: verse, arabicSize: arabicSize, showTranslation: showTranslation,
-                                  tajweed: showsTajweed,
+                                  tajweed: showsTajweed, lineHeight: CGFloat(lineHeight),
                                   isBookmarked: store.isBookmarked(verse),
                                   isReciting: player.current == .verse(surah: surahID, verse: verse.number),
                                   showsPlay: audioAvailable,
@@ -240,6 +241,7 @@ private struct VerseCard: View {
     let arabicSize: Double
     let showTranslation: Bool
     let tajweed: Bool
+    let lineHeight: CGFloat
     let isBookmarked: Bool
     let isReciting: Bool
     let showsPlay: Bool
@@ -286,18 +288,9 @@ private struct VerseCard: View {
                 .accessibilityLabel(isBookmarked ? "Remove bookmark" : "Bookmark")
             }
 
-            Group {
-                if tajweed {
-                    Text(TajweedStore.shared.attributed(verse.arabic, surah: verse.surah, verse: verse.number,
-                                                        base: .white, dark: true))
-                } else {
-                    Text(verse.arabic).foregroundStyle(.white)
-                }
-            }
-                .font(.quran(size: arabicSize))
-                .lineSpacing(0)
-                .multilineTextAlignment(.trailing)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            ArabicVerseText(text: verse.arabic, size: arabicSize, color: .white, lineHeight: lineHeight,
+                            tajweed: tajweed ? (surah: verse.surah, verse: verse.number) : nil)
+                .frame(maxWidth: .infinity)
 
             if showTranslation, !verse.translation.isEmpty {
                 Text(verse.translation)
