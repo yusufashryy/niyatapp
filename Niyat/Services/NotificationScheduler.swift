@@ -359,40 +359,46 @@ enum NotificationScheduler {
 final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationPresenter()
 
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async
-        -> UNNotificationPresentationOptions {
-        [.banner, .list, .sound]
+    // Completion-handler versions, answered on the main thread: the async
+    // versions can finish off the main thread, which crashed or froze the app
+    // (a black screen) when it was opened from a notification.
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        DispatchQueue.main.async { completionHandler([.banner, .list, .sound]) }
     }
 
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
         let kind = info[NotificationScheduler.UserInfoKey.kind] as? String
+        let action = response.actionIdentifier
+        let prayer = (info[NotificationScheduler.UserInfoKey.prayer] as? String).flatMap(PrayerName.init(rawValue:))
+        let dayKey = info[NotificationScheduler.UserInfoKey.dayKey] as? String
+        let surah = info[NotificationScheduler.UserInfoKey.surah] as? Int
+        let verse = info[NotificationScheduler.UserInfoKey.verse] as? Int
 
-        if response.actionIdentifier == NotificationScheduler.Action.logPrayer,
-           let raw = info[NotificationScheduler.UserInfoKey.prayer] as? String,
-           let prayer = PrayerName(rawValue: raw),
-           let dayKey = info[NotificationScheduler.UserInfoKey.dayKey] as? String {
-            // logIfNeeded won't overwrite an existing log, so tapping twice (or
-            // on both the adhan and the follow-up alert) never double-counts.
-            if PrayerLog.logIfNeeded(prayer, dayKey: dayKey) {
-                NotificationScheduler.prayerLogged(prayer, dayKey: dayKey)
-                WidgetCenter.shared.reloadAllTimelines()
-            }
-            await MainActor.run {
+        DispatchQueue.main.async {
+            defer { completionHandler() }
+            if action == NotificationScheduler.Action.logPrayer, let prayer, let dayKey {
+                // logIfNeeded won't overwrite an existing log, so tapping twice (or
+                // on both the adhan and the follow-up alert) never double-counts.
+                if PrayerLog.logIfNeeded(prayer, dayKey: dayKey) {
+                    NotificationScheduler.prayerLogged(prayer, dayKey: dayKey)
+                    WidgetCenter.shared.reloadAllTimelines()
+                }
                 NotificationCenter.default.post(name: .prayerJournalChanged, object: nil)
+                return
             }
-            return
-        }
-
-        if kind == "quran", response.actionIdentifier == UNNotificationDefaultActionIdentifier {
-            let destination: DeepLink.Destination
-            if let surah = info[NotificationScheduler.UserInfoKey.surah] as? Int,
-               let verse = info[NotificationScheduler.UserInfoKey.verse] as? Int {
-                destination = .quranVerse(surah: surah, verse: verse)
-            } else {
-                destination = .quranContinueReading
+            if kind == "quran", action == UNNotificationDefaultActionIdentifier {
+                MainActor.assumeIsolated {
+                    if let surah, let verse {
+                        DeepLink.shared.pending = .quranVerse(surah: surah, verse: verse)
+                    } else {
+                        DeepLink.shared.pending = .quranContinueReading
+                    }
+                }
             }
-            await MainActor.run { DeepLink.shared.pending = destination }
         }
     }
 }

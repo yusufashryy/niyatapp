@@ -155,6 +155,8 @@ final class RecitationPlayer {
             Task { @MainActor in
                 self?.isPlaying = status == .playing
                 self?.isLoading = status == .waitingToPlayAtSpecifiedRate
+                // Keeps the Lock Screen's play/pause and progress in step.
+                self?.updateNowPlaying()
             }
         }
         currentItemObservation = player.observe(\.currentItem, options: [.new]) { [weak self] _, _ in
@@ -398,12 +400,28 @@ final class RecitationPlayer {
         case .bismillah: "\(surahName) · Bismillah"
         case .verse(let surah, let verse): "\(surahName) \(surah):\(verse)"
         }
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+        var info: [String: Any] = [
             MPMediaItemPropertyTitle: title,
             MPMediaItemPropertyArtist: reciter.name,
             MPMediaItemPropertyAlbumTitle: "Niyat",
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
         ]
+        if let artwork = Self.artwork { info[MPMediaItemPropertyArtwork] = artwork }
+        // The verse's length and position, so the Lock Screen shows progress.
+        if let item = player.currentItem {
+            let duration = item.duration.seconds
+            if duration.isFinite, duration > 0 { info[MPMediaItemPropertyPlaybackDuration] = duration }
+            let elapsed = item.currentTime().seconds
+            if elapsed.isFinite { info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = elapsed }
+        }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
+
+    /// The app icon, shown by the Lock Screen and Control Centre player.
+    private static let artwork: MPMediaItemArtwork? = {
+        guard let image = UIImage(named: "NowPlayingArtwork") else { return nil }
+        return MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+    }()
 }
 
 // MARK: - Mini player

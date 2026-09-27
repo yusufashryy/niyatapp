@@ -36,12 +36,16 @@ struct QuranTextStyle: Equatable {
     /// Soft highlight behind the word being recited.
     var currentWord: UIColor = UIColor(white: 0.55, alpha: 0.30)
     var uncertain: UIColor = UIColor(white: 0.62, alpha: 0.9)
-    var mistake: UIColor = UIColor(red: 0.96, green: 0.52, blue: 0.16, alpha: 1)
+    /// Bright red: something clearly different was heard.
+    var mistake: UIColor = UIColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 1)
     /// Memorization mode: blank shapes where the words are.
     var placeholder: UIColor = UIColor(white: 0.55, alpha: 0.20)
     /// How much a justified line's words may be squeezed or stretched
     /// horizontally to fill it (1...1: only the spaces between words grow).
     var stretch: ClosedRange<CGFloat> = 1...1
+    /// Thicker strokes for easier reading, as a percentage of the size
+    /// (0 = the font as designed). Letter widths don't change, so lines don't move.
+    var weight: CGFloat = 0
 }
 
 /// A run of consecutive words from one verse.
@@ -96,6 +100,8 @@ final class WordHighlights {
     @ObservationIgnored private(set) var current: WordID?
     @ObservationIgnored private(set) var marks: [WordID: WordMark] = [:]
     @ObservationIgnored private(set) var band: VerseKey?
+    /// Memorisation: words already recited, shown through the hidden text.
+    @ObservationIgnored private(set) var revealed: Set<WordID> = []
     @ObservationIgnored private let views = NSHashTable<QuranTextCanvas>.weakObjects()
 
     private init() {}
@@ -106,6 +112,7 @@ final class WordHighlights {
     func setHidden(_ hidden: Bool) {
         guard hidden != isHidden else { return }
         isHidden = hidden
+        revealed = []
         for view in views.allObjects { view.contentChanged() }
     }
 
@@ -127,6 +134,17 @@ final class WordHighlights {
         redraw([previous, verse])
     }
 
+    /// Memorisation: shows words the reciter has reached. Only lines with
+    /// newly revealed words are rebuilt.
+    func reveal(_ words: [WordID]) {
+        guard isHidden else { return }
+        let new = words.filter { !revealed.contains($0) }
+        guard !new.isEmpty else { return }
+        revealed.formUnion(new)
+        let keys = Set(new.map(\.verseKey))
+        for view in views.allObjects where !view.verses.isDisjoint(with: keys) { view.contentChanged() }
+    }
+
     /// Adds or clears marks for some words.
     func updateMarks(_ changes: [WordID: WordMark?]) {
         guard !changes.isEmpty else { return }
@@ -145,6 +163,9 @@ final class WordHighlights {
         let verses = Set(marks.keys.map(\.verseKey)).union([current?.verseKey].compactMap { $0 })
         marks = [:]
         current = nil
+        let wasRevealed = !revealed.isEmpty
+        revealed = []
+        if wasRevealed, isHidden { for view in views.allObjects { view.contentChanged() } }
         activeVerse = nil
         activeWord = nil
         flaggedCount = 0
@@ -243,7 +264,7 @@ final class QuranTextCanvas: UIView {
                 .map { (piece.words.text as NSString).substring(with: piece.words.words[$0].range) }
                 .joined(separator: " ")
         }.joined(separator: " ")
-        units = Self.makeUnits(pieces, style: style, hidden: hidden)
+        units = Self.makeUnits(pieces, style: style, hidden: hidden ? WordHighlights.shared.revealed : nil)
         spaceWidth = Self.width(of: NSAttributedString(string: " ", attributes: Self.baseAttributes(style)))
         laidOutSize = .zero
         setNeedsDisplay()
@@ -264,7 +285,7 @@ final class QuranTextCanvas: UIView {
     static func naturalWidth(of pieces: [QuranTextPiece], fontSize: CGFloat) -> CGFloat {
         var style = QuranTextStyle()
         style.fontSize = fontSize
-        let units = makeUnits(pieces, style: style, hidden: false)
+        let units = makeUnits(pieces, style: style, hidden: nil)
         let space = width(of: NSAttributedString(string: " ", attributes: baseAttributes(style)))
         return units.reduce(0) { $0 + $1.width } + space * CGFloat(max(units.count - 1, 0))
     }
@@ -278,12 +299,19 @@ final class QuranTextCanvas: UIView {
     private static let colorKey = NSAttributedString.Key(kCTForegroundColorAttributeName as String)
     private static let fontKey = NSAttributedString.Key(kCTFontAttributeName as String)
 
+    private static let strokeKey = NSAttributedString.Key(kCTStrokeWidthAttributeName as String)
+
     private static func baseAttributes(_ style: QuranTextStyle) -> [NSAttributedString.Key: Any] {
-        [fontKey: font(style.fontSize), colorKey: style.ink.cgColor]
+        var attributes: [NSAttributedString.Key: Any] = [fontKey: font(style.fontSize), colorKey: style.ink.cgColor]
+        // Negative stroke width: fill and outline in the text's own colour.
+        if style.weight > 0 { attributes[strokeKey] = -style.weight }
+        return attributes
     }
 
     @MainActor
-    private static func makeUnits(_ pieces: [QuranTextPiece], style: QuranTextStyle, hidden: Bool) -> [Unit] {
+    /// `hidden`: nil when the text is shown; otherwise the words still shown
+    /// (already recited) while the rest are hidden.
+    private static func makeUnits(_ pieces: [QuranTextPiece], style: QuranTextStyle, hidden: Set<WordID>?) -> [Unit] {
         var result: [Unit] = []
         let base = baseAttributes(style)
         var markerAttributes = base
@@ -299,7 +327,7 @@ final class QuranTextCanvas: UIView {
                 let word = verse.words[index]
                 let display = word.displayRange
                 let unit = NSMutableAttributedString(string: text.substring(with: display), attributes: base)
-                if hidden {
+                if let shown = hidden, !shown.contains(word.id) {
                     unit.addAttribute(colorKey, value: clear, range: NSRange(location: 0, length: unit.length))
                 } else {
                     for mark in tajweedMarks {
@@ -470,7 +498,7 @@ final class QuranTextCanvas: UIView {
             // Memorization: blank shapes where the words are.
             if highlights.isHidden {
                 style.placeholder.setFill()
-                for word in line.words {
+                for word in line.words where !highlights.revealed.contains(word.id) {
                     let box = self.rect(of: word.core, in: line)
                     UIBezierPath(roundedRect: CGRect(x: box.minX + size * 0.05, y: line.baseline - size * 0.62,
                                                      width: max(box.width - size * 0.1, size * 0.4), height: size * 0.62),
@@ -499,11 +527,11 @@ final class QuranTextCanvas: UIView {
         context.restoreGState()
 
         // Review marks, drawn under the words so the text stays readable.
-        // While the text is hidden they're kept for when it's shown again.
-        guard !highlights.isHidden else { return }
+        // While the text is hidden, only words already recited show theirs.
         for line in lines {
             for word in line.words {
-                guard let mark = highlights.marks[word.id] else { continue }
+                guard let mark = highlights.marks[word.id],
+                      !highlights.isHidden || highlights.revealed.contains(word.id) else { continue }
                 let box = self.rect(of: word.core, in: line)
                 let y = line.baseline + size * 0.5
                 let path = UIBezierPath()
@@ -554,6 +582,8 @@ struct QuranTextView: UIViewRepresentable {
     let pieces: [QuranTextPiece]
     let style: QuranTextStyle
     var layout: QuranTextCanvas.Layout = .paragraph
+    /// Drawn this many times sharper (the mushaf while zoomed in).
+    var sharpness: CGFloat = 1
     var onTap: ((WordID?) -> Void)?
 
     func makeUIView(context: Context) -> QuranTextCanvas {
@@ -567,6 +597,12 @@ struct QuranTextView: UIViewRepresentable {
         canvas.onTap = onTap
         // Without a tap action, touches go to the views around (scrolling, menus).
         canvas.isUserInteractionEnabled = onTap != nil
+        let screen = canvas.traitCollection.displayScale > 0 ? canvas.traitCollection.displayScale : 3
+        let scale = screen * sharpness
+        if canvas.contentScaleFactor != scale {
+            canvas.contentScaleFactor = scale
+            canvas.setNeedsDisplay()
+        }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView canvas: QuranTextCanvas, context: Context) -> CGSize? {

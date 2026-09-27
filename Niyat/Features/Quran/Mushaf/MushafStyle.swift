@@ -9,7 +9,20 @@ struct MushafOptions: Codable, Equatable {
         var title: String { self == .actions ? "Show verse options" : "Play recitation" }
     }
 
+    /// Bigger text still keeps the 15 printed lines, so it can only grow a
+    /// little: narrower margins and slightly narrower letters.
+    enum TextSize: String, Codable, CaseIterable, Identifiable {
+        case standard, large
+        var id: String { rawValue }
+        var title: String { self == .standard ? "Standard" : "Large" }
+        /// How far a line's letters may be narrowed to fit.
+        var squeeze: CGFloat { self == .standard ? 0.9 : 0.8 }
+        /// Side margin, as a share of the screen width.
+        var margin: CGFloat { self == .standard ? 0.04 : 0.02 }
+    }
+
     var style = MushafStyle.cream
+    var textSize = TextSize.standard
     var tapAction = TapAction.actions
     var showTranslation = true
     var followRecitation = true
@@ -36,6 +49,7 @@ struct MushafOptions: Codable, Equatable {
         }
         let d = MushafOptions()
         style = value(.style, d.style)
+        textSize = value(.textSize, d.textSize)
         tapAction = value(.tapAction, d.tapAction)
         showTranslation = value(.showTranslation, d.showTranslation)
         followRecitation = value(.followRecitation, d.followRecitation)
@@ -43,8 +57,8 @@ struct MushafOptions: Codable, Equatable {
     }
 }
 
-/// Paper colours. These are deliberately fixed (except Night, which follows
-/// the app theme): they recreate a printed page rather than the app's look.
+/// Paper colours. These are deliberately fixed: they recreate a printed page
+/// (or, for Night and Black, a dark screen) rather than the app's look.
 enum MushafStyle: String, Codable, CaseIterable, Identifiable {
     case cream, white, sepia, night, black
 
@@ -82,11 +96,11 @@ enum MushafStyle: String, Codable, CaseIterable, Identifiable {
                          ornament: .rgb(0.33, 0.42, 0.28), label: .rgb(0.36, 0.25, 0.13),
                          band: .rgb(0.97, 0.84, 0.48, 0.5), isLight: true)
         case .night:
-            MushafColors(paper: UIColor(Palette.base.mix(with: .white, by: 0.05)), ink: .rgb(0.96, 0.96, 0.94),
-                         marker: UIColor(Palette.highlight), frame: UIColor(Palette.highlight),
-                         frameFill: UIColor(Palette.base.mix(with: .white, by: 0.1)),
-                         ornament: UIColor(Palette.accent), label: UIColor(Palette.highlight),
-                         band: UIColor(Palette.glow.opacity(0.45)), isLight: false)
+            // Deep night blue with warm, soft text: easy on the eyes in the dark.
+            MushafColors(paper: .rgb(0.06, 0.09, 0.15), ink: .rgb(0.93, 0.89, 0.80),
+                         marker: .rgb(0.80, 0.66, 0.38), frame: .rgb(0.64, 0.56, 0.38), frameFill: .rgb(0.09, 0.13, 0.21),
+                         ornament: .rgb(0.42, 0.58, 0.72), label: .rgb(0.78, 0.74, 0.64),
+                         band: .rgb(0.36, 0.48, 0.70, 0.35), isLight: false)
         case .black:
             // Black for OLED screens: white text, gold ornaments.
             MushafColors(paper: .rgb(0, 0, 0), ink: .rgb(0.96, 0.96, 0.94),
@@ -114,7 +128,8 @@ struct MushafColors {
     let isLight: Bool
 
     /// Text style for a page at a size.
-    func textStyle(size: CGFloat, tajweed: Bool, highContrast: Bool) -> QuranTextStyle {
+    func textStyle(size: CGFloat, tajweed: Bool, highContrast: Bool, weight: CGFloat = 0,
+                   squeeze: CGFloat = MushafMetrics.stretch.lowerBound) -> QuranTextStyle {
         var style = QuranTextStyle()
         style.fontSize = size
         style.ink = ink
@@ -126,10 +141,11 @@ struct MushafColors {
         style.currentWord = isLight ? UIColor(white: 0, alpha: 0.10) : UIColor(white: 1, alpha: 0.16)
         style.placeholder = isLight ? ink.withAlphaComponent(0.10) : ink.withAlphaComponent(0.14)
         style.uncertain = isLight ? UIColor(white: 0.45, alpha: 0.9) : UIColor(white: 0.65, alpha: 0.9)
-        style.mistake = isLight ? UIColor(red: 0.85, green: 0.38, blue: 0.05, alpha: 1)
-                                : UIColor(red: 0.98, green: 0.58, blue: 0.22, alpha: 1)
+        style.mistake = isLight ? UIColor(red: 0.86, green: 0.07, blue: 0.07, alpha: 1)
+                                : UIColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 1)
         // Words may be squeezed or stretched a little to fill each line, as in print.
-        style.stretch = MushafMetrics.stretch
+        style.stretch = squeeze...MushafMetrics.stretch.upperBound
+        style.weight = weight
         return style
     }
 }

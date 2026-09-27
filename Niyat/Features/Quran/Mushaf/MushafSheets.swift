@@ -74,6 +74,7 @@ struct MushafVerseActions: View {
 struct MushafOptionsSheet: View {
     @Binding var options: MushafOptions
     @AppStorage("quran.tajweed") private var tajweedOn = true
+    @AppStorage(QuranTextWeight.key) private var textWeight = QuranTextWeight.regular.rawValue
     @Environment(\.dismiss) private var dismiss
     @State private var store = QuranStore.shared
     @State private var player = RecitationPlayer.shared
@@ -88,6 +89,21 @@ struct MushafOptionsSheet: View {
                         }
                     }
                     .padding(.vertical, 4)
+                }
+
+                Section {
+                    Picker("Text size", selection: $options.textSize) {
+                        ForEach(MushafOptions.TextSize.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    Picker("Thickness", selection: $textWeight) {
+                        ForEach(QuranTextWeight.allCases) { Text($0.title).tag($0.rawValue) }
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Text")
+                } footer: {
+                    Text("Pages keep the 15 lines of the printed mushaf, so the text can only grow a little here. For much bigger text, read verse by verse (Qur'an settings › Arabic size).")
                 }
 
                 Section {

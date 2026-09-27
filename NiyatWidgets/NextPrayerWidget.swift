@@ -30,6 +30,7 @@ struct NextPrayerView: View {
                 NoLocationView()
             }
         }
+        .fontDesign(.rounded)
         .containerBackground(for: .widget) {
             if family == .systemSmall {
                 if let next = entry.next {
@@ -44,35 +45,30 @@ struct NextPrayerView: View {
     }
 
     private func small(_ next: PrayerTime) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Image(systemName: next.name.symbolName)
-                    .foregroundStyle(Color.white)
-                Spacer()
-                Text(next.name.arabicName)
-                    .font(.calligraphy(size: 20))
-                    .foregroundStyle(.white)
-            }
-            Spacer(minLength: 0)
-            Text(next.name.displayName(on: next.date))
-                .font(.headline)
-                .foregroundStyle(Color.white)
+        VStack(spacing: 2) {
+            Image(systemName: next.name.symbolName)
+                .font(.system(size: 15, weight: .semibold))
+            Text(next.name.arabicName)
+                .font(.calligraphy(size: 22))
+                .lineLimit(1)
             Text(next.date.shortTime)
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.system(size: 30, weight: .bold, design: .rounded))
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
             Text(next.date, style: .relative)
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.8))
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.85))
+                .multilineTextAlignment(.center)
             if let name = entry.locationName {
                 Text(name)
-                    .font(.caption2)
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
                     .lineLimit(1)
                     .foregroundStyle(.white.opacity(0.6))
             }
         }
         .foregroundStyle(.white)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func circular(_ next: PrayerTime) -> some View {
@@ -91,7 +87,7 @@ struct NextPrayerView: View {
     }
 
     private func rectangular(_ next: PrayerTime) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .center, spacing: 1) {
             Label(next.name.displayName(on: next.date), systemImage: next.name.symbolName)
                 .font(.headline)
                 .widgetAccentable()
@@ -99,8 +95,9 @@ struct NextPrayerView: View {
                 .font(.body.weight(.semibold))
             Text(next.date, style: .relative)
                 .font(.caption)
+                .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
     }
 
     private func inline(_ next: PrayerTime) -> some View {

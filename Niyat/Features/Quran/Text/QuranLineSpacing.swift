@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Line spacing for Qur'an text in the verse-by-verse reader, as line height
@@ -8,4 +9,31 @@ enum QuranLineSpacing {
     static let key = "quran.lineHeight"
     static let standard = 1.6
     static let range = 1.5...2.5
+}
+
+/// How thick the Arabic is drawn, for readers who find the thin strokes hard
+/// to see. Shared by the verse cards and the mushaf.
+enum QuranTextWeight: Int, CaseIterable, Identifiable {
+    case regular, bold, heavy
+
+    static let key = "quran.textWeight"
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .regular: "Normal"
+        case .bold: "Bold"
+        case .heavy: "Heavy"
+        }
+    }
+
+    /// Outline width as a percentage of the text size.
+    var stroke: CGFloat {
+        switch self {
+        case .regular: 0
+        case .bold: 2.5
+        case .heavy: 5
+        }
+    }
 }

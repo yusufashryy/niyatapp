@@ -98,6 +98,7 @@ struct TasbihWidgetView: View {
             }
             .buttonStyle(.plain)
         }
+        .fontDesign(.rounded)
         .containerBackground(for: .widget) {
             WidgetBackground()
         }

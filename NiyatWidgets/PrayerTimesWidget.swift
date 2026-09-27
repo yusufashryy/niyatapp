@@ -1,7 +1,8 @@
 import SwiftUI
 import WidgetKit
 
-/// Medium/large Home Screen widget with the whole day's times.
+/// The whole day's times: medium and large on the Home Screen, and a compact
+/// two-column version for the Lock Screen.
 struct PrayerTimesWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "PrayerTimesWidget", provider: PrayerProvider()) { entry in
@@ -9,7 +10,7 @@ struct PrayerTimesWidget: Widget {
         }
         .configurationDisplayName("Prayer Times")
         .description("All of today's prayer times.")
-        .supportedFamilies([.systemMedium, .systemLarge])
+        .supportedFamilies([.systemMedium, .systemLarge, .accessoryRectangular])
     }
 }
 
@@ -20,17 +21,47 @@ struct PrayerTimesView: View {
     var body: some View {
         Group {
             if let schedule = entry.schedule {
-                if family == .systemLarge {
-                    large(schedule)
-                } else {
-                    medium(schedule)
+                switch family {
+                case .systemLarge: large(schedule)
+                case .accessoryRectangular: lockScreen(schedule)
+                default: medium(schedule)
                 }
             } else {
                 NoLocationView().foregroundStyle(.white)
             }
         }
+        .fontDesign(.rounded)
         .containerBackground(for: .widget) {
-            WidgetBackground()
+            if family == .accessoryRectangular { Color.clear } else { WidgetBackground() }
+        }
+    }
+
+    /// Six times in two columns, the next prayer marked with a filled dot.
+    private func lockScreen(_ schedule: DaySchedule) -> some View {
+        let times = schedule.times
+        return HStack(alignment: .top, spacing: 12) {
+            lockColumn(Array(times.prefix(3)))
+            lockColumn(Array(times.dropFirst(3).prefix(3)))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func lockColumn(_ times: [PrayerTime]) -> some View {
+        VStack(alignment: .trailing, spacing: 1) {
+            ForEach(times) { time in
+                let isNext = time.id == entry.next?.id
+                HStack(spacing: 4) {
+                    Text(time.date, format: .dateTime.hour(.defaultDigits(amPM: .omitted)).minute())
+                        .monospacedDigit()
+                    Text(time.name.arabicName)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Image(systemName: isNext ? "circle.fill" : "circle")
+                        .font(.system(size: 6, weight: .bold))
+                }
+                .font(.system(size: 12, weight: isNext ? .bold : .medium))
+                .widgetAccentable(isNext)
+            }
         }
     }
 

@@ -2,9 +2,15 @@ import SwiftUI
 import UIKit
 
 struct SurahReaderView: View {
-    let surahID: Int
+    /// The surah shown. Live recitation can move it to another surah.
+    @State private var surahID: Int
     /// Hafs verse number to open at (from bookmarks or "continue reading").
     let startVerse: Int?
+
+    init(surahID: Int, startVerse: Int?) {
+        _surahID = State(initialValue: surahID)
+        self.startVerse = startVerse
+    }
 
     @Environment(AppModel.self) private var model
     @Environment(\.colorSchemeContrast) private var contrast
@@ -17,6 +23,7 @@ struct SurahReaderView: View {
     @AppStorage("quran.showTranslation") private var showTranslation = true
     @AppStorage("quran.tajweed") private var tajweedOn = true
     @AppStorage(QuranLineSpacing.key) private var lineHeight = QuranLineSpacing.standard
+    @AppStorage(QuranTextWeight.key) private var textWeight = QuranTextWeight.regular.rawValue
     @State private var tajweedStore = TajweedStore.shared
     @State private var didScroll = false
     @State private var showSettings = false
@@ -99,6 +106,11 @@ struct SurahReaderView: View {
             .onChange(of: player.current) { _, current in
                 guard let current, current.surah == surahID else { return }
                 follow(current, animated: true)
+            }
+            // Recited from another surah (or far away): go there and keep listening.
+            .onChange(of: live.jump) { _, jump in
+                guard let jump else { return }
+                follow(jump.word)
             }
             // Reciting yourself: the same, verse by verse.
             .onChange(of: highlights.activeVerse) { _, verse in
@@ -267,6 +279,7 @@ struct SurahReaderView: View {
         style.tajweed = showsTajweed
         style.dark = true
         style.highContrast = contrast == .increased
+        style.weight = (QuranTextWeight(rawValue: textWeight) ?? .regular).stroke
         return style
     }
 
@@ -279,6 +292,23 @@ struct SurahReaderView: View {
             startListening()
         } else {
             showIntro = true
+        }
+    }
+
+    /// Moves to the surah and verse of `word` and listens from there.
+    private func follow(_ word: WordID) {
+        if word.surah != surahID { surahID = word.surah }
+        let verses = store.verses(for: word.surah)
+        let words = verses.map { QuranWords.shared.words(for: $0, edition: store.edition) }
+        var start = 0
+        for verseWords in words {
+            if verseWords.key.verse >= word.verse { break }
+            start += verseWords.words.count
+        }
+        live.move(verses: words, at: start + word.index, searchingAhead: 300)
+        let target = word.surah * 1000 + word.verse
+        DispatchQueue.main.async {
+            withAnimation(.smooth(duration: 0.5)) { position.scrollTo(id: target, anchor: .center) }
         }
     }
 

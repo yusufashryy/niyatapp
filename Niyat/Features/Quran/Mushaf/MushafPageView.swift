@@ -22,6 +22,7 @@ struct MushafPageView: View {
     @State private var highlights = WordHighlights.shared
     @AppStorage("quran.mushafPage") private var page = 1
     @AppStorage("quran.tajweed") private var tajweedOn = true
+    @AppStorage(QuranTextWeight.key) private var textWeight = QuranTextWeight.regular.rawValue
     @State private var options = MushafOptions.load()
     @State private var selected: Verse?
     /// Show the verse options at the top when the tapped verse is low on the page.
@@ -117,6 +118,12 @@ struct MushafPageView: View {
             follow(WordID(surah: displayed.surah, verse: displayed.number, index: 0))
         }
         .onChange(of: live.isListening) { _, _ in updateIdleTimer() }
+        // Recited from somewhere else in the Qur'an: go to that page and listen there.
+        .onChange(of: live.jump) { _, jump in
+            guard let jump else { return }
+            let target = layout.page(containing: jump.word)
+            if target != page { withAnimation(.smooth) { page = target } }
+        }
         .onAppear {
             page = min(max(page, 1), MushafLayout.pageCount)
             updateIdleTimer()
@@ -148,7 +155,8 @@ struct MushafPageView: View {
         TabView(selection: $page) {
             ForEach(1...MushafLayout.pageCount, id: \.self) { number in
                 MushafPage(number: number, isCurrent: number == page, colors: colors, tajweed: showsTajweed,
-                           highContrast: contrast == .increased) { word, row in
+                           highContrast: contrast == .increased, textSize: options.textSize,
+                           weight: (QuranTextWeight(rawValue: textWeight) ?? .regular).stroke) { word, row in
                     tapped(word, row: row)
                 }
                 .environment(\.layoutDirection, .leftToRight)

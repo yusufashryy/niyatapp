@@ -296,6 +296,20 @@ final class RecitationTrackerTests: XCTestCase {
         XCTAssertTrue(tracker.flagged.isEmpty)
     }
 
+    /// Reciting from another surah: the phrase is found anywhere in the Qur'an.
+    @MainActor
+    func testLocatesAPhraseAnywhere() async {
+        let store = await loadUthmani()
+        let verses = store.surahs.flatMap { store.verses(for: $0.id) }
+            .map { VerseWords(surah: $0.surah, verse: $0.number, text: $0.arabic) }
+        let locator = QuranLocator(verses: verses)
+        XCTAssertEqual(locator.locate(speech(14, 1, from: 2, to: 10)), WordID(surah: 14, verse: 1, index: 9))
+        XCTAssertEqual(locator.locate(speech(2, 255, from: 0, to: 8)), WordID(surah: 2, verse: 255, index: 7))
+        // Too short, or not Qur'an: not placed.
+        XCTAssertNil(locator.locate(["الحمد", "لله"]))
+        XCTAssertNil(locator.locate("هذا كلام عادي عن الطقس اليوم".split(separator: " ").map(String.init)))
+    }
+
     /// Timing a reciter's recording: only clearly recognised words are placed.
     @MainActor
     func testMatchedPairsPlaceOnlyRecognisedWords() async {

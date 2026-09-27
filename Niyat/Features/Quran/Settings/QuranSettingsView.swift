@@ -14,6 +14,7 @@ struct QuranSettingsView: View {
     @AppStorage("quran.tajweed") private var tajweedOn = true
     @AppStorage("quran.readingLayout") private var readingLayout = "verses"
     @AppStorage(QuranLineSpacing.key) private var lineHeight = QuranLineSpacing.standard
+    @AppStorage(QuranTextWeight.key) private var textWeight = QuranTextWeight.regular.rawValue
     @AppStorage(ReciterWordSync.settingKey) private var wordSync = true
     @State private var speechStatus = SFSpeechRecognizer.authorizationStatus()
     @State private var speechOnDevice = SFSpeechRecognizer(locale: Locale(identifier: "ar-SA"))?.supportsOnDeviceRecognition ?? false
@@ -81,7 +82,10 @@ struct QuranSettingsView: View {
                     }
                     VStack(alignment: .leading) {
                         LabeledContent("Arabic size", value: "\(Int(arabicSize))")
-                        Slider(value: $arabicSize, in: 20...48, step: 2)
+                        Slider(value: $arabicSize, in: 20...64, step: 2)
+                    }
+                    Picker("Thickness", selection: $textWeight) {
+                        ForEach(QuranTextWeight.allCases) { Text($0.title).tag($0.rawValue) }
                     }
                     VStack(alignment: .leading) {
                         LabeledContent("Line spacing", value: lineHeight <= QuranLineSpacing.standard + 0.01 ? "Tight, like print" : String(format: "%.1f×", lineHeight))

@@ -94,9 +94,15 @@ final class AppModel {
         }
         WidgetCenter.shared.reloadAllTimelines()
         #if SCREEN_TIME
-        FocusScheduler.reschedule()
+        // Screen Time calls wait for an iOS service: never on the main thread.
+        Self.focusQueue.async { FocusScheduler.reschedule() }
         #endif
     }
+
+    #if SCREEN_TIME
+    /// One reschedule at a time, off the main thread.
+    private static let focusQueue = DispatchQueue(label: "niyat.prayerLock", qos: .utility)
+    #endif
 
     // MARK: Prayer journal
 

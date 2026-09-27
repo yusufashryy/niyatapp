@@ -102,6 +102,7 @@ struct PrayerDialWidgetView: View {
                 NoLocationView().foregroundStyle(.white)
             }
         }
+        .fontDesign(.rounded)
         .containerBackground(for: .widget) { WidgetBackground() }
     }
 
@@ -156,6 +157,7 @@ struct CountdownRingView: View {
                 Image(systemName: "location.slash")
             }
         }
+        .fontDesign(.rounded)
         .containerBackground(for: .widget) { Color.clear }
     }
 }
@@ -199,6 +201,7 @@ struct PrayerLogWidgetView: View {
                 NoLocationView().foregroundStyle(.white)
             }
         }
+        .fontDesign(.rounded)
         .containerBackground(for: .widget) { WidgetBackground() }
     }
 
@@ -254,23 +257,24 @@ struct StreakWidgetView: View {
         Group {
             switch family {
             case .accessoryRectangular:
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(spacing: 2) {
                     Label("\(entry.prayerStreak)-day prayer streak", systemImage: "flame.fill")
                         .widgetAccentable()
                     Label("\(entry.quranStreak)-day Qur'an streak", systemImage: "book.fill")
                 }
                 .font(.caption.weight(.semibold))
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity)
             case .systemMedium:
                 HStack(spacing: 16) {
                     streaks
                     week
                 }
             default:
-                streaks
+                streaks.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .foregroundStyle(.white)
+        .fontDesign(.rounded)
         .containerBackground(for: .widget) {
             if family == .accessoryRectangular { Color.clear } else { WidgetBackground() }
         }
@@ -380,6 +384,7 @@ struct QuranGoalWidgetView: View {
             }
         }
         .widgetURL(URL(string: "niyat://quran"))
+        .fontDesign(.rounded)
         .containerBackground(for: .widget) {
             if family == .systemSmall { WidgetBackground() } else { Color.clear }
         }
@@ -434,6 +439,7 @@ struct HijriDateWidgetView: View {
                 .foregroundStyle(.white)
             }
         }
+        .fontDesign(.rounded)
         .containerBackground(for: .widget) {
             if family == .systemSmall { WidgetBackground() } else { Color.clear }
         }

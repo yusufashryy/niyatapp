@@ -71,7 +71,17 @@ final class LiveRecitation {
         var id: VerseKey { key }
     }
 
+    /// The reciter was found somewhere else in the Qur'an: the reader should
+    /// go there (the page or surah), then call `move`.
+    struct Jump: Equatable {
+        let word: WordID
+        let serial: Int
+    }
+
     private(set) var status = Status.idle
+    private(set) var jump: Jump?
+    /// Set briefly when a word sounded clearly different, for a quick notice.
+    private(set) var mistakeNotice: Int = 0
     private(set) var isOnDevice = false
     /// Which reading the words are being compared with.
     private(set) var edition: QuranEdition = .uthmani
@@ -98,6 +108,10 @@ final class LiveRecitation {
     /// Requests that ended at once with nothing heard (recogniser failing).
     @ObservationIgnored private var quickFailures = 0
     @ObservationIgnored private var requestStarted = Date.distantPast
+    /// Finds a phrase anywhere in the Qur'an (built once per reading, off the main thread).
+    @ObservationIgnored private var locator: (edition: QuranEdition, value: QuranLocator)?
+    @ObservationIgnored private var buildingLocator = false
+    @ObservationIgnored private var lastJumpGeneration = -1
 
     private init() {}
 
@@ -129,6 +143,7 @@ final class LiveRecitation {
         guard status == .starting else { return }
 
         self.edition = edition
+        prepareLocator()
         prepare(verses: verses, at: start, searchingAhead: searchingAhead)
         isOnDevice = recognizer.supportsOnDeviceRecognition
         RecitationPlayer.shared.stop()
@@ -136,6 +151,14 @@ final class LiveRecitation {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.record, mode: .measurement, options: .duckOthers)
             try session.setActive(true, options: .notifyOthersOnDeactivation)
+            // A microphone with no usable format (in a call, or none at all)
+            // would crash installTap instead of throwing.
+            let format = engine.inputNode.outputFormat(forBus: 0)
+            guard format.sampleRate > 0, format.channelCount > 0 else {
+                try? session.setActive(false, options: .notifyOthersOnDeactivation)
+                status = .unavailable("The microphone isn't available right now. End any call or recording and try again.")
+                return
+            }
             Self.installTap(on: engine.inputNode, sending: requests)
             engine.prepare()
             try engine.start()
@@ -261,6 +284,7 @@ final class LiveRecitation {
         case .lost: status = .lost
         case .following: status = .following
         }
+        if result != .following { lookElsewhere(for: words.isEmpty ? lastHeard : words, tracker: tracker) }
         publish()
         if isFinal {
             finalTimer?.cancel()
@@ -291,6 +315,34 @@ final class LiveRecitation {
         }
     }
 
+    // MARK: Anywhere in the Qur'an
+
+    private func prepareLocator() {
+        guard locator?.edition != edition, !buildingLocator else { return }
+        buildingLocator = true
+        let store = QuranStore.shared
+        let edition = edition
+        let texts = store.surahs.flatMap { store.verses(for: $0.id) }.map { ($0.surah, $0.number, $0.arabic) }
+        Task.detached(priority: .utility) {
+            let built = QuranLocator(verses: texts.map { VerseWords(surah: $0.0, verse: $0.1, text: $0.2) })
+            await MainActor.run {
+                LiveRecitation.shared.locator = (edition, built)
+                LiveRecitation.shared.buildingLocator = false
+            }
+        }
+    }
+
+    /// Heard words that don't fit the text around the place: if they're
+    /// clearly somewhere else (another surah, or far away), go there. Once per utterance.
+    private func lookElsewhere(for heard: [String], tracker: RecitationTracker) {
+        guard lastJumpGeneration != generation, let locator, locator.edition == edition,
+              let word = locator.value.locate(heard) else { return }
+        // Close by in the text being followed: the tracker finds it itself.
+        if let index = tracker.tokens.firstIndex(where: { $0.id == word }), abs(index - tracker.focus) < 300 { return }
+        lastJumpGeneration = generation
+        jump = Jump(word: word, serial: (jump?.serial ?? 0) + 1)
+    }
+
     /// Sends the tracker's state to the highlight system: the current word,
     /// and marks for words to review. Only changes are sent.
     private func publish() {
@@ -310,8 +362,13 @@ final class LiveRecitation {
             }
             if shownMarks[id] != mark { changes[id] = .some(mark) }
         }
+        if changes.values.contains(where: { $0 == .mistake }) { mistakeNotice += 1 }
         for (id, mark) in changes { shownMarks[id] = mark }
         WordHighlights.shared.updateMarks(changes)
+        // Memorisation: words recited so far show through the hidden text.
+        var passed: [WordID] = tracker.committed.keys.map { tracker.tokens[$0].id }
+        passed += tracker.provisional.compactMap { $0.value == .matched ? tracker.tokens[$0.key].id : nil }
+        WordHighlights.shared.reveal(passed)
     }
 
     // MARK: Off the main thread

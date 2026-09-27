@@ -10,9 +10,36 @@ struct LiveRecitationStatus: View {
     var light = false
     @State private var live = LiveRecitation.shared
     @State private var pulse = false
+    /// "Sounded different", shown for a moment in bright red.
+    @State private var showMistake = false
+    @State private var hideTask: Task<Void, Never>?
 
     var body: some View {
-        if let text {
+        content
+            .haptic(.warning, trigger: live.mistakeNotice)
+            .onChange(of: live.mistakeNotice) { _, _ in
+                withAnimation(.smooth) { showMistake = true }
+                hideTask?.cancel()
+                hideTask = Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.smooth) { showMistake = false }
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if showMistake, live.isListening {
+            Label("Sounded different", systemImage: "exclamationmark.circle.fill")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color(red: 1.0, green: 0.23, blue: 0.19), in: .capsule)
+                .transition(.scale(scale: 0.9).combined(with: .opacity))
+                .accessibilityLabel("A word sounded different")
+        } else if let text {
             HStack(spacing: 6) {
                 Circle()
                     .fill(dot)

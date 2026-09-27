@@ -10,20 +10,42 @@ struct MushafPage: View {
     let colors: MushafColors
     let tajweed: Bool
     let highContrast: Bool
+    var textSize = MushafOptions.TextSize.standard
+    var weight: CGFloat = 0
     /// A word was tapped (nil: outside the text), and on which line.
     let onTap: (WordID?, Int) -> Void
 
     @State private var store = QuranStore.shared
     @State private var goal = QuranGoalModel.shared
     @State private var readTask: Task<Void, Never>?
+    // Pinch to zoom: the settled zoom and pan, and the gesture in progress.
+    @State private var zoom: CGFloat = 1
+    @State private var pan: CGSize = .zero
+    @State private var anchor: UnitPoint = .center
+    @GestureState private var pinch: CGFloat = 1
+    @GestureState private var drag: CGSize = .zero
+
+    private static let maxZoom: CGFloat = 3
 
     var body: some View {
         GeometryReader { geo in
             if let text = MushafPageText.page(number) {
+                let scale = min(max(zoom * pinch, 1), Self.maxZoom)
                 content(text, size: geo.size)
+                    .scaleEffect(scale, anchor: anchor)
+                    .offset(clamped(CGSize(width: pan.width + drag.width, height: pan.height + drag.height),
+                                    scale: scale, size: geo.size))
+                    .clipped()
+                    .contentShape(.rect)
+                    .gesture(magnify)
+                    // While zoomed, dragging moves around the page instead of turning it.
+                    .highPriorityGesture(panning(size: geo.size), including: zoom > 1 ? .all : .subviews)
             } else {
                 Color.clear
             }
+        }
+        .onChange(of: isCurrent) { _, current in
+            if !current { resetZoom() }
         }
         .onChange(of: isCurrent, initial: true) { _, current in
             readTask?.cancel()
@@ -42,13 +64,53 @@ struct MushafPage: View {
         .onDisappear { readTask?.cancel() }
     }
 
+    private var magnify: some Gesture {
+        MagnifyGesture()
+            .updating($pinch) { value, state, _ in state = value.magnification }
+            .onChanged { value in
+                if zoom == 1 { anchor = value.startAnchor }
+            }
+            .onEnded { value in
+                let settled = min(max(zoom * value.magnification, 1), Self.maxZoom)
+                if settled < 1.08 {
+                    withAnimation(.smooth) { resetZoom() }
+                } else {
+                    zoom = settled
+                }
+            }
+    }
+
+    private func panning(size: CGSize) -> some Gesture {
+        DragGesture()
+            .updating($drag) { value, state, _ in state = value.translation }
+            .onEnded { value in
+                pan = clamped(CGSize(width: pan.width + value.translation.width, height: pan.height + value.translation.height),
+                              scale: zoom, size: size)
+            }
+    }
+
+    /// Keeps the zoomed page covering the screen: scaled about the anchor,
+    /// its edges may move in by at most the extra size on each side.
+    private func clamped(_ offset: CGSize, scale: CGFloat, size: CGSize) -> CGSize {
+        let extraX = (scale - 1) * size.width, extraY = (scale - 1) * size.height
+        return CGSize(width: min(max(offset.width, -extraX * (1 - anchor.x)), extraX * anchor.x),
+                      height: min(max(offset.height, -extraY * (1 - anchor.y)), extraY * anchor.y))
+    }
+
+    private func resetZoom() {
+        zoom = 1
+        pan = .zero
+        anchor = .center
+    }
+
     private func content(_ text: MushafPageText, size: CGSize) -> some View {
-        let margin = MushafMetrics.margin(for: size.width)
+        let margin = MushafMetrics.margin(for: size.width, share: textSize.margin)
         let width = size.width - margin * 2
         let linesHeight = max(size.height - MushafMetrics.headerHeight - MushafMetrics.footerHeight, 100)
         let rowHeight = floor(linesHeight / CGFloat(MushafMetrics.lineCount))
-        let fontSize = MushafMetrics.fontSize(for: text, width: width, rowHeight: rowHeight)
-        let style = colors.textStyle(size: fontSize, tajweed: tajweed, highContrast: highContrast)
+        let fontSize = MushafMetrics.fontSize(for: text, width: width, rowHeight: rowHeight, squeeze: textSize.squeeze)
+        let style = colors.textStyle(size: fontSize, tajweed: tajweed, highContrast: highContrast,
+                                     weight: weight, squeeze: textSize.squeeze)
         let label = Color(colors.label)
 
         return VStack(spacing: 0) {
@@ -95,9 +157,11 @@ struct MushafPage: View {
                 .contentShape(.rect)
                 .onTapGesture { onTap(nil, index) }
         case .basmala(let piece):
-            QuranTextView(pieces: [piece], style: basmalaStyle(style), layout: .centredLine) { _ in onTap(nil, index) }
+            QuranTextView(pieces: [piece], style: basmalaStyle(style), layout: .centredLine,
+                          sharpness: zoom) { _ in onTap(nil, index) }
         case .text(let pieces):
-            QuranTextView(pieces: pieces, style: style, layout: opening ? .centredLine : .justifiedLine) { word in
+            QuranTextView(pieces: pieces, style: style, layout: opening ? .centredLine : .justifiedLine,
+                          sharpness: zoom) { word in
                 onTap(word, index)
             }
         case .empty:

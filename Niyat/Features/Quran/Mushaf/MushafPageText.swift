@@ -115,18 +115,19 @@ enum MushafMetrics {
     /// Lines on a full page.
     static let lineCount = 15
 
-    static func margin(for width: CGFloat) -> CGFloat {
-        max(12, (width * 0.04).rounded())
+    static func margin(for width: CGFloat, share: CGFloat = 0.04) -> CGFloat {
+        max(8, (width * share).rounded())
     }
 
     /// One text size for the whole page: its widest line just fits (squeezed
     /// at most to the stretch limit), no bigger than a typical page, and small
     /// enough for the line height.
     @MainActor
-    static func fontSize(for page: MushafPageText, width: CGFloat, rowHeight: CGFloat) -> CGFloat {
-        let cap = width / (typicalLineWidth * stretch.lowerBound)
+    static func fontSize(for page: MushafPageText, width: CGFloat, rowHeight: CGFloat,
+                         squeeze: CGFloat = stretch.lowerBound) -> CGFloat {
+        let cap = width / (typicalLineWidth * squeeze)
         let widest = page.widths.max() ?? 0
-        let fit = widest > 0 ? width / (widest * stretch.lowerBound) : cap
+        let fit = widest > 0 ? width / (widest * squeeze) : cap
         return max(8, min(cap, fit, rowHeight / 1.45))
     }
 }
