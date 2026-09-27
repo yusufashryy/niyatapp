@@ -2,6 +2,7 @@ import StoreKit
 import SwiftUI
 
 struct MoreView: View {
+    @State private var tipJar = TipJar.shared
     @State private var showTutorial = false
     @Environment(\.openURL) private var openURL
     @Environment(\.requestReview) private var requestReview
@@ -42,8 +43,12 @@ struct MoreView: View {
                     .appearAnimation(1)
 
                     VStack(spacing: 0) {
-                        row("Support Niyat", systemImage: "heart.fill") { SupportView() }
-                        Divider().overlay(Palette.hairline).padding(.leading, 56)
+                        // Only once the tips have loaded from the App Store, so
+                        // nobody lands on a page with nothing to buy.
+                        if !tipJar.products.isEmpty {
+                            row("Support Niyat", systemImage: "heart.fill") { SupportView() }
+                            Divider().overlay(Palette.hairline).padding(.leading, 56)
+                        }
                         row("Send feedback", systemImage: "envelope.fill") { FeedbackView() }
                         Divider().overlay(Palette.hairline).padding(.leading, 56)
                         Button {
@@ -79,6 +84,7 @@ struct MoreView: View {
             }
             .niyatBackground()
             .navigationTitle("More")
+            .task { await tipJar.load() }
             .fullScreenCover(isPresented: $showTutorial) { TutorialView() }
         }
     }
