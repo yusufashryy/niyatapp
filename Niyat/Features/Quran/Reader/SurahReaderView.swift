@@ -120,6 +120,9 @@ struct SurahReaderView: View {
         .niyatBackground()
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
+                if highlights.flaggedCount > 0 {
+                    RecitationReviewPill(count: highlights.flaggedCount) { showReview = true }
+                }
                 if live.isListening || highlights.flaggedCount > 0 {
                     recitationBar.transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -231,14 +234,6 @@ struct SurahReaderView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            if highlights.flaggedCount > 0 {
-                Button { showReview = true } label: {
-                    Label("Review \(highlights.flaggedCount)", systemImage: "text.badge.checkmark")
-                        .font(.subheadline.weight(.semibold).monospacedDigit())
-                }
-                .buttonStyle(.pressable)
-                .foregroundStyle(Palette.highlight)
-            }
             if live.isListening {
                 Button { live.stop() } label: {
                     Label("Stop", systemImage: "stop.fill").font(.subheadline.weight(.semibold))

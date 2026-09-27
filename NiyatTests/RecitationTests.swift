@@ -241,6 +241,36 @@ final class RecitationTrackerTests: XCTestCase {
         XCTAssertEqual(flagged(unsure), [WordID(surah: 14, verse: 1, index: 4): .uncertain])
     }
 
+    /// The recogniser spelling a word a little differently (an extra alef and
+    /// one letter off) still counts as reciting it correctly.
+    @MainActor
+    func testSpellingNoiseCountsAsCorrect() async {
+        var tracker = await makeTracker([(14, 1), (14, 2), (14, 3)])
+        var heard = speech(14, 1)
+        guard let index = heard.indices.first(where: { $0 > 1 && RecitationMatcher.normalize(heard[$0]).count >= 6 }) else {
+            return XCTFail("No long word")
+        }
+        var letters = Array(heard[index])
+        letters[letters.count / 2] = letters[letters.count / 2] == "ت" ? "ث" : "ت"
+        letters.insert("ا", at: 1)
+        heard[index] = String(letters)
+        _ = tracker.update(heard: heard, confidences: sure(heard), isFinal: true)
+        XCTAssertTrue(tracker.flagged.isEmpty, "\(flagged(tracker))")
+        XCTAssertEqual(position(tracker), WordID(surah: 14, verse: 1, index: 15))
+    }
+
+    /// Words the recogniser didn't hear between two utterances aren't marked.
+    @MainActor
+    func testWordsLostBetweenUtterancesAreNotFlagged() async {
+        var tracker = await makeTracker([(14, 1), (14, 2), (14, 3)])
+        let heard = speech(14, 1)
+        let first = Array(heard[..<7]), rest = Array(heard[9...])
+        _ = tracker.update(heard: first, confidences: sure(first), isFinal: true)
+        _ = tracker.update(heard: rest, confidences: sure(rest), isFinal: true)
+        XCTAssertTrue(tracker.flagged.isEmpty, "\(flagged(tracker))")
+        XCTAssertEqual(position(tracker), WordID(surah: 14, verse: 1, index: 15))
+    }
+
     @MainActor
     func testRepeatsPausesAndRestartsAreNotMistakes() async {
         let heard = speech(14, 1)

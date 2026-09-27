@@ -53,7 +53,7 @@ struct RecitationTracker {
     private var locked = false
     private var searchRange: Range<Int> = 0..<0
 
-    enum Kind { case matched, different, skipped, gap }
+    enum Kind { case matched, different, skipped }
 
     // Alignment costs. A match earns a reward, so the best path explains the
     // most speech. Different words cost little (the recogniser mishears);
@@ -124,7 +124,7 @@ struct RecitationTracker {
         }
 
         provisional = [:]
-        guard let last = matched.max(), let first = matched.min() else {
+        guard let last = matched.max() else {
             guard kept.count >= 8 else { return .following }
             // Lost the place: search more widely around it for the next words.
             locked = false
@@ -133,12 +133,14 @@ struct RecitationTracker {
         }
         for step in steps {
             guard let token = step.token, token <= last else { continue }
-            provisional[token] = step.kind
-        }
-        // Resuming a little further on than expected: the words in between
-        // weren't heard. (Bigger jumps are taken as moving on deliberately.)
-        if position != nil, first > expected, first - expected <= 6 {
-            for token in expected..<first where provisional[token] == nil { provisional[token] = .gap }
+            // Spelled a little differently by the recogniser, but clearly the
+            // same word: it counts as recited correctly.
+            if step.kind == .different, let h = step.heard,
+               tokens[token].forms.contains(where: { Self.closeEnough(Array($0.utf16), kept[h]) }) {
+                provisional[token] = .matched
+            } else {
+                provisional[token] = step.kind
+            }
         }
         position = last
 
@@ -152,7 +154,12 @@ struct RecitationTracker {
     /// Ends the utterance in progress (the reciter stopped), judging what was heard.
     mutating func finishUtterance() {
         for (token, kind) in provisional {
-            committed[token] = kind == .matched ? .correct : .uncertain
+            switch kind {
+            case .matched: committed[token] = .correct
+            case .different: committed[token] = .uncertain
+            // Not heard at all: left unmarked rather than guessed at.
+            case .skipped: break
+            }
         }
         provisional = [:]
         if let position { expected = position + 1 }
@@ -173,16 +180,12 @@ struct RecitationTracker {
                 let close = Self.distance(word, target) * 2 <= max(word.count, target.count)
                 committed[token] = confidences[heardIndex] >= 0.5 && !close ? .mistake : .uncertain
             case .skipped:
+                // Only a clear skip (words heard on both sides) is marked;
+                // otherwise the recogniser probably just dropped it.
                 let before = steps[..<offset].filter { $0.kind == .matched }.suffix(2)
                 let after = steps[(offset + 1)...].filter { $0.kind == .matched }.prefix(2)
-                committed[token] = before.count == 2 && after.count == 2 ? .skipped : .uncertain
-            case .gap:
-                committed[token] = .uncertain
+                if before.count == 2, after.count == 2 { committed[token] = .skipped }
             }
-        }
-        // Gaps don't appear as steps.
-        for (token, kind) in provisional where kind == .gap && committed[token] == nil {
-            committed[token] = .uncertain
         }
         provisional = [:]
     }
@@ -314,6 +317,19 @@ struct RecitationTracker {
         let allowed = max(1, max(a.count, b.count) / 4)
         guard abs(a.count - b.count) <= allowed else { return false }
         return distance(a, b) <= allowed
+    }
+
+    /// Looser than `similar`, for judging a word already placed: long vowels
+    /// written or left out (common between the Uthmani text and everyday
+    /// spelling) are ignored, and a third of the letters may differ.
+    static func closeEnough(_ a: [UInt16], _ b: [UInt16]) -> Bool {
+        if similar(a, b) { return true }
+        let alef: UInt16 = 0x0627
+        let x = a.filter { $0 != alef }, y = b.filter { $0 != alef }
+        guard !x.isEmpty, !y.isEmpty else { return false }
+        let allowed = max(1, max(x.count, y.count) / 3)
+        guard abs(x.count - y.count) <= allowed else { return false }
+        return distance(x, y) <= allowed
     }
 
     /// Joining or splitting words is only accepted when spelling explains it.

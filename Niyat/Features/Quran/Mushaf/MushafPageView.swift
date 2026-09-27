@@ -71,7 +71,15 @@ struct MushafPageView: View {
                     .transition(.move(edge: actionsAtTop ? .top : .bottom).combined(with: .opacity))
             }
         }
-        .safeAreaInset(edge: .bottom) { controls(colors) }
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 8) {
+                if highlights.flaggedCount > 0 {
+                    RecitationReviewPill(count: highlights.flaggedCount) { showReview = true }
+                }
+                controls(colors)
+            }
+            .animation(.smooth, value: highlights.flaggedCount > 0)
+        }
         .overlay(alignment: .top) {
             if let error = player.errorMessage {
                 Text(error)
@@ -214,17 +222,6 @@ struct MushafPageView: View {
                 barButton(isPageBookmarked ? "Remove bookmark" : "Bookmark this page",
                           isPageBookmarked ? "bookmark.fill" : "bookmark",
                           tint: isPageBookmarked ? active : tint) { bookmarkPage() }
-            }
-            if highlights.flaggedCount > 0 {
-                Button { showReview = true } label: {
-                    Label("\(highlights.flaggedCount)", systemImage: "text.badge.checkmark")
-                        .font(.subheadline.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(active)
-                        .padding(.horizontal, 8)
-                        .frame(height: 40)
-                }
-                .buttonStyle(.pressable)
-                .accessibilityLabel("Review \(highlights.flaggedCount) marked words")
             }
             Spacer(minLength: 0)
             barButton(highlights.isHidden ? "Show the text" : "Hide the text to recite from memory",

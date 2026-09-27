@@ -33,6 +33,11 @@ struct QuranLocator {
     /// The word the reciter has reached, if the phrase heard can be placed
     /// with confidence. Uses the last dozen words heard.
     func locate(_ heard: [String]) -> WordID? {
+        locateIndex(heard).map { ids[$0] }
+    }
+
+    /// Like `locate`, as a position in `ids` (so two places can be compared).
+    func locateIndex(_ heard: [String]) -> Int? {
         let words = heard.map(RecitationMatcher.normalize).filter { !$0.isEmpty }.suffix(12)
         let phrase = Array(words)
         guard phrase.count >= 3 else { return nil }
@@ -44,10 +49,10 @@ struct QuranLocator {
         }
         let ranked = votes.sorted { $0.value > $1.value }
         guard let best = ranked.first else { return nil }
-        // Several word pairs agree (at least half the phrase), and no other place ties.
-        let needed = max(2, (phrase.count - 1) / 2)
+        // Several word pairs agree (at least three, and half the phrase), and no other place ties.
+        let needed = max(3, (phrase.count - 1) / 2)
         guard best.value >= needed, ranked.count < 2 || ranked[1].value < best.value else { return nil }
         let reached = min(max(best.key + phrase.count - 1, 0), ids.count - 1)
-        return ids.indices.contains(reached) ? ids[reached] : nil
+        return ids.indices.contains(reached) ? reached : nil
     }
 }

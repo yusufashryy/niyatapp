@@ -19,6 +19,9 @@ targets:
       - target: FocusMonitor
       - target: FocusShield
       - target: NiyatWatch
+    info:
+      properties:
+        NiyatCloudContainer: iCloud.$(BUNDLE_ID_PREFIX).niyat
     entitlements:
       properties:
         com.apple.developer.family-controls: true

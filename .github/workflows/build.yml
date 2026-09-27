@@ -40,6 +40,12 @@ jobs:
           echo "Prayer Lock targets present: $has"
           [ "$has" = "${{ matrix.variant == 'full' && 'yes' || 'no' }}" ]
 
+      - name: Check Groups uses the entitled iCloud container
+        if: matrix.variant == 'full'
+        run: |
+          grep -A1 "NiyatCloudContainer" Niyat/Support/Info.plist | grep -q 'iCloud\.$(BUNDLE_ID_PREFIX)\.niyat'
+          grep -A2 "icloud-container-identifiers" Niyat/Support/Niyat.entitlements | grep -q 'iCloud\.$(BUNDLE_ID_PREFIX)\.niyat'
+
       - name: Check the privacy manifests are bundled
         run: |
           count=$(grep -c "PrivacyInfo.xcprivacy in Resources" Niyat.xcodeproj/project.pbxproj || true)

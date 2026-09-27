@@ -9,6 +9,8 @@ import UIKit
 
 /// How a word is marked after live recitation.
 enum WordMark: Hashable {
+    /// Recited correctly (soft green behind the word).
+    case correct
     /// Couldn't tell (neutral dotted underline). Never shown as an error.
     case uncertain
     /// Something clearly different was heard.
@@ -36,6 +38,8 @@ struct QuranTextStyle: Equatable {
     /// Soft highlight behind the word being recited.
     var currentWord: UIColor = UIColor(white: 0.55, alpha: 0.30)
     var uncertain: UIColor = UIColor(white: 0.62, alpha: 0.9)
+    /// Soft green behind words recited correctly.
+    var correct: UIColor = UIColor(red: 0.25, green: 0.85, blue: 0.45, alpha: 0.28)
     /// Bright red: something clearly different was heard.
     var mistake: UIColor = UIColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 1)
     /// Memorization mode: blank shapes where the words are.
@@ -154,7 +158,7 @@ final class WordHighlights {
             affected.insert(word.verseKey)
         }
         guard !affected.isEmpty else { return }
-        flaggedCount = marks.count
+        flaggedCount = marks.values.filter { $0 != .correct }.count
         redraw(Array(affected))
     }
 
@@ -505,6 +509,12 @@ final class QuranTextCanvas: UIView {
                                  cornerRadius: size * 0.31).fill()
                 }
             }
+            // Words recited correctly: soft green (only once shown, if hidden).
+            for word in line.words where highlights.marks[word.id] == .correct
+                && (!highlights.isHidden || highlights.revealed.contains(word.id)) {
+                style.correct.setFill()
+                UIBezierPath(roundedRect: self.rect(of: word.core, in: line), cornerRadius: size * 0.3).fill()
+            }
             // The word being recited: a soft highlight.
             if let current = highlights.current, let word = line.words.first(where: { $0.id == current }) {
                 style.currentWord.setFill()
@@ -530,7 +540,7 @@ final class QuranTextCanvas: UIView {
         // While the text is hidden, only words already recited show theirs.
         for line in lines {
             for word in line.words {
-                guard let mark = highlights.marks[word.id],
+                guard let mark = highlights.marks[word.id], mark != .correct,
                       !highlights.isHidden || highlights.revealed.contains(word.id) else { continue }
                 let box = self.rect(of: word.core, in: line)
                 let y = line.baseline + size * 0.5
@@ -539,6 +549,8 @@ final class QuranTextCanvas: UIView {
                 path.addLine(to: CGPoint(x: box.maxX - size * 0.1, y: y))
                 path.lineCapStyle = .round
                 switch mark {
+                case .correct:
+                    continue
                 case .uncertain:
                     path.lineWidth = max(1.5, size * 0.06)
                     path.setLineDash([0.1, size * 0.18], count: 2, phase: 0)

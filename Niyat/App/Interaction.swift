@@ -29,12 +29,11 @@ extension View {
         modifier(AppearAnimation(delay: Double(min(index, 12)) * 0.05, enabled: enabled))
     }
 
-    /// Cards gently shrink and fade as they scroll off the top or bottom.
+    /// Rows coming up from the bottom fade straight in, once, rather than
+    /// following the finger; rows leaving at the top don't fade.
     func scrollFade() -> some View {
-        scrollTransition(.interactive, axis: .vertical) { content, phase in
-            content
-                .opacity(phase.isIdentity ? 1 : 0.4)
-                .scaleEffect(phase.isIdentity ? 1 : 0.95)
+        scrollTransition(.animated(.smooth(duration: 0.35)), axis: .vertical) { content, phase in
+            content.opacity(phase == .bottomTrailing ? 0 : 1)
         }
     }
 }

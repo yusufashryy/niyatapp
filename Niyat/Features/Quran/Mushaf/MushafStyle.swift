@@ -141,6 +141,8 @@ struct MushafColors {
         style.currentWord = isLight ? UIColor(white: 0, alpha: 0.10) : UIColor(white: 1, alpha: 0.16)
         style.placeholder = isLight ? ink.withAlphaComponent(0.10) : ink.withAlphaComponent(0.14)
         style.uncertain = isLight ? UIColor(white: 0.45, alpha: 0.9) : UIColor(white: 0.65, alpha: 0.9)
+        style.correct = isLight ? UIColor(red: 0.10, green: 0.62, blue: 0.28, alpha: 0.24)
+                                : UIColor(red: 0.25, green: 0.85, blue: 0.45, alpha: 0.28)
         style.mistake = isLight ? UIColor(red: 0.86, green: 0.07, blue: 0.07, alpha: 1)
                                 : UIColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 1)
         // Words may be squeezed or stretched a little to fill each line, as in print.

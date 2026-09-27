@@ -112,6 +112,8 @@ final class LiveRecitation {
     @ObservationIgnored private var locator: (edition: QuranEdition, value: QuranLocator)?
     @ObservationIgnored private var buildingLocator = false
     @ObservationIgnored private var lastJumpGeneration = -1
+    /// A place found elsewhere, waiting for the next words to confirm it.
+    @ObservationIgnored private var jumpCandidate: (index: Int, heard: Int)?
 
     private init() {}
 
@@ -235,13 +237,14 @@ final class LiveRecitation {
         fresh.begin(at: start, searchingAhead: searchingAhead)
         tracker = fresh
         lastHeard = []
+        jumpCandidate = nil
     }
 
     // MARK: Review
 
     /// Words marked in this session, by verse.
     func review() -> [ReviewVerse] {
-        let byVerse = Dictionary(grouping: shownMarks, by: { $0.key.verseKey })
+        let byVerse = Dictionary(grouping: shownMarks.filter { $0.value != .correct }, by: { $0.key.verseKey })
         return byVerse.keys.sorted().map { key in
             let words = byVerse[key, default: []].sorted { $0.key < $1.key }
                 .map { ReviewWord(id: $0.key, text: wordText[$0.key] ?? "", mark: $0.value) }
@@ -346,15 +349,34 @@ final class LiveRecitation {
         }
     }
 
+    /// Words needed before looking elsewhere in the Qur'an.
+    private static let wordsBeforeJumping = 6
+
     /// Heard words that don't fit the text around the place: if they're
-    /// clearly somewhere else (another surah, or far away), go there. Once per utterance.
+    /// clearly somewhere else (another surah, or far away), go there. Once per
+    /// utterance, and only after at least six words, when the next words heard
+    /// confirm the same place (so a phrase shared by several surahs, or a
+    /// misheard word, doesn't send the reader away).
     private func lookElsewhere(for heard: [String], tracker: RecitationTracker) {
-        guard lastJumpGeneration != generation, let locator, locator.edition == edition,
-              let word = locator.value.locate(heard) else { return }
+        let count = heard.filter { !RecitationMatcher.normalize($0).isEmpty }.count
+        guard lastJumpGeneration != generation, count >= Self.wordsBeforeJumping,
+              let locator, locator.edition == edition,
+              let index = locator.value.locateIndex(heard) else { return }
+        let word = locator.value.ids[index]
         // Close by in the text being followed: the tracker finds it itself.
-        if let index = tracker.tokens.firstIndex(where: { $0.id == word }), abs(index - tracker.focus) < 300 { return }
-        lastJumpGeneration = generation
-        jump = Jump(word: word, serial: (jump?.serial ?? 0) + 1)
+        if let near = tracker.tokens.firstIndex(where: { $0.id == word }), abs(near - tracker.focus) < 300 {
+            jumpCandidate = nil
+            return
+        }
+        // Confirmed: more words heard since, and they carry on from the same place.
+        if let candidate = jumpCandidate, count > candidate.heard,
+           index >= candidate.index, index - candidate.index <= count - candidate.heard + 3 {
+            jumpCandidate = nil
+            lastJumpGeneration = generation
+            jump = Jump(word: word, serial: (jump?.serial ?? 0) + 1)
+        } else {
+            jumpCandidate = (index, count)
+        }
     }
 
     /// Sends the tracker's state to the highlight system: the current word,
@@ -364,17 +386,22 @@ final class LiveRecitation {
         let current = tracker.position.map { tracker.tokens[$0].id }
         WordHighlights.shared.setCurrent(isListening ? current : nil)
         // Only words this tracker has judged change; a word re-recited
-        // correctly loses its mark.
+        // correctly turns green. Words matched in the utterance still going
+        // on turn green straight away.
         var changes: [WordID: WordMark?] = [:]
         for (index, result) in tracker.committed {
             let id = tracker.tokens[index].id
-            let mark: WordMark? = switch result {
-            case .correct: nil
+            let mark: WordMark = switch result {
+            case .correct: .correct
             case .uncertain: .uncertain
             case .mistake: .mistake
             case .skipped: .skipped
             }
             if shownMarks[id] != mark { changes[id] = .some(mark) }
+        }
+        for (index, kind) in tracker.provisional where kind == .matched && tracker.committed[index] == nil {
+            let id = tracker.tokens[index].id
+            if shownMarks[id] == nil { changes[id] = .some(.correct) }
         }
         if changes.values.contains(where: { $0 == .mistake }) { mistakeNotice += 1 }
         for (id, mark) in changes { shownMarks[id] = mark }

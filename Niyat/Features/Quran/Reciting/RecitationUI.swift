@@ -80,6 +80,38 @@ struct LiveRecitationStatus: View {
     }
 }
 
+/// Words to review after reciting: its own pill that pops up above the
+/// controls (verse by verse and mushaf alike), so it's hard to miss.
+struct RecitationReviewPill: View {
+    let count: Int
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "text.badge.checkmark")
+                Text(count == 1 ? "1 word to review" : "\(count) words to review")
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .opacity(0.7)
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .frame(height: 42)
+            .glassEffect(.regular.tint(Palette.control.opacity(0.55)).interactive(), in: .capsule)
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.pressable)
+        .haptic(.impact(weight: .light), trigger: count > 0) { !$0 && $1 }
+        .animation(.smooth, value: count)
+        .transition(.scale(scale: 0.8, anchor: .bottom).combined(with: .opacity))
+        .accessibilityLabel("Review \(count) marked words")
+    }
+}
+
 /// Shown the first time the microphone is tapped: what live recitation does,
 /// what it doesn't, and what happens to the audio. Permission is only asked
 /// for after this.
@@ -97,8 +129,8 @@ struct ReciteIntroSheet: View {
                 VStack(alignment: .leading, spacing: 18) {
                     point("text.word.spacing", "Follows you word by word",
                           "Recite from anywhere on the page. Niyat finds your place, highlights the word you're on and turns the pages with you.")
-                    point("checkmark.bubble", "Marks words to double-check",
-                          "Words you skip, or that sound different, get a quiet underline to review afterwards. It compares words only: it doesn't judge tajweed or pronunciation, and speech recognition can mishear. When unsure, it says so instead of calling it a mistake.")
+                    point("checkmark.bubble", "Shows how it went",
+                          "Words you recite correctly turn green. Words you skip, or that sound different, get an underline to review afterwards. It compares words only: it doesn't judge tajweed or pronunciation, and speech recognition can mishear. When unsure, it says so instead of calling it a mistake.")
                     point("eye.slash", "Recite from memory",
                           "Hide the text with the eye button. Niyat keeps following and marking words; show the text to see them.")
                     point("lock.shield", "Private",
@@ -226,6 +258,7 @@ struct RecitationReviewSheet: View {
 
     private func title(_ mark: WordMark) -> String {
         switch mark {
+        case .correct: "Correct"
         case .mistake: "Sounded different"
         case .skipped: "Skipped"
         case .uncertain: "Couldn't tell"
@@ -255,6 +288,9 @@ struct MarkSwatch: View {
             path.addLine(to: CGPoint(x: size.width - 2, y: size.height / 2))
             let style = QuranTextStyle()
             switch mark {
+            case .correct:
+                context.fill(Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: size.height / 2),
+                             with: .color(Color(style.correct)))
             case .uncertain:
                 context.stroke(path, with: .color(Color(style.uncertain)),
                                style: StrokeStyle(lineWidth: 2.5, lineCap: .round, dash: [0.1, 5]))

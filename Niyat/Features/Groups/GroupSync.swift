@@ -129,7 +129,17 @@ final class GroupSync {
     #if GROUPS
     // MARK: - CloudKit
 
-    @ObservationIgnored private lazy var container = CKContainer.default()
+    /// The container named in the entitlements (Config/full-features.yml).
+    /// Not `CKContainer.default()`: that one is "iCloud.<bundle ID>", which the
+    /// app isn't allowed to use, so iCloud refuses with "Couldn't get container
+    /// configuration".
+    @ObservationIgnored private lazy var container: CKContainer = {
+        if let id = Bundle.main.object(forInfoDictionaryKey: "NiyatCloudContainer") as? String,
+           id.hasPrefix("iCloud."), !id.contains("$(") {
+            return CKContainer(identifier: id)
+        }
+        return CKContainer.default()
+    }()
     private var privateDB: CKDatabase { container.privateCloudDatabase }
     private var sharedDB: CKDatabase { container.sharedCloudDatabase }
     private static let zonePrefix = "Group-"
