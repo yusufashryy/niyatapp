@@ -88,6 +88,8 @@ struct SurahReaderView: View {
                 .scrollTargetLayout()
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
+                // Qur'an text reads best at a book-like width.
+                .readableWidth(820)
             }
             .scrollPosition($position, anchor: .center)
             .onAppear {
@@ -128,6 +130,7 @@ struct SurahReaderView: View {
                 }
                 RecitationMiniPlayer()
             }
+            .readableWidth(600)
             .padding(.bottom, 6)
             .animation(.smooth, value: player.current)
             .animation(.smooth, value: live.isListening)

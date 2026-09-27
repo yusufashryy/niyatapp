@@ -103,7 +103,11 @@ struct MushafPage: View {
         anchor = .center
     }
 
-    private func content(_ text: MushafPageText, size: CGSize) -> some View {
+    private func content(_ text: MushafPageText, size available: CGSize) -> some View {
+        // A printed page's shape: on a wide screen (iPad, landscape) the page
+        // sits in the middle instead of stretching sideways.
+        let size = CGSize(width: min(available.width, available.height * MushafMetrics.pageShape),
+                          height: available.height)
         let margin = MushafMetrics.margin(for: size.width, share: textSize.margin)
         let width = size.width - margin * 2
         let linesHeight = max(size.height - MushafMetrics.headerHeight - MushafMetrics.footerHeight, 100)
@@ -146,6 +150,7 @@ struct MushafPage: View {
         }
         .padding(.horizontal, margin)
         .frame(width: size.width, height: size.height)
+        .frame(width: available.width, height: available.height)
     }
 
     @ViewBuilder

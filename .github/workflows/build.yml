@@ -128,39 +128,80 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify --renderer github-actions
 
+      # The same tour on the biggest iPad, for the App Store's iPad screenshots
+      # (13", 2064 × 2752). Screenshots only: it doesn't fail the build.
+      - name: Run demo tour on iPad
+        if: matrix.variant == 'full'
+        continue-on-error: true
+        timeout-minutes: 12
+        run: |
+          set -o pipefail
+          IPAD=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          for runtime in sorted(devices, reverse=True):
+              if "iOS" in runtime:
+                  pads = [d for d in devices[runtime] if d["name"].startswith("iPad Pro")]
+                  best = [d for d in pads if "13" in d["name"]] or pads
+                  if best:
+                      print(best[0]["udid"]); sys.exit()
+          ')
+          echo "Using iPad $IPAD"
+          xcrun simctl boot "$IPAD" || true
+          xcrun simctl bootstatus "$IPAD" -b
+          xcrun simctl status_bar "$IPAD" override \
+            --time "$(TZ=Europe/London date +%H:%M)" --batteryState charged --batteryLevel 100 --wifiBars 3 || true
+          xcodebuild test \
+            -project Niyat.xcodeproj \
+            -scheme Niyat \
+            -destination "id=$IPAD" \
+            -only-testing:NiyatUITests \
+            -parallel-testing-enabled NO \
+            -resultBundlePath demo/tour-ipad.xcresult \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify --renderer github-actions
+
       - name: Export demo screenshots
         if: always() && matrix.variant == 'full'
         run: |
-          mkdir -p demo/screenshots
-          xcrun xcresulttool export attachments --path demo/tour.xcresult --output-path demo/raw
           python3 - <<'PY'
-          import json, pathlib, shutil
-          raw = pathlib.Path("demo/raw")
+          import json, pathlib, shutil, subprocess
           diagnostics = pathlib.Path("demo/diagnostics")
-          for test in json.loads((raw / "manifest.json").read_text()):
-              for a in test.get("attachments", []):
-                  name = a.get("suggestedHumanReadableName") or a["exportedFileName"]
-                  # Keep only our numbered screenshots ("03 Today"), not Xcode's automatic attachments,
-                  # except hang reports and failure details, which say why a tour failed.
-                  if not name[:2].isdigit():
-                      if name.startswith(("Spindump", "Debug description")):
-                          diagnostics.mkdir(exist_ok=True)
-                          clean = name.split("_0_")[0].replace("/", "-").replace("`", "")
-                          shutil.copy(raw / a["exportedFileName"], diagnostics / f"{clean} {a['exportedFileName'][:8]}.txt")
-                      continue
-                  name = name.split("_0_")[0].replace("/", "-")
-                  if not name.endswith(".png"):
-                      name += ".png"
-                  shutil.copy(raw / a["exportedFileName"], pathlib.Path("demo/screenshots") / name)
+          for bundle, folder in [("demo/tour.xcresult", "screenshots"), ("demo/tour-ipad.xcresult", "screenshots-ipad")]:
+              if not pathlib.Path(bundle).exists():
+                  continue
+              raw = pathlib.Path(f"demo/raw-{folder}")
+              subprocess.run(["xcrun", "xcresulttool", "export", "attachments", "--path", bundle,
+                              "--output-path", str(raw)], check=True)
+              out = pathlib.Path("demo") / folder
+              out.mkdir(parents=True, exist_ok=True)
+              for test in json.loads((raw / "manifest.json").read_text()):
+                  for a in test.get("attachments", []):
+                      name = a.get("suggestedHumanReadableName") or a["exportedFileName"]
+                      # Keep only our numbered screenshots ("03 Today"), not Xcode's automatic attachments,
+                      # except hang reports and failure details, which say why a tour failed.
+                      if not name[:2].isdigit():
+                          if name.startswith(("Spindump", "Debug description")):
+                              diagnostics.mkdir(exist_ok=True)
+                              clean = name.split("_0_")[0].replace("/", "-").replace("`", "")
+                              shutil.copy(raw / a["exportedFileName"], diagnostics / f"{folder} {clean} {a['exportedFileName'][:8]}.txt")
+                          continue
+                      name = name.split("_0_")[0].replace("/", "-")
+                      if not name.endswith(".png"):
+                          name += ".png"
+                      shutil.copy(raw / a["exportedFileName"], out / name)
           PY
-          ls -la demo/screenshots
+          ls -la demo/screenshots demo/screenshots-ipad || true
 
       - name: Upload demo
         if: always() && matrix.variant == 'full'
         uses: actions/upload-artifact@v7
         with:
           name: demo
-          path: demo/screenshots
+          path: |
+            demo/screenshots
+            demo/screenshots-ipad
 
       # Also keep the latest demo on a separate branch (no shared history with
       # the code) so screenshots can be linked from the README.
@@ -173,6 +214,7 @@ jobs:
         run: |
           mkdir -p demo/publish
           cp -R demo/screenshots demo/publish/
+          if [ -d demo/screenshots-ipad ]; then cp -R demo/screenshots-ipad demo/publish/; fi
           if [ -d demo/diagnostics ]; then cp -R demo/diagnostics demo/publish/; fi
           cd demo/publish
           git init -q -b demo-media

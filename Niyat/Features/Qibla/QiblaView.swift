@@ -59,6 +59,7 @@ struct QiblaView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 28)
+            .readableWidth()
         }
         .scrollBounceBehavior(.basedOnSize)
         .animation(.smooth(duration: 0.4), value: aligned)

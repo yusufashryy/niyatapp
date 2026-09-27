@@ -75,6 +75,7 @@ struct MoreView: View {
                     .appearAnimation(3)
                 }
                 .padding(16)
+                .readableWidth()
             }
             .niyatBackground()
             .navigationTitle("More")

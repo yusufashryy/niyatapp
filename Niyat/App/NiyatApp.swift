@@ -91,6 +91,8 @@ struct MainTabView: View {
             Tab("Stats", systemImage: "chart.bar.xaxis", value: .stats) { StatsView() }
             Tab("More", systemImage: "circle.grid.2x2.fill", value: .more) { MoreView() }
         }
+        // iPad: tabs at the top that can open into a sidebar.
+        .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
         .haptic(.selection, trigger: selection)
         .onChange(of: deepLink.pending, initial: true) { _, destination in

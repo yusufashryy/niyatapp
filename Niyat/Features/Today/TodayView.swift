@@ -12,6 +12,7 @@ struct TodayView: View {
                     content(now: context.date)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 28)
+                        .readableWidth()
                 }
                 .scrollEdgeEffectStyle(.soft, for: .top)
                 .background { SkyBackdrop(prayer: skyPrayer(at: context.date)) }

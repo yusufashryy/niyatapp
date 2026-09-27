@@ -67,9 +67,9 @@ Every source is listed in [docs/SOURCES.md](docs/SOURCES.md).
 
 ## Privacy
 
-Everything stays on your iPhone. There is no Niyat server and nothing is collected. Read the [privacy policy](docs/privacy.md).
+Everything stays on your iPhone or iPad. There is no Niyat server and nothing is collected. Read the [privacy policy](docs/privacy.md).
 
-## Put it on your iPhone
+## Put it on your iPhone or iPad
 
 You need a **Mac** with **Xcode** (free from the Mac App Store).
 

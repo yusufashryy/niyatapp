@@ -114,6 +114,8 @@ enum MushafMetrics {
     static let stretch: ClosedRange<CGFloat> = 0.9...1.1
     /// Lines on a full page.
     static let lineCount = 15
+    /// Widest a page gets, as a share of its height (about a printed mushaf).
+    static let pageShape: CGFloat = 0.72
 
     static func margin(for width: CGFloat, share: CGFloat = 0.04) -> CGFloat {
         max(8, (width * share).rounded())

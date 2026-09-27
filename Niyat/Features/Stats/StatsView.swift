@@ -51,6 +51,7 @@ struct StatsView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 28)
+                .readableWidth()
             }
             .niyatBackground()
             .navigationTitle("Stats")

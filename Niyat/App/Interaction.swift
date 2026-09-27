@@ -29,6 +29,12 @@ extension View {
         modifier(AppearAnimation(delay: Double(min(index, 12)) * 0.05, enabled: enabled))
     }
 
+    /// Keeps a screen's content a comfortable width, centred (on iPad and in
+    /// landscape; on iPhone in portrait it changes nothing).
+    func readableWidth(_ width: CGFloat = 700) -> some View {
+        frame(maxWidth: width).frame(maxWidth: .infinity)
+    }
+
     /// Rows coming up from the bottom fade straight in, once, rather than
     /// following the finger; rows leaving at the top don't fade.
     func scrollFade() -> some View {

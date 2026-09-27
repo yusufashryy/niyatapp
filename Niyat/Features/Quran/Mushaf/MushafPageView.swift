@@ -78,6 +78,7 @@ struct MushafPageView: View {
                 }
                 controls(colors)
             }
+            .readableWidth(600)
             .animation(.smooth, value: highlights.flaggedCount > 0)
         }
         .overlay(alignment: .top) {

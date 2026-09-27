@@ -173,7 +173,10 @@ final class DemoTour: XCTestCase {
 
     /// The Liquid Glass tab bar shrinks while scrolling; scroll back first if needed.
     private func openTab(_ name: String) {
-        let button = app.tabBars.buttons[name]
+        // iPhone: the tab bar at the bottom. iPad: tabs at the top, which may
+        // not be a "tab bar" to UI tests.
+        let inTabBar = app.tabBars.buttons[name]
+        let button = inTabBar.exists ? inTabBar : app.buttons[name].firstMatch
         if !button.isHittable {
             app.swipeDown()
             pause(0.5)

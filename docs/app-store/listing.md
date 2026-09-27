@@ -9,10 +9,10 @@ Niyat: Prayer Times & Qur'an
 Salah, Qur'an & Qibla. No ads.
 
 ## Promotional text (170, can change any time)
-Free forever: no ads, no accounts, no tracking. Accurate prayer times, a daily Qur'an habit, Qibla and beautiful widgets, all on your iPhone.
+Free forever: no ads, no accounts, no tracking. Accurate prayer times, a daily Qur'an habit, Qibla and beautiful widgets, on iPhone, iPad and Apple Watch.
 
 ## Description (4000)
-Niyat (نيّة, "intention") helps you keep your prayers and build a daily Qur'an habit. It's free, has no ads, no subscriptions and no accounts, and everything stays on your iPhone.
+Niyat (نيّة, "intention") helps you keep your prayers and build a daily Qur'an habit. It's free, has no ads, no subscriptions and no accounts, and everything stays on your device.
 
 PRAYER TIMES
 • Accurate times for anywhere, calculated on your phone with your choice of method (Muslim World League, ISNA, Umm al-Qura, Egyptian, Karachi and more) and Hanafi or Standard Asr
@@ -89,7 +89,7 @@ Each needs a screenshot of the Support Niyat screen for review. Join the App Sto
 Niyat is free with no login. Tips are optional and unlock nothing. Location is only used to calculate prayer times and the Qibla. Prayer Lock uses Screen Time (Family Controls) to lock apps the user chooses during prayer times. The microphone and speech recognition are only used after the user taps the microphone in the Qur'an reader, to follow their recitation word by word; audio is never recorded or saved. Speech recognition is also used, on the device only, to line up reciters' recordings with the text.
 
 ## Screenshots
-Needed at 6.9" (1320 × 2868). CI's demo tour takes them on the largest iPhone simulator, so they're already the right size: download them from the `demo-media` branch (`screenshots/` folder) on GitHub. Suggested set (up to 10): 03 Today · 06 Quran - Al-Fatiha · 07 Mushaf · 07c Mushaf - memorisation · 08 Qibla · 09 Stats · 09c Year · 11 Tasbih.
+iPhone 6.9" (1320 × 2868) and iPad 13" (2064 × 2752). CI's demo tour takes them on the largest iPhone and iPad simulators, so they're already the right sizes: download them from the `demo-media` branch on GitHub (`screenshots/` for iPhone, `screenshots-ipad/` for iPad). Suggested set (up to 10): 03 Today · 06 Quran - Al-Fatiha · 07 Mushaf · 07c Mushaf - memorisation · 08 Qibla · 09 Stats · 09c Year · 11 Tasbih.
 
 ## Enabling the privacy policy page (free)
 1. On GitHub: repo **Settings › Pages**.

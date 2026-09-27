@@ -17,9 +17,10 @@ configFiles:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: "1"
-    TARGETED_DEVICE_FAMILY: "1"
+    MARKETING_VERSION: "1.1.0"
+    CURRENT_PROJECT_VERSION: "2"
+    # iPhone and iPad.
+    TARGETED_DEVICE_FAMILY: "1,2"
     # Xcode's recommended settings.
     DEAD_CODE_STRIPPING: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES
@@ -58,9 +59,13 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen:
           UIColorName: LaunchBackground
+        # iPhone: portrait. iPad: any way round, and side by side with other apps.
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        # Portrait-only iPhone app, so it opts out of iPad multitasking sizes.
-        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UIAppFonts: [AmiriQuran-Regular.ttf, ArefRuqaa-Bold.ttf]
         UIBackgroundModes: [fetch, audio]
         BGTaskSchedulerPermittedIdentifiers: [$(PRODUCT_BUNDLE_IDENTIFIER).refresh]
