@@ -18,6 +18,9 @@ struct NiyatApp: App {
         // Talks to iOS's notification service: don't hold up launch for it.
         DispatchQueue.global(qos: .utility).async { NotificationScheduler.registerCategories() }
         TipJar.shared.startListening()
+        #if WATCH
+        WatchSync.shared.activate()
+        #endif
     }
 
     var body: some Scene {

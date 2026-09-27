@@ -93,6 +93,9 @@ final class AppModel {
                                                    quranReminders: SettingsStore.quranReminders)
         }
         WidgetCenter.shared.reloadAllTimelines()
+        #if WATCH
+        WatchSync.shared.push()
+        #endif
         #if SCREEN_TIME
         // Screen Time calls wait for an iOS service: never on the main thread.
         Self.focusQueue.async { FocusScheduler.reschedule() }
@@ -119,6 +122,9 @@ final class AppModel {
         if record != nil { NotificationScheduler.prayerLogged(prayer, dayKey: PrayerLog.dayKey(for: day)) }
         WidgetCenter.shared.reloadAllTimelines()
         GroupSync.shared.publishSoon()
+        #if WATCH
+        WatchSync.shared.push()
+        #endif
     }
 
     func isPrayed(_ prayer: PrayerName, on day: Date) -> Bool {

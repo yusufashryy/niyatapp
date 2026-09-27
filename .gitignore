@@ -5,6 +5,8 @@ Niyat/Support/
 NiyatWidgets/Support/
 PrayerLock/Monitor/Support/
 PrayerLock/Shield/Support/
+Watch/App/Support/
+Watch/Widgets/Support/
 
 # Your personal signing settings
 Config/Local.xcconfig

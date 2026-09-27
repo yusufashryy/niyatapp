@@ -10,7 +10,7 @@ Niyat is a free, open-source prayer and Qur'an app. **Niyat does not collect, st
 
 ## What stays on your iPhone
 
-Everything you do in Niyat is stored only on your device, in the app's own storage (shared with Niyat's widgets on the same device):
+Everything you do in Niyat is stored only on your device, in the app's own storage (shared with Niyat's widgets on the same device, and with your paired Apple Watch directly over Apple's watch connection, never through a server):
 
 - your location (used to calculate prayer times and the Qibla direction)
 - your prayer log, missed-prayer reasons and streaks

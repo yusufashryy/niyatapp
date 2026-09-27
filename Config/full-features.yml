@@ -3,6 +3,8 @@
 #     "Family Controls" capability)
 #   - Time Sensitive notifications: prayer alerts break through Focus modes
 #   - Groups: private accountability circles through iCloud (CloudKit) sharing
+#   - Apple Watch app + watch face complications (a free account only allows
+#     three app IDs, and the iPhone app + widgets already use two)
 #
 # Turned on with `make full`, which runs `NIYAT_FULL=true xcodegen`.
 # Paths are from the repository root.
@@ -12,9 +14,11 @@ targets:
   Niyat:
     sources:
       - path: PrayerLock/Shared
+      - path: Watch/Shared
     dependencies:
       - target: FocusMonitor
       - target: FocusShield
+      - target: NiyatWatch
     entitlements:
       properties:
         com.apple.developer.family-controls: true
@@ -24,7 +28,7 @@ targets:
         com.apple.developer.icloud-services: [CloudKit]
     settings:
       base:
-        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) SCREEN_TIME GROUPS
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) SCREEN_TIME GROUPS WATCH
 
   # Runs in the background when a prayer window starts/ends and locks/unlocks apps.
   FocusMonitor:
@@ -85,3 +89,74 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).Niyat.FocusShield
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) SCREEN_TIME
+
+  # The Apple Watch app: next prayer, today's times, log a prayer from the wrist.
+  NiyatWatch:
+    type: application
+    platform: watchOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Watch/App
+      - path: Watch/Shared
+      - path: Shared
+      - path: Niyat/Resources/Fonts/AmiriQuran-Regular.ttf
+        buildPhase: resources
+      - path: Niyat/Resources/Fonts/ArefRuqaa-Bold.ttf
+        buildPhase: resources
+    dependencies:
+      - package: Adhan
+      - target: NiyatWatchWidgets
+    info:
+      path: Watch/App/Support/Info.plist
+      properties:
+        CFBundleDisplayName: Niyat
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UIAppFonts: [AmiriQuran-Regular.ttf, ArefRuqaa-Bold.ttf]
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: $(BUNDLE_ID_PREFIX).Niyat
+        NiyatAppGroup: $(APP_GROUP_ID)
+    entitlements:
+      path: Watch/App/Support/NiyatWatch.entitlements
+      properties:
+        com.apple.security.application-groups: [$(APP_GROUP_ID)]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).Niyat.watchkitapp
+        TARGETED_DEVICE_FAMILY: "4"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  # Watch face complications.
+  NiyatWatchWidgets:
+    type: app-extension
+    platform: watchOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: Watch/Widgets
+      - path: Shared
+      - path: Niyat/Resources/Fonts/AmiriQuran-Regular.ttf
+        buildPhase: resources
+      - path: Niyat/Resources/Fonts/ArefRuqaa-Bold.ttf
+        buildPhase: resources
+    dependencies:
+      - package: Adhan
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+    info:
+      path: Watch/Widgets/Support/Info.plist
+      properties:
+        CFBundleDisplayName: Niyat Complications
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UIAppFonts: [AmiriQuran-Regular.ttf, ArefRuqaa-Bold.ttf]
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        NiyatAppGroup: $(APP_GROUP_ID)
+    entitlements:
+      path: Watch/Widgets/Support/NiyatWatchWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [$(APP_GROUP_ID)]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).Niyat.watchkitapp.widgets
+        TARGETED_DEVICE_FAMILY: "4"

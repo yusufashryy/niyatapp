@@ -44,7 +44,7 @@ jobs:
         run: |
           count=$(grep -c "PrivacyInfo.xcprivacy in Resources" Niyat.xcodeproj/project.pbxproj || true)
           echo "Privacy manifests in Resources: $count"
-          [ "$count" -ge ${{ matrix.variant == 'full' && '4' || '2' }} ]
+          [ "$count" -ge ${{ matrix.variant == 'full' && '6' || '2' }} ]
 
       - name: Pick an iPhone simulator
         run: |

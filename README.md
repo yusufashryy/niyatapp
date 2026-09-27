@@ -50,6 +50,7 @@
 **And more**
 - Qibla compass with true north and a gentle tap when you face the Qibla
 - 10 widgets for the Home Screen and Lock Screen
+- Apple Watch app with watch face complications: next prayer, today's times, log a prayer from your wrist (full build)
 - Tasbih counter, Hijri date, themes
 - Groups: keep each other on track with family and friends (uses iCloud)
 - Prayer Lock: locks distracting apps at prayer time (needs a paid Apple developer account)
@@ -86,7 +87,7 @@ The first time, your iPhone asks you to turn on **Developer Mode** (Settings ›
 
 To get updates later: `make update`, then press **▶ Run** again.
 
-With a free Apple ID the app works for 7 days, then press Run again. With a paid developer account ($99/year) it lasts a year, and `make full` adds Prayer Lock, Groups and Time Sensitive alerts.
+With a free Apple ID the app works for 7 days, then press Run again. With a paid developer account ($99/year) it lasts a year, and `make full` adds Prayer Lock, Groups, Time Sensitive alerts and the Apple Watch app.
 
 ## Support
 
@@ -104,6 +105,7 @@ Swift and SwiftUI, iOS 26+, Liquid Glass. Every push is built and tested on GitH
 | `Shared/` | Code shared by the app and its widgets |
 | `NiyatWidgets/` | Home Screen and Lock Screen widgets |
 | `PrayerLock/` | Prayer Lock (Screen Time extensions and shared code) |
+| `Watch/` | Apple Watch app, its complications, and the iPhone ↔ watch sync |
 | `NiyatTests/`, `NiyatUITests/` | Tests, and the demo tour that takes the screenshots |
 | `Config/` | Build settings (your signing details go in `Config/Local.xcconfig`) |
 | `scripts/` | One-off generators for bundled data (layouts, tajweed, icon) |

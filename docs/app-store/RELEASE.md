@@ -21,7 +21,7 @@ phone straight away, but **App Store builds need Apple's approval**.
 
 If it hasn't come through when everything else is ready, you can ship 1.0
 without Prayer Lock: build with `make project` instead of `make full` (this
-also leaves out Groups and Time Sensitive alerts). Add them in 1.1.
+also leaves out Groups, Time Sensitive alerts and the Apple Watch app). Add them in 1.1.
 
 ## 3. Your signing settings (**You**, on the Mac)
 1. `make setup` (or copy `Config/Local.xcconfig.example` to `Config/Local.xcconfig`).
@@ -29,7 +29,7 @@ also leaves out Groups and Time Sensitive alerts). Add them in 1.1.
    - `DEVELOPMENT_TEAM` = your Team ID (developer.apple.com › Account › Membership details).
    - `BUNDLE_ID_PREFIX` = something you own, e.g. `com.yourname`. **Pick it carefully: it can't change after release.**
 3. `make full`, then open `Niyat.xcodeproj`. Xcode › Settings › Accounts: sign in with your developer Apple ID.
-4. With "Automatically manage signing" Xcode creates the App IDs, the App Group and the iCloud container for you the first time you build to your phone.
+4. With "Automatically manage signing" Xcode creates the App IDs (including the watch app's), the App Group and the iCloud container for you the first time you build to your phone.
 
 ## 4. Create the app in App Store Connect (**You**)
 1. <https://appstoreconnect.apple.com> › Apps › **+** › New App.
