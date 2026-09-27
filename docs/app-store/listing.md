@@ -35,6 +35,13 @@ QUR'AN
 • A daily goal in ayat with a streak, gentle reminders, a verse of the day and a Friday reminder for Surah Al-Kahf
 • English translation (The Clear Quran)
 
+PRAYER LOCK
+• Choose apps to lock when it's time to pray, so the adhan isn't lost in a scroll. They unlock when you tap "I've prayed" or when the lock time ends
+
+APPLE WATCH
+• The next prayer and today's times on your wrist, and log a prayer with a tap
+• Watch face complications, including a ring that fills up until the next prayer
+
 QIBLA
 • A clean, accurate compass using true north and your live location, with a gentle tap when you're facing the Qibla
 
