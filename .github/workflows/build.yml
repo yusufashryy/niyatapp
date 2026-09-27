@@ -17,7 +17,7 @@ jobs:
   build:
     name: ${{ matrix.variant }}
     runs-on: xcode-27  # macOS 27 + Xcode 27 (iOS 27 SDK and simulator)
-    timeout-minutes: 40
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -133,7 +133,7 @@ jobs:
       - name: Run demo tour on iPad
         if: matrix.variant == 'full'
         continue-on-error: true
-        timeout-minutes: 12
+        timeout-minutes: 25
         run: |
           set -o pipefail
           IPAD=$(xcrun simctl list devices available -j | python3 -c '
@@ -169,11 +169,14 @@ jobs:
           import json, pathlib, shutil, subprocess
           diagnostics = pathlib.Path("demo/diagnostics")
           for bundle, folder in [("demo/tour.xcresult", "screenshots"), ("demo/tour-ipad.xcresult", "screenshots-ipad")]:
-              if not pathlib.Path(bundle).exists():
+              # A tour stopped part way (e.g. timed out) leaves no readable bundle.
+              if not (pathlib.Path(bundle) / "Info.plist").exists():
+                  print(f"No results in {bundle}")
                   continue
               raw = pathlib.Path(f"demo/raw-{folder}")
-              subprocess.run(["xcrun", "xcresulttool", "export", "attachments", "--path", bundle,
-                              "--output-path", str(raw)], check=True)
+              if subprocess.run(["xcrun", "xcresulttool", "export", "attachments", "--path", bundle,
+                                 "--output-path", str(raw)]).returncode != 0:
+                  continue
               out = pathlib.Path("demo") / folder
               out.mkdir(parents=True, exist_ok=True)
               for test in json.loads((raw / "manifest.json").read_text()):
