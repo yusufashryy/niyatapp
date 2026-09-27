@@ -365,8 +365,10 @@ final class RecitationPlayer {
     // MARK: System integration
 
     private func activateAudioSession() {
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
-        try? AVAudioSession.sharedInstance().setActive(true)
+        AudioSessionQueue.run {
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
+            try? AVAudioSession.sharedInstance().setActive(true)
+        }
     }
 
     private func setUpRemoteCommands() {
@@ -587,5 +589,23 @@ struct ReciterPicker: View {
         }
         .buttonStyle(.pressable)
         .foregroundStyle(.white)
+    }
+}
+
+/// Audio session changes wait on iOS's audio service, which can take a moment,
+/// so they run here in order instead of on the main thread (where they'd make
+/// the screen stutter).
+enum AudioSessionQueue {
+    private static let queue = DispatchQueue(label: "niyat.audioSession", qos: .userInitiated)
+
+    static func run(_ work: @escaping @Sendable () -> Void) {
+        queue.async(execute: work)
+    }
+
+    /// Runs `work` on the queue and waits for it without blocking the caller.
+    static func perform(_ work: @escaping @Sendable () throws -> Void) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            queue.async { continuation.resume(with: Result { try work() }) }
+        }
     }
 }

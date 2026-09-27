@@ -148,14 +148,21 @@ final class LiveRecitation {
         isOnDevice = recognizer.supportsOnDeviceRecognition
         RecitationPlayer.shared.stop()
         do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
+            try await AudioSessionQueue.perform {
+                let session = AVAudioSession.sharedInstance()
+                try session.setCategory(.record, mode: .measurement, options: .duckOthers)
+                try session.setActive(true, options: .notifyOthersOnDeactivation)
+            }
+            // Stopped while the microphone was being switched on.
+            guard status == .starting else {
+                Self.deactivateSession()
+                return
+            }
             // A microphone with no usable format (in a call, or none at all)
             // would crash installTap instead of throwing.
             let format = engine.inputNode.outputFormat(forBus: 0)
             guard format.sampleRate > 0, format.channelCount > 0 else {
-                try? session.setActive(false, options: .notifyOthersOnDeactivation)
+                Self.deactivateSession()
                 status = .unavailable("The microphone isn't available right now. End any call or recording and try again.")
                 return
             }
@@ -180,6 +187,13 @@ final class LiveRecitation {
         startRequest()
     }
 
+    /// Hands the audio back to other apps (music resumes), off the main thread.
+    private static func deactivateSession() {
+        AudioSessionQueue.run {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
+    }
+
     func stop() {
         guard isListening else { return }
         pauseTimer?.cancel()
@@ -191,7 +205,7 @@ final class LiveRecitation {
         if engine.isRunning {
             engine.stop()
             engine.inputNode.removeTap(onBus: 0)
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            Self.deactivateSession()
         }
         tracker?.finishUtterance()
         publish()
