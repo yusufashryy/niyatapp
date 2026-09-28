@@ -47,6 +47,8 @@ final class GroupSync {
     private(set) var groups: [AccountabilityGroup] = []
     private(set) var isLoading = false
     private(set) var errorMessage: String?
+    /// The name of a group being created, shown as a placeholder meanwhile.
+    private(set) var creating: String?
 
     /// What you choose to share.
     var sharePrayers: Bool {
@@ -218,11 +220,17 @@ final class GroupSync {
     }
 
     func createGroup(named name: String) async -> CKShare? {
+        creating = name
+        errorMessage = nil
+        defer { creating = nil }
         guard await checkAccount() else { return nil }
         do {
-            let me = try await myUserID()
+            // Both at once: who you are, and the group's own space in iCloud.
             let zone = CKRecordZone(zoneName: Self.zonePrefix + UUID().uuidString)
-            _ = try await privateDB.save(zone)
+            async let myID = myUserID()
+            async let savedZone = privateDB.save(zone)
+            let me = try await myID
+            _ = try await savedZone
             let group = CKRecord(recordType: "Group", recordID: CKRecord.ID(recordName: "group", zoneID: zone.zoneID))
             group["name"] = name
             let member = memberRecord(me: me, zoneID: zone.zoneID)
@@ -242,7 +250,12 @@ final class GroupSync {
                     }
                 }
                 guard let savedShare else { throw CKError(.internalError) }
-                await refresh()
+                // Show it straight away; a full reload follows in the background.
+                let created = AccountabilityGroup(
+                    id: zone.zoneID.zoneName, name: name, isOwner: true,
+                    members: [AccountabilityGroup.Member(id: me, snapshot: mySnapshot(), isMe: true)])
+                groups = (groups + [created]).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                Task { await refresh() }
                 return savedShare
             } catch {
                 // Don't leave an empty group behind.
@@ -287,6 +300,8 @@ final class GroupSync {
 
     /// Owners delete the group for everyone; members just leave.
     func leave(_ group: AccountabilityGroup) async {
+        // Gone from the list at once; a reload brings it back if iCloud refuses.
+        groups.removeAll { $0.id == group.id }
         do {
             if group.isOwner {
                 let zoneID = CKRecordZone.ID(zoneName: group.id, ownerName: CKCurrentUserDefaultName)
@@ -296,6 +311,7 @@ final class GroupSync {
             }
             await refresh()
         } catch {
+            await refresh()
             errorMessage = "Couldn't leave the group: \(Self.explain(error))"
         }
     }

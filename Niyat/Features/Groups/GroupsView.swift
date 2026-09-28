@@ -31,6 +31,11 @@ struct GroupsView: View {
                         .surface(cornerRadius: 18)
                 }
 
+                if let name = sync.creating {
+                    creatingCard(name)
+                        .transition(.scale(scale: 0.92).combined(with: .opacity))
+                }
+
                 ForEach(Array(sync.groups.enumerated()), id: \.element.id) { index, group in
                     GroupCard(group: group) {
                         Task {
@@ -40,9 +45,11 @@ struct GroupsView: View {
                         leaving = group
                     }
                     .appearAnimation(1 + index)
+                    .transition(.asymmetric(insertion: .scale(scale: 0.92).combined(with: .opacity),
+                                            removal: .scale(scale: 0.92).combined(with: .opacity)))
                 }
 
-                if sync.groups.isEmpty, !sync.isLoading {
+                if sync.groups.isEmpty, !sync.isLoading, sync.creating == nil {
                     VStack(spacing: 10) {
                         Rosette(color: Palette.highlight.opacity(0.4)).frame(width: 70, height: 70)
                         Text("No groups yet").font(.headline)
@@ -59,7 +66,12 @@ struct GroupsView: View {
                 privacySection
             }
             .padding(16)
+            .readableWidth()
+            .animation(.smooth(duration: 0.35), value: sync.groups.map(\.id))
+            .animation(.smooth(duration: 0.35), value: sync.creating)
+            .animation(.smooth(duration: 0.35), value: sync.errorMessage)
         }
+        .haptic(.success, trigger: sync.groups.count) { old, new in new > old }
         // Its own task: pull-to-refresh cancels its work when the gesture
         // ends, which would cut the iCloud requests off half way.
         .refreshable { await Task { await sync.refresh() }.value }
@@ -78,6 +90,8 @@ struct GroupsView: View {
                 newGroupName = ""
                 Task {
                     if let share = await sync.createGroup(named: name.isEmpty ? "My group" : name) {
+                        // A moment to see the new card appear, then the invite sheet.
+                        try? await Task.sleep(for: .milliseconds(350))
                         sharing = ShareItem(share: share)
                     }
                 }
@@ -100,6 +114,26 @@ struct GroupsView: View {
         }
         .task { await sync.refresh() }
         .overlay { if sync.isLoading && sync.groups.isEmpty { ProgressView() } }
+    }
+
+    /// Stands in for a group while iCloud saves it.
+    private func creatingCard(_ name: String) -> some View {
+        HStack(spacing: 14) {
+            ProgressView()
+                .tint(Palette.highlight)
+                .frame(width: 44, height: 44)
+                .glassEffect(.regular.tint(Palette.glow.opacity(0.4)), in: .circle)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(name).font(.headline)
+                Text("Creating your group…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .surface(cornerRadius: 22)
+        .accessibilityElement(children: .combine)
     }
 
     private var intro: some View {
