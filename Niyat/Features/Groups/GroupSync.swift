@@ -193,6 +193,9 @@ final class GroupSync {
             switch record.recordType {
             case "Group":
                 name = record["name"] as? String ?? name
+            case CKRecord.SystemType.share:
+                // The invite carries the name too.
+                if name == "Group", let title = record[CKShare.SystemFieldKey.title] as? String, !title.isEmpty { name = title }
             case "Member":
                 // Only trust a member record written by the person it belongs to.
                 let ownerID = String(record.recordID.recordName.dropFirst("member-".count))
@@ -222,19 +225,51 @@ final class GroupSync {
             let share = CKShare(recordZoneID: zone.zoneID)
             share[CKShare.SystemFieldKey.title] = name
             share.publicPermission = .none
-            _ = try await privateDB.modifyRecords(saving: [share, group, member], deleting: [])
-            await refresh()
-            return share
+            do {
+                // Each record can fail on its own without the call throwing:
+                // check them, and hand back the share iCloud actually saved.
+                let (saved, _) = try await privateDB.modifyRecords(saving: [share, group, member], deleting: [])
+                var savedShare: CKShare?
+                for (_, result) in saved {
+                    switch result {
+                    case .success(let record): if let record = record as? CKShare { savedShare = record }
+                    case .failure(let error): throw error
+                    }
+                }
+                guard let savedShare else { throw CKError(.internalError) }
+                await refresh()
+                return savedShare
+            } catch {
+                // Don't leave an empty group behind.
+                _ = try? await privateDB.deleteRecordZone(withID: zone.zoneID)
+                throw error
+            }
         } catch {
-            errorMessage = "Couldn't create the group: \(error.localizedDescription)"
+            await refresh()
+            errorMessage = "Couldn't create the group: \(Self.explain(error))"
             return nil
         }
+    }
+
+    /// A readable reason, including the one a developer can fix: the Groups
+    /// record types not yet deployed to iCloud's production environment.
+    private static func explain(_ error: Error) -> String {
+        let text = error.localizedDescription
+        if text.localizedCaseInsensitiveContains("production schema") || text.localizedCaseInsensitiveContains("record type") {
+            return "Groups isn't set up on iCloud yet. Please try again later. (\(text))"
+        }
+        return text
     }
 
     /// The share for a group you own, for inviting people.
     func share(for group: AccountabilityGroup) async -> CKShare? {
         let zoneID = CKRecordZone.ID(zoneName: group.id, ownerName: CKCurrentUserDefaultName)
-        return try? await privateDB.record(for: CKRecord.ID(recordName: CKRecordNameZoneWideShare, zoneID: zoneID)) as? CKShare
+        do {
+            return try await privateDB.record(for: CKRecord.ID(recordName: CKRecordNameZoneWideShare, zoneID: zoneID)) as? CKShare
+        } catch {
+            errorMessage = "Couldn't open this group's invite: \(Self.explain(error)). Try deleting the group and creating it again."
+            return nil
+        }
     }
 
     var cloudContainer: CKContainer { container }
