@@ -9,7 +9,7 @@ import UIKit
 
 /// How a word is marked after live recitation.
 enum WordMark: Hashable {
-    /// Recited correctly (soft green behind the word).
+    /// Final transcript matched the text; pronunciation is not assessed.
     case correct
     /// Couldn't tell (neutral dotted underline). Never shown as an error.
     case uncertain
@@ -38,7 +38,7 @@ struct QuranTextStyle: Equatable {
     /// Soft highlight behind the word being recited.
     var currentWord: UIColor = UIColor(white: 0.55, alpha: 0.30)
     var uncertain: UIColor = UIColor(white: 0.62, alpha: 0.9)
-    /// Soft green behind words recited correctly.
+    /// Soft green behind words matched in the final transcript.
     var correct: UIColor = UIColor(red: 0.25, green: 0.85, blue: 0.45, alpha: 0.28)
     /// Bright red: something clearly different was heard.
     var mistake: UIColor = UIColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 1)

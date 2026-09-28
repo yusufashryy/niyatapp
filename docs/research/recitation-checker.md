@@ -2,11 +2,46 @@
 
 **Status: live recitation is part of the Qur'an reader.** The microphone button (in the verse-by-verse reader and on the mushaf pages) follows the recitation word by word, finds the place when you start anywhere, turns pages, and marks words to review (skipped, sounded different, couldn't tell). The eye button hides the text to recite from memory, and tracking carries on underneath. It uses Apple's speech recognition (on the device when the iPhone supports Arabic there) and the aligner in `Niyat/Features/Quran/Reciting/RecitationTracker.swift`. Harakat, tajweed and pronunciation are not assessed; a Qur'an-trained model (e.g. WhisperKit) remains the next step for accuracy.
 
+### Reliability changes (September 2026)
+
+The live checker remains a transcription aid, not a pronunciation assessment.
+Apple's Arabic dictation can substitute expected words or omit speech. Exact text
+matches do not verify harakat, tajweed or makharij. A model replacement needs
+held-out recordings from learners and qualified teacher labels before making
+stronger accuracy claims.
+
+- Live alignment accepts only exact normalized spellings, including explicit
+  Uthmani/Imla'i alternatives from the bundled recognition-form generator.
+  Arbitrary changed letters and approximate merged words no longer turn green.
+- Green requires a final transcript and confidence of at least 0.5 in all
+  contributing segments. This is a conservative heuristic, not a calibrated
+  probability that the recitation was correct. Partial, failed and timed-out
+  recognition stays unverified. Transcript revisions retract provisional marks.
+- Skips require confident anchors; gaps between recognition requests remain
+  unverified. Trailing substitutions are included in review.
+- Expected-word dictation hints were removed to avoid encouraging the answer
+  being checked. Recognition segments containing multiple words are split with
+  their confidence retained.
+- Pauses use microphone energy, not gaps between recognition callbacks. Requests
+  roll over after silence or 45 seconds; up to three seconds of in-memory audio
+  are retained during finalization and replayed to the next request. Nothing is
+  written to disk. Quiet voices and noisy rooms still need device testing.
+- Repeated unchanged partial results are skipped, normalized token forms are
+  cached, and joined recognition words are computed once per update. The live
+  alignment loop no longer runs per-cell edit-distance calculations.
+
+Before releasing, test on the oldest supported phone with slow recitation,
+long vowels, quiet speech, background noise, repeated phrases, intentional
+single-letter substitutions, missing words, mid-verse starts, and continuous
+recitation over 45 seconds. Record false acceptances, false review marks,
+and speech-to-highlight delay separately. Unit tests exercise transcripts and
+audio-buffer handling, not actual microphone recognition accuracy.
+
 ### How it's built
 
 - **One word model** (`Text/QuranWords.swift`): every verse is split into words without changing a character. A word is identified by surah, ayah and index (`WordID`) and carries its exact display text (a range of the verified text) and a normalised form used only for matching. Tajweed marks (`TajweedStore`) and reciter timings (`WordTimings`) attach to the same words by position.
 - **One renderer** (`Text/QuranTextCanvas.swift`) draws both the verse cards and the mushaf lines with CoreText, and reads one shared highlight state (`WordHighlights`): the current word (grey), the verse band, review marks and memorisation placeholders. A new word redraws only the lines showing its verse, never the page.
-- **Tracker** (pure Swift, unit-tested): semi-global alignment of what was heard against the words around the place, with a small cost for starting away from where the reader is looking. It searches for the place before following, allows repeats and restarts, and judges words only when an utterance ends, with the recogniser's confidence. Low confidence gives "couldn't tell", never an error.
+- **Tracker** (pure Swift, unit-tested): semi-global alignment of what was heard against the words around the place, with a small cost for starting away from where the reader is looking. It searches for the place before following, allows repeats and restarts, and judges words only from a final result, with the recogniser's confidence. Low confidence gives "couldn't tell", never an error.
 - **Reciter sync** (`Audio/ReciterWordSync.swift`): each ayah's recording is aligned on the device with the same aligner; used only when 60% of words were placed, else the whole ayah is highlighted.
 
 ### Room for tajweed later
@@ -15,7 +50,12 @@ Tajweed checking (madd, ghunnah, qalqalah, ikhfa, idgham, iqlab, makharij) needs
 
 Goal: a mode, similar in concept to Tarteel, where the user turns on the microphone, recites, and the app follows along and flags mistakes.
 
-## Summary
+## Original feasibility proposal (estimates, not validated product claims)
+
+The research discussion below predates implementation. Its feasibility levels and
+model suggestions are hypotheses to evaluate, not guarantees of the live checker.
+
+### Summary
 
 - **Feasible in stages.** The key simplification: we almost always know *what* the user is trying to recite. That turns open-ended speech recognition into **matching audio against a known text**, which is much easier and more accurate.
 - **On-device first.** Modern iPhones can run a Whisper-class model on the Neural Engine in near real time. Recordings then never leave the phone, there's no server cost, and it works offline.

@@ -105,8 +105,9 @@ final class LiveRecitation {
     @ObservationIgnored private var pauseTimer: Task<Void, Never>?
     @ObservationIgnored private var finalTimer: Task<Void, Never>?
     @ObservationIgnored private var shownMarks: [WordID: WordMark] = [:]
-    /// Words showing an early mark (see `RecitationTracker.early`).
-    @ObservationIgnored private var earlyShown: Set<WordID> = []
+    /// Marks from a partial transcript; removed when a revision retracts them.
+    @ObservationIgnored private var transientShown: Set<WordID> = []
+    @ObservationIgnored private var tapInstalled = false
     /// Requests that ended at once with nothing heard (recogniser failing).
     @ObservationIgnored private var quickFailures = 0
     @ObservationIgnored private var requestStarted = Date.distantPast
@@ -171,9 +172,13 @@ final class LiveRecitation {
                 return
             }
             Self.installTap(on: engine.inputNode, sending: requests)
+            tapInstalled = true
             engine.prepare()
             try engine.start()
         } catch {
+            if tapInstalled { engine.inputNode.removeTap(onBus: 0); tapInstalled = false }
+            engine.stop()
+            Self.deactivateSession()
             status = .unavailable("Couldn't start the microphone. Close other apps using it and try again.")
             return
         }
@@ -206,11 +211,9 @@ final class LiveRecitation {
         task?.cancel()
         task = nil
         requests.set(nil)
-        if engine.isRunning {
-            engine.stop()
-            engine.inputNode.removeTap(onBus: 0)
-            Self.deactivateSession()
-        }
+        engine.stop()
+        if tapInstalled { engine.inputNode.removeTap(onBus: 0); tapInstalled = false }
+        Self.deactivateSession()
         tracker?.finishUtterance()
         publish()
         WordHighlights.shared.setCurrent(nil)
@@ -226,7 +229,7 @@ final class LiveRecitation {
     func clearReview() {
         tracker = nil
         shownMarks = [:]
-        earlyShown = []
+        transientShown = []
         WordHighlights.shared.clearRecitation()
     }
 
@@ -258,7 +261,9 @@ final class LiveRecitation {
     // MARK: Recognition
 
     private func startRequest() {
-        guard let recognizer, let tracker else { return }
+        guard let recognizer, tracker != nil else { return }
+        pauseTimer?.cancel()
+        finalTimer?.cancel()
         task?.cancel()
         generation += 1
         lastHeard = []
@@ -267,19 +272,29 @@ final class LiveRecitation {
         request.taskHint = .dictation
         request.addsPunctuation = false
         if isOnDevice { request.requiresOnDeviceRecognition = true }
-        // The words around the place help the recogniser (up to 100 hints).
-        let around = tracker.focus
-        let hints = tracker.tokens[max(0, around - 5)..<min(tracker.tokens.count, around + 95)]
-            .compactMap { wordText[$0.id].map(RecitationText.withoutMarks) }
-        request.contextualStrings = Array(hints)
+        // Expected words bias dictation toward the answer, hiding substitutions.
+        // Keep the transcript independent of the text being checked.
         requests.set(request)
         requestStarted = .now
-        task = Self.recognize(request, with: recognizer, generation: generation) { [weak self] words, confidences, isFinal, generation in
-            self?.received(words: words, confidences: confidences, isFinal: isFinal, generation: generation)
+        task = Self.recognize(request, with: recognizer, generation: generation, requests: requests) { [weak self] words, confidences, isFinal, failed, generation in
+            self?.received(words: words, confidences: confidences, isFinal: isFinal, failed: failed, generation: generation)
+        }
+        let currentGeneration = generation
+        pauseTimer = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(200))
+                guard !Task.isCancelled, let self, self.generation == currentGeneration else { return }
+                // Silence is measured from microphone samples, never from the
+                // interval between callbacks (which can lag behind speech).
+                if self.requests.hasSpeechPause || Date.now.timeIntervalSince(self.requestStarted) >= 45 {
+                    self.endUtterance(generation: currentGeneration)
+                    return
+                }
+            }
         }
     }
 
-    private func received(words: [String], confidences: [Float], isFinal: Bool, generation: Int) {
+    private func received(words: [String], confidences: [Float], isFinal: Bool, failed: Bool, generation: Int) {
         guard generation == self.generation, isListening, var tracker else { return }
         if isFinal, words.isEmpty, lastHeard.isEmpty {
             // Nothing heard. After a long silence the recogniser simply times
@@ -295,10 +310,12 @@ final class LiveRecitation {
             startRequest()
             return
         }
-        quickFailures = 0
+        if !failed { quickFailures = 0 }
+        if !isFinal, words == lastHeard { return }
         if !words.isEmpty { lastHeard = words }
         let result = tracker.update(heard: words.isEmpty ? lastHeard : words,
-                                    confidences: isFinal ? confidences : nil, isFinal: isFinal)
+                                    confidences: isFinal && !failed ? confidences : nil, isFinal: isFinal && !failed)
+        if failed { tracker.finishUtterance() }
         self.tracker = tracker
         switch result {
         case .searching: status = .searching
@@ -310,26 +327,16 @@ final class LiveRecitation {
         if isFinal {
             finalTimer?.cancel()
             startRequest()
-        } else {
-            // A pause of about a second ends the utterance: ask the
-            // recogniser for its final (confidence-rated) result.
-            pauseTimer?.cancel()
-            pauseTimer = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(1.1))
-                guard !Task.isCancelled else { return }
-                self?.endUtterance(generation: generation)
-            }
         }
     }
 
     private func endUtterance(generation: Int) {
-        guard generation == self.generation, isListening else { return }
-        requests.set(nil) // endAudio: the final result follows shortly
+        guard generation == self.generation, isListening,
+              requests.endCurrentAudio() else { return }
         finalTimer?.cancel()
         finalTimer = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.5))
             guard !Task.isCancelled, let self, generation == self.generation, self.isListening else { return }
-            // No final result came: judge what was heard, conservatively.
             self.tracker?.finishUtterance()
             self.publish()
             self.startRequest()
@@ -389,11 +396,13 @@ final class LiveRecitation {
         guard let tracker else { return }
         let current = tracker.position.map { tracker.tokens[$0].id }
         WordHighlights.shared.setCurrent(isListening ? current : nil)
-        // Only words this tracker has judged change; a word re-recited
-        // correctly turns green. Words matched in the utterance still going
-        // on turn green straight away.
+        // Only final, confident exact matches turn green. Provisional marks
+        // are recomputed, including removal when a transcript is revised.
+        let results = tracker.displayResults
         var changes: [WordID: WordMark?] = [:]
-        for (index, result) in tracker.committed {
+        let currentIDs = Set(results.keys.map { tracker.tokens[$0].id })
+        for id in transientShown.subtracting(currentIDs) { changes[id] = .some(nil) }
+        for (index, result) in results {
             let id = tracker.tokens[index].id
             let mark: WordMark = switch result {
             case .correct: .correct
@@ -403,27 +412,7 @@ final class LiveRecitation {
             }
             if shownMarks[id] != mark { changes[id] = .some(mark) }
         }
-        // Clear mistakes shown early (see below) that a revised hearing dropped.
-        let earlyNow = Set(tracker.early.keys.filter { tracker.committed[$0] == nil }.map { tracker.tokens[$0].id })
-        for id in earlyShown.subtracting(earlyNow) where changes[id] == nil {
-            let index = tracker.tokens.firstIndex { $0.id == id }
-            if let index, tracker.committed[index] != nil { continue }
-            let matched = index.map { tracker.provisional[$0] == .matched } ?? false
-            let mark: WordMark? = matched ? .correct : nil
-            changes[id] = .some(mark)
-        }
-        earlyShown = earlyNow
-        // Clear mistakes in the utterance still going on: shown straight away.
-        for (index, result) in tracker.early where tracker.committed[index] == nil {
-            let id = tracker.tokens[index].id
-            let mark: WordMark = result == .skipped ? .skipped : .mistake
-            if shownMarks[id] != mark { changes[id] = .some(mark) }
-        }
-        for (index, kind) in tracker.provisional
-        where kind == .matched && tracker.committed[index] == nil && tracker.early[index] == nil {
-            let id = tracker.tokens[index].id
-            if shownMarks[id] == nil, changes[id] == nil { changes[id] = .some(.correct) }
-        }
+        transientShown = Set(tracker.provisional.keys.map { tracker.tokens[$0].id })
         if changes.values.contains(where: { $0 == .mistake }) { mistakeNotice += 1 }
         for (id, mark) in changes { shownMarks[id] = mark }
         WordHighlights.shared.updateMarks(changes)
@@ -445,34 +434,118 @@ final class LiveRecitation {
 
     private nonisolated static func recognize(
         _ request: SFSpeechAudioBufferRecognitionRequest, with recognizer: SFSpeechRecognizer, generation: Int,
-        update: @escaping @MainActor ([String], [Float], Bool, Int) -> Void
+        requests: RequestBox,
+        update: @escaping @MainActor ([String], [Float], Bool, Bool, Int) -> Void
     ) -> SFSpeechRecognitionTask {
         recognizer.recognitionTask(with: request) { result, error in
             let segments = result?.bestTranscription.segments ?? []
-            let words = segments.map(\.substring)
-            let confidences = segments.map(\.confidence)
+            // A segment can contain several words. Keep confidence aligned to
+            // each split word, including joined/split Arabic phrases.
+            let split = segments.flatMap { segment in
+                RecitationMatcher.words(segment.substring).map { ($0, segment.confidence) }
+            }
+            let words = split.map(\.0)
+            let confidences = split.map(\.1)
             let isFinal = (result?.isFinal ?? false) || error != nil
-            Task { @MainActor in update(words, confidences, isFinal, generation) }
+            if isFinal { requests.endCurrentAudio(ifCurrent: request) }
+            Task { @MainActor in update(words, confidences, isFinal, error != nil, generation) }
         }
     }
 }
 
+/// The audio boundary can be tested without calling Apple's speech service.
+protocol RecitationAudioRequest: AnyObject {
+    func append(_ audioPCMBuffer: AVAudioPCMBuffer)
+    func endAudio()
+}
+
+extension SFSpeechAudioBufferRecognitionRequest: RecitationAudioRequest {}
+
 /// Hands microphone audio to whichever recognition request is current.
 final class RequestBox: @unchecked Sendable {
     private let lock = NSLock()
-    private var request: SFSpeechAudioBufferRecognitionRequest?
+    private var request: (any RecitationAudioRequest)?
+    private var draining = false
+    private var pending: [AVAudioPCMBuffer] = []
+    private var pendingDuration: Double = 0
+    private var lastVoice: TimeInterval?
+    private var pendingLastVoice: TimeInterval?
 
-    func set(_ newRequest: SFSpeechAudioBufferRecognitionRequest?) {
+    var hasSpeechPause: Bool {
         lock.lock()
-        request?.endAudio()
+        defer { lock.unlock() }
+        guard !draining, let lastVoice else { return false }
+        return ProcessInfo.processInfo.systemUptime - lastVoice >= 1.1
+    }
+
+    func set(_ newRequest: (any RecitationAudioRequest)?) {
+        lock.lock()
+        defer { lock.unlock() }
+        if !draining { request?.endAudio() }
         request = newRequest
-        lock.unlock()
+        if let newRequest {
+            for buffer in pending { newRequest.append(buffer) }
+        }
+        pending = []
+        pendingDuration = 0
+        draining = false
+        lastVoice = newRequest == nil ? nil : pendingLastVoice
+        pendingLastVoice = nil
+    }
+
+    /// Keep capturing while the old request produces its final transcript.
+    /// A stale callback must never close a newer request.
+    @discardableResult
+    func endCurrentAudio(ifCurrent current: (any RecitationAudioRequest)? = nil) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let request, !draining, current == nil || current === request else { return false }
+        draining = true
+        request.endAudio()
+        return true
     }
 
     func append(_ buffer: AVAudioPCMBuffer) {
         lock.lock()
-        request?.append(buffer)
-        lock.unlock()
+        defer { lock.unlock() }
+        guard request != nil else { return }
+        if let samples = buffer.floatChannelData, buffer.frameLength > 0 {
+            var energy: Float = 0
+            let stride = buffer.stride
+            for frame in 0..<Int(buffer.frameLength) {
+                let sample = samples[0][frame * stride]
+                energy += sample * sample
+            }
+            if energy / Float(buffer.frameLength) > 0.00001 {
+                lastVoice = ProcessInfo.processInfo.systemUptime
+                if draining { pendingLastVoice = lastVoice }
+            }
+        }
+        if draining {
+            // Audio tap buffers are reused: own a copy until the next request.
+            guard let copy = Self.copy(buffer) else { return }
+            pending.append(copy)
+            pendingDuration += Double(copy.frameLength) / copy.format.sampleRate
+            // The final-result timeout is 1.5s. Bound memory even if the UI stalls.
+            while pendingDuration > 3, !pending.isEmpty {
+                let removed = pending.removeFirst()
+                pendingDuration -= Double(removed.frameLength) / removed.format.sampleRate
+            }
+        } else {
+            request?.append(buffer)
+        }
+    }
+
+    static func copy(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard let copy = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameLength) else { return nil }
+        copy.frameLength = buffer.frameLength
+        let source = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: buffer.audioBufferList))
+        let destination = UnsafeMutableAudioBufferListPointer(copy.mutableAudioBufferList)
+        for (from, to) in zip(source, destination) {
+            guard let input = from.mData, let output = to.mData else { return nil }
+            memcpy(output, input, Int(from.mDataByteSize))
+        }
+        return copy
     }
 }
 

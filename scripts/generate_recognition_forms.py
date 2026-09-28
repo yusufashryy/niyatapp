@@ -57,7 +57,7 @@ def distance(a: str, b: str) -> int:
 
 
 def similar(a: str, b: str) -> bool:
-    """Same as RecitationMatcher.similar."""
+    """Offline alignment heuristic only; live acceptance uses exact forms."""
     if a == b:
         return True
     allowed = max(1, max(len(a), len(b)) // 4)
@@ -120,7 +120,7 @@ def main() -> None:
             uthmani = [normalize(w) for w in verse_words(UTHMANI, surah, verse)]
             imlaei = [normalize(w) for w in verse_words(IMLAEI, surah, verse)]
             for index, everyday in align(uthmani, imlaei):
-                if not similar(uthmani[index], everyday):
+                if uthmani[index] != everyday:
                     forms.setdefault(f"{surah}:{verse}:{index}", []).append(everyday)
     for surah, verse in DISJOINED:
         letters = normalize(verse_words(UTHMANI, surah, verse)[0])

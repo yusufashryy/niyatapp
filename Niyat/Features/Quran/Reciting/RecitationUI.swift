@@ -121,7 +121,7 @@ struct ReciteIntroSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var onDevice = SFSpeechRecognizer(locale: Locale(identifier: "ar-SA"))?.supportsOnDeviceRecognition ?? false
 
-    static let seenKey = "quran.reciteIntroSeen"
+    static let seenKey = "quran.reciteIntroSeen.v2"
 
     var body: some View {
         NavigationStack {
@@ -129,8 +129,8 @@ struct ReciteIntroSheet: View {
                 VStack(alignment: .leading, spacing: 18) {
                     point("text.word.spacing", "Follows you word by word",
                           "Recite from anywhere on the page. Niyat finds your place, highlights the word you're on and turns the pages with you.")
-                    point("checkmark.bubble", "Shows how it went",
-                          "Words you recite correctly turn green. Words you skip, or that sound different, get an underline to review afterwards. It compares words only: it doesn't judge tajweed or pronunciation, and speech recognition can mishear. When unsure, it says so instead of calling it a mistake.")
+                    point("checkmark.bubble", "Helps you review the words",
+                          "Green means the final transcript matched the written word, not that your pronunciation was correct. While listening, words remain unverified. Underlined words may need review. Speech recognition can miss or change words, and Niyat cannot assess harakat, tajweed or makharij. Check your recitation with a qualified teacher.")
                     point("eye.slash", "Recite from memory",
                           "Hide the text with the eye button. Niyat keeps following and marking words; show the text to see them.")
                     point("lock.shield", "Private",
@@ -193,7 +193,7 @@ struct RecitationReviewSheet: View {
             List {
                 Section {
                     legend(.mistake, "Sounded different", "Something clearly different was heard.")
-                    legend(.skipped, "Skipped", "The words around it were heard, but not this one.")
+                    legend(.skipped, "Possibly skipped", "The words around it were heard, but not this one.")
                     legend(.uncertain, "Couldn't tell", "Not clearly heard. Often the recogniser, not you.")
                 } footer: {
                     Text("Niyat compares words, not pronunciation or tajweed, and speech recognition can mishear. Treat these as prompts to check with the text or a teacher.")
@@ -258,9 +258,9 @@ struct RecitationReviewSheet: View {
 
     private func title(_ mark: WordMark) -> String {
         switch mark {
-        case .correct: "Correct"
+        case .correct: "Text matched"
         case .mistake: "Sounded different"
-        case .skipped: "Skipped"
+        case .skipped: "Possibly skipped"
         case .uncertain: "Couldn't tell"
         }
     }

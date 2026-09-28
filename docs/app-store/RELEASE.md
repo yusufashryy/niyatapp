@@ -36,6 +36,44 @@ also leaves out Groups, Time Sensitive alerts and the Apple Watch app). Add them
 2. Platform iOS, name **Niyat: Prayer Times & Qur'an**, language English, bundle ID `<your prefix>.Niyat`, SKU `niyat`.
 3. Copy the numeric **Apple ID** from App Information into `Config/Base.xcconfig` › `APP_STORE_ID` (it powers "Rate Niyat"). This one is fine to commit.
 
+## 4a. Initialize and deploy Groups' CloudKit schema
+
+TestFlight and App Store builds use **Production**, whose schema must already
+exist. Creating `Group` and `Member` by hand is not enough: sharing also requires
+the system record type `cloudkit.share`.
+
+1. Run the full app (`make full`) in **Debug** from Xcode on an iPhone signed
+   into iCloud. Create one private group successfully; there is no need to invite
+   anyone. This initializes CloudKit's sharing type in **Development**.
+2. Open [CloudKit Console](https://icloud.developer.apple.com/), select
+   `iCloud.<BUNDLE_ID_PREFIX>.niyat`, and inspect Development → Record Types.
+   Confirm `Group`, `Member`, and **`cloudkit.share`** are present. Do not try
+   to create Apple's sharing system type manually.
+3. Inspect **Deploy Schema Changes**, verify the changes belong to this app,
+   then deploy to Production. Confirm the same types exist in Production.
+4. Test group creation in TestFlight, then invite another iCloud account. Verify
+   acceptance both while Niyat is open and after fully closing it, and confirm
+   each member's shared progress updates.
+
+Expected application fields:
+
+| Type | Fields | CloudKit type |
+|---|---|---|
+| Group | name | String |
+| Member | displayName, dayKey | String |
+| Member | prayersToday, prayerStreak, quranToday, quranGoal, quranGoalComplete, quranStreak, quranWeek | Int64 |
+| Member | updatedAt | Date/Time |
+
+An "Atomic failure" can be a secondary error from another failed record in the
+same save. Inspect the other per-record errors. A production `RecordSave` failure
+with `BAD_REQUEST` on `_pcs_data` can accompany a missing `cloudkit.share` type;
+check the schema before changing encryption or permissions. The app now chooses
+the underlying record error and gives users a readable message.
+
+Sources: [Apple deployment guide](https://developer.apple.com/documentation/cloudkit/deploying-an-icloud-container-s-schema),
+[Apple batch-error guidance](https://developer.apple.com/documentation/cloudkit/ckerror/batchrequestfailed),
+[developer report of the missing sharing type](https://developer.apple.com/forums/thread/840248).
+
 ## 5. Upload a build (**You**, on the Mac)
 1. In Xcode choose the device **Any iOS Device (arm64)**.
 2. Product › **Archive**. When it finishes the Organizer opens.

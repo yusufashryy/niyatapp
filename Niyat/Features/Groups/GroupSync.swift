@@ -3,6 +3,7 @@ import Observation
 
 #if GROUPS
 import CloudKit
+import OSLog
 #endif
 
 /// What a member shares with their groups: summary counts only, never reasons,
@@ -179,7 +180,7 @@ final class GroupSync {
             groups = result.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             errorMessage = nil
         } catch {
-            errorMessage = "Couldn't load your groups: \(error.localizedDescription)"
+            errorMessage = "Couldn't load your groups: \(Self.explain(error))"
         }
     }
 
@@ -229,11 +230,12 @@ final class GroupSync {
                 // Each record can fail on its own without the call throwing:
                 // check them, and hand back the share iCloud actually saved.
                 let (saved, _) = try await privateDB.modifyRecords(saving: [share, group, member], deleting: [])
+                try GroupCloudErrors.check(saved)
                 var savedShare: CKShare?
                 for (_, result) in saved {
                     switch result {
                     case .success(let record): if let record = record as? CKShare { savedShare = record }
-                    case .failure(let error): throw error
+                    case .failure: break
                     }
                 }
                 guard let savedShare else { throw CKError(.internalError) }
@@ -254,11 +256,10 @@ final class GroupSync {
     /// A readable reason, including the one a developer can fix: the Groups
     /// record types not yet deployed to iCloud's production environment.
     private static func explain(_ error: Error) -> String {
-        let text = error.localizedDescription
-        if text.localizedCaseInsensitiveContains("production schema") || text.localizedCaseInsensitiveContains("record type") {
-            return "Groups isn't set up on iCloud yet. Please try again later. (\(text))"
-        }
-        return text
+        let cause = GroupCloudErrors.rootCause(in: [error]) ?? error
+        Logger(subsystem: Bundle.main.bundleIdentifier ?? "Niyat", category: "Groups")
+            .error("CloudKit failure: \(String(describing: cause), privacy: .private)")
+        return GroupCloudErrors.message(for: cause)
     }
 
     /// The share for a group you own, for inviting people.
@@ -267,7 +268,7 @@ final class GroupSync {
         do {
             return try await privateDB.record(for: CKRecord.ID(recordName: CKRecordNameZoneWideShare, zoneID: zoneID)) as? CKShare
         } catch {
-            errorMessage = "Couldn't open this group's invite: \(Self.explain(error)). Try deleting the group and creating it again."
+            errorMessage = "Couldn't open this group's invite: \(Self.explain(error))"
             return nil
         }
     }
@@ -285,7 +286,7 @@ final class GroupSync {
             }
             await refresh()
         } catch {
-            errorMessage = "Couldn't leave the group: \(error.localizedDescription)"
+            errorMessage = "Couldn't leave the group: \(Self.explain(error))"
         }
     }
 
@@ -296,21 +297,24 @@ final class GroupSync {
             await publishNow()
             await refresh()
         } catch {
-            errorMessage = "Couldn't join the group: \(error.localizedDescription)"
+            errorMessage = "Couldn't join the group: \(Self.explain(error))"
         }
     }
 
     func publishNow() async {
         guard Self.isAvailable, (try? await container.accountStatus()) == .available, let me = try? await myUserID() else { return }
-        let owned = (try? await privateDB.allRecordZones()) ?? []
-        for zone in owned where zone.zoneID.zoneName.hasPrefix(Self.zonePrefix) {
-            _ = try? await privateDB.modifyRecords(saving: [memberRecord(me: me, zoneID: zone.zoneID)], deleting: [],
-                                                    savePolicy: .allKeys)
-        }
-        let joined = (try? await sharedDB.allRecordZones()) ?? []
-        for zone in joined where zone.zoneID.zoneName.hasPrefix(Self.zonePrefix) {
-            _ = try? await sharedDB.modifyRecords(saving: [memberRecord(me: me, zoneID: zone.zoneID)], deleting: [],
-                                                   savePolicy: .allKeys)
+        do {
+            for database in [privateDB, sharedDB] {
+                let zones = try await database.allRecordZones()
+                for zone in zones where zone.zoneID.zoneName.hasPrefix(Self.zonePrefix) {
+                    let (saved, _) = try await database.modifyRecords(
+                        saving: [memberRecord(me: me, zoneID: zone.zoneID)], deleting: [], savePolicy: .allKeys)
+                    try GroupCloudErrors.check(saved)
+                }
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = "Couldn't update your group progress: \(Self.explain(error))"
         }
     }
 
@@ -353,3 +357,57 @@ final class GroupSync {
     func publishNow() async {}
     #endif
 }
+
+#if GROUPS
+/// Atomic batches report a secondary failure for otherwise valid records.
+/// Inspect all records (and nested partial failures) before choosing a reason.
+enum GroupCloudErrors {
+    static func rootCause(in errors: [Error]) -> Error? {
+        let leaves = errors.flatMap { error -> [Error] in
+            if let partial = (error as? CKError)?.partialErrorsByItemID, !partial.isEmpty {
+                return partial.keys.sorted { String(describing: $0) < String(describing: $1) }
+                    .compactMap { key in partial[key].flatMap { rootCause(in: [$0]) } }
+            }
+            return [error]
+        }
+        return leaves.first { error in
+            guard let ck = error as? CKError else { return true }
+            return ck.code != .batchRequestFailed && ck.code != .partialFailure
+        } ?? leaves.first
+    }
+
+    static func check(_ results: [CKRecord.ID: Result<CKRecord, Error>]) throws {
+        let errors = results.keys.sorted { $0.recordName < $1.recordName }.compactMap { id -> Error? in
+            if case .failure(let error) = results[id] { return error }
+            return nil
+        }
+        if let cause = rootCause(in: errors) { throw cause }
+    }
+
+    static func message(for error: Error) -> String {
+        let cause = rootCause(in: [error]) ?? error
+        let text = cause.localizedDescription.lowercased()
+        if text.contains("production schema") || text.contains("record type") ||
+            text.contains("unknown field") || text.contains("invalid field") {
+            return "Groups needs an iCloud setup update from the app developer. Please report this issue."
+        }
+        guard let ck = cause as? CKError else { return "iCloud couldn't complete the request. Please try again." }
+        switch ck.code {
+        case .notAuthenticated:
+            return "Sign in to iCloud in the iPhone Settings app, then try again."
+        case .networkUnavailable, .networkFailure:
+            return "Check your internet connection, then try again."
+        case .quotaExceeded:
+            return "Your iCloud storage is full. Free some space, then try again."
+        case .serviceUnavailable, .requestRateLimited, .zoneBusy:
+            return "iCloud is busy right now. Please try again shortly."
+        case .permissionFailure, .badContainer, .missingEntitlement:
+            return "iCloud hasn't allowed access to Groups. Please report this issue."
+        case .batchRequestFailed, .partialFailure:
+            return "iCloud couldn't save all of the group's details. Please try again or report this issue."
+        default:
+            return "iCloud couldn't complete the request (code \(ck.code.rawValue)). Please try again or report this issue."
+        }
+    }
+}
+#endif

@@ -227,6 +227,12 @@ private struct CloudSharingSheet: UIViewControllerRepresentable {
 
 /// Receives group invitations tapped in Messages or Mail.
 final class GroupsSceneDelegate: NSObject, UIWindowSceneDelegate {
+    // A share opened while the app is closed arrives in the connection options.
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        guard let metadata = connectionOptions.cloudKitShareMetadata else { return }
+        Task { @MainActor in await GroupSync.shared.accept(metadata) }
+    }
+
     func windowScene(_ windowScene: UIWindowScene, userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
         Task { @MainActor in await GroupSync.shared.accept(metadata) }
     }

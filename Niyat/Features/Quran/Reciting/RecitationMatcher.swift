@@ -29,9 +29,4 @@ enum RecitationMatcher {
         text.split(whereSeparator: \.isWhitespace).map(String.init).filter { !normalize($0).isEmpty }
     }
 
-    /// Close enough to count as the same word (allows one letter off in
-    /// short words, a quarter of the letters in longer ones).
-    static func similar(_ a: String, _ b: String) -> Bool {
-        RecitationTracker.similar(Array(a.utf16), Array(b.utf16))
-    }
 }

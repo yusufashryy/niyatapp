@@ -1,4 +1,6 @@
 import XCTest
+import AVFoundation
+import Speech
 @testable import Niyat
 
 /// Loads the Uthmani text once for these tests.
@@ -15,11 +17,10 @@ final class RecitationMatcherTests: XCTestCase {
         XCTAssertEqual(RecitationMatcher.normalize("إِيَّاكَ"), RecitationMatcher.normalize("اياك"))
         XCTAssertEqual(RecitationMatcher.normalize("رَحْمَةً"), RecitationMatcher.normalize("رحمه"))
         // The dagger alif is read as an alif: the Uthmani spelling matches the
-        // everyday one, and is close to the spelling without it.
+        // everyday one; other spellings need explicit accepted alternatives.
         XCTAssertEqual(RecitationMatcher.normalize("ٱلْكِتَٰبِ"), RecitationMatcher.normalize("الكتاب"))
         XCTAssertEqual(RecitationMatcher.normalize("ٱلسَّمَٰوَٰتِ"), RecitationMatcher.normalize("السماوات"))
-        XCTAssertTrue(RecitationMatcher.similar(RecitationMatcher.normalize("الرَّحْمَٰنِ"), RecitationMatcher.normalize("الرحمن")))
-        XCTAssertFalse(RecitationMatcher.similar("الناس", "الفلق"))
+        XCTAssertNotEqual(RecitationMatcher.normalize("الرَّحْمَٰنِ"), RecitationMatcher.normalize("الرحمن"))
     }
 }
 
@@ -186,6 +187,17 @@ final class RecitationTrackerTests: XCTestCase {
     }
 
     @MainActor
+    func testFatihaAcceptsDocumentedEverydaySpellings() async {
+        var tracker = await makeTracker((1...7).map { (1, $0) })
+        for verse in 1...7 {
+            let heard = speech(1, verse)
+            _ = tracker.update(heard: heard, confidences: sure(heard), isFinal: true)
+        }
+        XCTAssertTrue(tracker.flagged.isEmpty)
+        XCTAssertEqual(tracker.committed.count, tracker.tokens.count)
+    }
+
+    @MainActor
     func testFollowsAlongWordByWord() async {
         var tracker = await makeTracker([(14, 1), (14, 2), (14, 3)])
         let heard = speech(14, 1)
@@ -238,13 +250,13 @@ final class RecitationTrackerTests: XCTestCase {
 
         var unsure = await makeTracker([(14, 1), (14, 2), (14, 3)])
         _ = unsure.update(heard: heard, confidences: Array(repeating: 0.3, count: heard.count), isFinal: true)
-        XCTAssertEqual(flagged(unsure), [WordID(surah: 14, verse: 1, index: 4): .uncertain])
+        XCTAssertEqual(unsure.committed.count, 16)
+        XCTAssertTrue(unsure.committed.values.allSatisfy { $0 == .uncertain })
     }
 
-    /// The recogniser spelling a word a little differently (an extra alef and
-    /// one letter off) still counts as reciting it correctly.
+    /// Changed letters must not be accepted as a spelling variant.
     @MainActor
-    func testSpellingNoiseCountsAsCorrect() async {
+    func testChangedLettersNeverCountAsCorrect() async {
         var tracker = await makeTracker([(14, 1), (14, 2), (14, 3)])
         var heard = speech(14, 1)
         guard let index = heard.indices.first(where: { $0 > 1 && RecitationMatcher.normalize(heard[$0]).count >= 6 }) else {
@@ -255,33 +267,34 @@ final class RecitationTrackerTests: XCTestCase {
         letters.insert("ا", at: 1)
         heard[index] = String(letters)
         _ = tracker.update(heard: heard, confidences: sure(heard), isFinal: true)
-        XCTAssertTrue(tracker.flagged.isEmpty, "\(flagged(tracker))")
+        XCTAssertNotEqual(tracker.committed[index], .correct)
+        XCTAssertFalse(tracker.flagged.isEmpty)
         XCTAssertEqual(position(tracker), WordID(surah: 14, verse: 1, index: 15))
     }
 
-    /// A clearly different word shows while the reciter carries on, without
-    /// waiting for the pause, and is judged again when the utterance ends.
+    /// A mismatch stays uncertain while partial, then is judged at finalization.
     @MainActor
     func testClearMistakeShowsBeforeThePause() async {
         var tracker = await makeTracker([(14, 1), (14, 2), (14, 3)])
         var heard = speech(14, 1)
         heard[4] = "قلم"
         _ = tracker.update(heard: Array(heard.prefix(7)), isFinal: false)
-        XCTAssertEqual(tracker.early[4], .mistake)
+        XCTAssertEqual(tracker.early[4], .uncertain)
         _ = tracker.update(heard: heard, confidences: sure(heard), isFinal: true)
         XCTAssertTrue(tracker.early.isEmpty)
         XCTAssertEqual(flagged(tracker), [WordID(surah: 14, verse: 1, index: 4): .mistake])
     }
 
-    /// Words the recogniser didn't hear between two utterances aren't marked.
+    /// Gaps between utterances stay visible as unverified words.
     @MainActor
-    func testWordsLostBetweenUtterancesAreNotFlagged() async {
+    func testWordsLostBetweenUtterancesRemainUnverified() async {
         var tracker = await makeTracker([(14, 1), (14, 2), (14, 3)])
         let heard = speech(14, 1)
         let first = Array(heard[..<7]), rest = Array(heard[9...])
         _ = tracker.update(heard: first, confidences: sure(first), isFinal: true)
         _ = tracker.update(heard: rest, confidences: sure(rest), isFinal: true)
-        XCTAssertTrue(tracker.flagged.isEmpty, "\(flagged(tracker))")
+        XCTAssertEqual(tracker.committed[7], .uncertain)
+        XCTAssertEqual(tracker.committed[8], .uncertain)
         XCTAssertEqual(position(tracker), WordID(surah: 14, verse: 1, index: 15))
     }
 
@@ -394,5 +407,196 @@ final class WordTimingsTests: XCTestCase {
     func testAnchorsMustBeInOrder() {
         XCTAssertTrue(WordTimingAligner.isInOrder([0: 0.1, 3: 0.9, 5: 2]))
         XCTAssertFalse(WordTimingAligner.isInOrder([0: 0.1, 3: 2.5, 5: 2]))
+    }
+}
+
+/// Regression cases that do not depend on bundled text or a speech service.
+final class RecitationSafetyTests: XCTestCase {
+    private let words = ["الحمد", "لله", "رب", "العالمين", "الرحمن", "الرحيم"]
+
+    private func tracker(_ words: [String]) -> RecitationTracker {
+        var value = RecitationTracker(tokens: words.enumerated().map {
+            RecitationTracker.Token(id: WordID(surah: 1, verse: 1, index: $0.offset),
+                                    forms: [RecitationMatcher.normalize($0.element)])
+        })
+        value.begin(at: 0)
+        return value
+    }
+
+    func testOneLetterSubstitutionIsNotGreen() {
+        let target = ["الحمد", "لله", "من", "الرحمن", "الرحيم"]
+        var value = tracker(target)
+        var heard = target
+        heard[2] = "عن"
+        _ = value.update(heard: heard, confidences: Array(repeating: 0.9, count: heard.count), isFinal: true)
+        XCTAssertEqual(value.committed[2], .mistake)
+        XCTAssertEqual(value.position, 4)
+    }
+
+    func testPartialRevisionRetractsMatch() {
+        var value = tracker(words)
+        _ = value.update(heard: words, isFinal: false)
+        XCTAssertEqual(value.result(at: 2), .uncertain)
+        var revised = words
+        revised[2] = "قلم"
+        _ = value.update(heard: revised, isFinal: false)
+        XCTAssertNotEqual(value.result(at: 2), .correct)
+        _ = value.update(heard: revised, confidences: Array(repeating: 0.9, count: words.count), isFinal: true)
+        XCTAssertEqual(value.result(at: 2), .mistake)
+        XCTAssertTrue(value.early.isEmpty)
+    }
+
+    func testShortenedTranscriptRemovesTransientMarks() {
+        var value = tracker(words)
+        _ = value.update(heard: words, isFinal: false)
+        _ = value.update(heard: Array(words.prefix(2)), isFinal: false)
+        XCTAssertNil(value.result(at: 5))
+        XCTAssertEqual(value.position, 1)
+    }
+
+    func testTimeoutCannotCertifyPartialWords() {
+        var value = tracker(words)
+        _ = value.update(heard: words, isFinal: false)
+        value.finishUtterance()
+        XCTAssertEqual(value.committed.count, words.count)
+        XCTAssertTrue(value.committed.values.allSatisfy { $0 == .uncertain })
+    }
+
+    func testLowConfidenceMatchRemainsUncertain() {
+        var value = tracker(words)
+        _ = value.update(heard: words, confidences: [0.9, 0.9, 0, 0.9, 0.9, 0.9], isFinal: true)
+        XCTAssertEqual(value.committed[2], .uncertain)
+        XCTAssertEqual(value.committed[1], .correct)
+    }
+
+    func testTrailingSubstitutionIsReviewed() {
+        var value = tracker(words)
+        var heard = words
+        heard[5] = "قلم"
+        _ = value.update(heard: heard, confidences: Array(repeating: 0.9, count: words.count), isFinal: true)
+        XCTAssertEqual(value.committed[5], .mistake)
+    }
+
+    func testSplitWordRequiresConfidenceInEveryPart() {
+        var value = tracker(["ياايها", "الناس", "اعبدوا"])
+        _ = value.update(heard: ["يا", "ايها", "الناس", "اعبدوا"],
+                         confidences: [0.9, 0.1, 0.9, 0.9], isFinal: true)
+        XCTAssertEqual(value.committed[0], .uncertain)
+        XCTAssertEqual(value.committed[1], .correct)
+    }
+
+    func testMergedWordsDoNotForgiveChangedLetters() {
+        var value = tracker(words)
+        _ = value.update(heard: ["الحمد", "لله", "ربالعالمون", "الرحمن", "الرحيم"],
+                         confidences: Array(repeating: 0.9, count: 5), isFinal: true)
+        XCTAssertNotEqual(value.committed[2], .correct)
+        XCTAssertNotEqual(value.committed[3], .correct)
+    }
+
+    func testLowConfidenceAnchorsDoNotCertifySkip() {
+        var value = tracker(words)
+        var heard = words
+        heard.remove(at: 2)
+        _ = value.update(heard: heard, confidences: Array(repeating: 0.1, count: heard.count), isFinal: true)
+        XCTAssertEqual(value.committed[2], .uncertain)
+    }
+
+    func testLongStreamingTranscriptPerformance() {
+        let target = Array(repeating: words, count: 34).flatMap { $0 }
+        measure {
+            var value = tracker(target)
+            _ = value.update(heard: Array(target.prefix(150)), isFinal: false)
+            XCTAssertNotNil(value.position)
+        }
+    }
+}
+
+final class RecitationAudioTests: XCTestCase {
+    private final class Request: RecitationAudioRequest {
+        var samples: [Float] = []
+        var ends = 0
+        func append(_ audioPCMBuffer: AVAudioPCMBuffer) {
+            samples.append(audioPCMBuffer.floatChannelData![0][0])
+        }
+        func endAudio() { ends += 1 }
+    }
+
+    func testAudioDuringFinalizationReplaysOnceInOrder() throws {
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1))
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1024))
+        buffer.frameLength = 1024
+        buffer.floatChannelData![0].initialize(repeating: 0, count: 1024)
+        let box = RequestBox(), first = Request(), second = Request(), third = Request()
+        box.set(first)
+        buffer.floatChannelData![0][0] = 1
+        box.append(buffer)
+        box.endCurrentAudio()
+        for value: Float in [2, 3] {
+            buffer.floatChannelData![0][0] = value
+            box.append(buffer)
+        }
+        XCTAssertEqual(first.samples, [1])
+        XCTAssertEqual(first.ends, 1)
+        box.set(second)
+        XCTAssertEqual(second.samples, [2, 3])
+        buffer.floatChannelData![0][0] = 4
+        box.append(buffer)
+        XCTAssertEqual(second.samples, [2, 3, 4])
+        box.set(third)
+        XCTAssertTrue(third.samples.isEmpty)
+        box.set(nil)
+    }
+
+    func testStoppingDiscardsPendingAudio() throws {
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1))
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1024))
+        buffer.frameLength = 1024
+        buffer.floatChannelData![0].initialize(repeating: 0.1, count: 1024)
+        let box = RequestBox(), first = Request(), next = Request()
+        box.set(first)
+        box.endCurrentAudio()
+        box.append(buffer)
+        box.set(nil)
+        box.set(next)
+        XCTAssertTrue(next.samples.isEmpty)
+        box.set(nil)
+    }
+
+    func testBufferedAudioOwnsItsSamples() throws {
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1))
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1024))
+        buffer.frameLength = 1024
+        buffer.floatChannelData![0].initialize(repeating: 0.25, count: 1024)
+        let copy = try XCTUnwrap(RequestBox.copy(buffer))
+        buffer.floatChannelData![0][0] = 0
+        XCTAssertEqual(copy.floatChannelData![0][0], 0.25)
+        XCTAssertEqual(copy.frameLength, buffer.frameLength)
+    }
+
+    func testOldCallbackCannotEndNewRequest() {
+        let box = RequestBox()
+        let first = SFSpeechAudioBufferRecognitionRequest()
+        let second = SFSpeechAudioBufferRecognitionRequest()
+        box.set(first)
+        XCTAssertTrue(box.endCurrentAudio(ifCurrent: first))
+        XCTAssertFalse(box.endCurrentAudio(ifCurrent: first))
+        box.set(second)
+        XCTAssertFalse(box.endCurrentAudio(ifCurrent: first))
+        XCTAssertTrue(box.endCurrentAudio(ifCurrent: second))
+        box.set(nil)
+        XCTAssertFalse(box.endCurrentAudio())
+    }
+
+    func testLackOfRecognitionCallbacksIsNotSilence() throws {
+        let box = RequestBox()
+        box.set(SFSpeechAudioBufferRecognitionRequest())
+        XCTAssertFalse(box.hasSpeechPause)
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1))
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1024))
+        buffer.frameLength = 1024
+        buffer.floatChannelData![0].initialize(repeating: 0.05, count: 1024)
+        box.append(buffer)
+        XCTAssertFalse(box.hasSpeechPause)
+        box.set(nil)
     }
 }

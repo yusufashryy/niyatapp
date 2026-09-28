@@ -26,6 +26,7 @@ struct RecitationTracker {
     }
 
     enum Result: Equatable {
+        /// Final transcript matched an accepted spelling; not a pronunciation verdict.
         case correct
         /// Couldn't tell: shown with a neutral mark, never as an error.
         case uncertain
@@ -49,11 +50,9 @@ struct RecitationTracker {
     private(set) var committed: [Int: Result] = [:]
     /// Words passed in the current utterance, before it is judged.
     private(set) var provisional: [Int: Kind] = [:]
-    /// Words in the utterance still going on that were clearly not what the
-    /// text says, with two words heard correctly after them: shown straight
-    /// away rather than at the next pause. Worked out again with every
-    /// update, then replaced by the judgement when the utterance ends.
+    /// Provisional mismatches are unverified until a confident final result.
     private(set) var early: [Int: Result] = [:]
+    private let tokenForms: [[[UInt16]]]
     private var expected = 0
     private var locked = false
     private var searchRange: Range<Int> = 0..<0
@@ -71,6 +70,7 @@ struct RecitationTracker {
 
     init(tokens: [Token]) {
         self.tokens = tokens
+        tokenForms = tokens.map { $0.forms.map { Array($0.utf16) } }
         searchRange = 0..<tokens.count
     }
 
@@ -79,18 +79,24 @@ struct RecitationTracker {
     mutating func begin(at index: Int, searchingAhead ahead: Int = 200) {
         expected = min(max(index, 0), max(tokens.count - 1, 0))
         locked = false
+        position = nil
         provisional = [:]
-        searchRange = max(0, expected - 5)..<min(tokens.count, expected + ahead)
+        early = [:]
+        searchRange = max(0, expected - 5)..<min(tokens.count, expected + max(1, ahead))
     }
 
     /// Where the reciter is, or where they're expected to start.
     var focus: Int { position ?? expected }
 
-    /// The result to show for a word, if it has been passed.
-    func result(at index: Int) -> Result? {
-        if let kind = provisional[index] { return kind == .matched ? .correct : nil }
-        return committed[index]
+    /// Partial hypotheses never certify a word, even when they match the text.
+    /// Re-reading a word temporarily replaces its old verdict until finalized.
+    var displayResults: [Int: Result] {
+        var results = committed
+        for index in provisional.keys { results[index] = .uncertain }
+        return results
     }
+
+    func result(at index: Int) -> Result? { displayResults[index] }
 
     /// Words worth reviewing: everything not judged correct.
     var flagged: [(index: Int, result: Result)] {
@@ -107,6 +113,8 @@ struct RecitationTracker {
             kept.append(Array(word.utf16))
             keptConfidences.append(confidences?.indices.contains(i) == true ? confidences![i] : 0)
         }
+        provisional = [:]
+        early = [:]
         guard !kept.isEmpty, !tokens.isEmpty else { return locked ? .following : .searching }
 
         let window: Range<Int>
@@ -125,50 +133,32 @@ struct RecitationTracker {
             let sorted = matched.sorted()
             let hasPair = zip(sorted, sorted.dropFirst()).contains { $1 == $0 + 1 }
             guard matched.count >= 2, hasPair else { return kept.count >= 8 ? .lost : .searching }
+            expected = steps.compactMap(\.token).min() ?? expected
             locked = true
         }
 
         provisional = [:]
-        guard let last = matched.max() else {
+        guard !matched.isEmpty, let last = steps.compactMap(\.token).max() else {
             guard kept.count >= 8 else { return .following }
             // Lost the place: search more widely around it for the next words.
             locked = false
             searchRange = max(0, expected - 60)..<min(tokens.count, expected + 300)
             return .lost
         }
+        // Once following, a gap between requests is unverified, not silently
+        // passed. It may be an omission or a recognition failure.
+        if let first = steps.compactMap(\.token).min(), position != nil, first > expected {
+            for index in expected..<first { provisional[index] = .skipped }
+        }
         for step in steps {
             guard let token = step.token, token <= last else { continue }
-            // Spelled a little differently by the recogniser, but clearly the
-            // same word: it counts as recited correctly.
-            if step.kind == .different, let h = step.heard,
-               tokens[token].forms.contains(where: { Self.closeEnough(Array($0.utf16), kept[h]) }) {
-                provisional[token] = .matched
-            } else {
-                provisional[token] = step.kind
-            }
+            provisional[token] = step.kind
+            if !isFinal, step.kind != .matched { early[token] = .uncertain }
         }
         position = last
 
-        early = [:]
-        if !isFinal {
-            for (offset, step) in steps.enumerated() {
-                guard let token = step.token, token <= last, provisional[token] != .matched else { continue }
-                let before = steps[..<offset].filter { $0.kind == .matched }.count
-                let after = steps[(offset + 1)...].filter { $0.kind == .matched }.count
-                guard before >= 1, after >= 2 else { continue }
-                switch step.kind {
-                case .different:
-                    if let h = step.heard, clearlyDifferent(kept[h], token: token) { early[token] = .mistake }
-                case .skipped:
-                    if before >= 2 { early[token] = .skipped }
-                case .matched:
-                    break
-                }
-            }
-        }
-
         if isFinal {
-            judge(steps: steps, heard: kept, confidences: keptConfidences)
+            judge(steps: steps, confidences: keptConfidences)
             expected = last + 1
         }
         return .following
@@ -176,50 +166,37 @@ struct RecitationTracker {
 
     /// Ends the utterance in progress (the reciter stopped), judging what was heard.
     mutating func finishUtterance() {
-        for (token, kind) in provisional {
-            switch kind {
-            case .matched: committed[token] = .correct
-            case .different: committed[token] = early[token] ?? .uncertain
-            // Not heard at all: left unmarked rather than guessed at.
-            case .skipped: break
-            }
-        }
+        // A timeout, stop or recognition error is not a confident final result.
+        for token in provisional.keys { committed[token] = .uncertain }
         provisional = [:]
         early = [:]
         if let position { expected = position + 1 }
     }
 
-    /// Nothing like any accepted spelling of the word.
-    private func clearlyDifferent(_ heard: [UInt16], token: Int) -> Bool {
-        tokens[token].forms.allSatisfy { form in
-            let target = Array(form.utf16)
-            return !Self.closeEnough(target, heard) && Self.distance(heard, target) * 2 > max(heard.count, target.count)
+    private mutating func judge(steps: [Step], confidences: [Float]) {
+        // Include gaps at request boundaries and weakly anchored omissions.
+        for token in provisional.keys { committed[token] = .uncertain }
+        let confidentMatches = steps.map { step in
+            step.kind == .matched && !step.heardIndices.isEmpty &&
+                step.heardIndices.allSatisfy { confidences[$0] >= 0.5 }
         }
-    }
-
-    private mutating func judge(steps: [Step], heard: [[UInt16]], confidences: [Float]) {
+        var before = 0
+        var remaining = confidentMatches.filter { $0 }.count
         for (offset, step) in steps.enumerated() {
+            if confidentMatches[offset] { remaining -= 1 }
+            defer { if confidentMatches[offset] { before += 1 } }
             guard let token = step.token, let kind = provisional[token] else { continue }
             switch kind {
             case .matched:
-                committed[token] = .correct
+                committed[token] = confidentMatches[offset] ? .correct : .uncertain
             case .different:
-                // A confident, clearly different word is a likely mistake;
-                // anything close or low-confidence is only uncertain.
-                guard let heardIndex = step.heard else { committed[token] = .uncertain; continue }
-                let word = heard[heardIndex]
-                let target = Array(tokens[token].forms[0].utf16)
-                let close = Self.distance(word, target) * 2 <= max(word.count, target.count)
-                committed[token] = confidences[heardIndex] >= 0.5 && !close ? .mistake : .uncertain
+                if let h = step.heard, confidences[h] >= 0.5 { committed[token] = .mistake }
             case .skipped:
-                // Only a clear skip (words heard on both sides) is marked;
-                // otherwise the recogniser probably just dropped it.
-                let before = steps[..<offset].filter { $0.kind == .matched }.suffix(2)
-                let after = steps[(offset + 1)...].filter { $0.kind == .matched }.prefix(2)
-                if before.count == 2, after.count == 2 { committed[token] = .skipped }
+                if before >= 2, remaining >= 2 { committed[token] = .skipped }
             }
         }
         provisional = [:]
+        early = [:]
     }
 
     // MARK: Alignment
@@ -254,6 +231,11 @@ struct RecitationTracker {
         let kind: Kind
         let token: Int?
         let heard: Int?
+        var heardCount = 1
+        var heardIndices: Range<Int> {
+            guard let heard else { return 0..<0 }
+            return heard..<(heard + heardCount)
+        }
     }
 
     private enum Move {
@@ -264,7 +246,7 @@ struct RecitationTracker {
     /// (small penalty for distance from `expected`) and end anywhere (words
     /// not reached yet are simply pending).
     private func align(heard: [[UInt16]], window: Range<Int>, penaltyPerWord: Double) -> [Step] {
-        let forms = window.map { tokens[$0].forms.map { Array($0.utf16) } }
+        let forms = Array(tokenForms[window])
         let w = forms.count, m = heard.count
         let infinity = Double.greatestFiniteMagnitude
         var cost = Array(repeating: Array(repeating: infinity, count: m + 1), count: w + 1)
@@ -272,7 +254,10 @@ struct RecitationTracker {
 
         // Heard words joined, for recognisers that split one Uthmani word
         // (يا أيها for يَٰٓأَيُّهَا, alif lam mim for الٓمٓ).
-        func joined(_ end: Int, _ count: Int) -> [UInt16] { heard[(end - count)..<end].flatMap { $0 } }
+        // Build these once per transcript, not up to four times in every cell.
+        let joined = (0...m).map { end in
+            (2...5).map { count in end >= count ? heard[(end - count)..<end].flatMap { $0 } : [] }
+        }
 
         for i in 0...w {
             let startPenalty = Double(abs(window.lowerBound + i - expected)) * penaltyPerWord
@@ -280,20 +265,20 @@ struct RecitationTracker {
                 var best = startPenalty + Double(j) * Self.leadingExtraCost
                 var bestMove = Move.start
                 if i > 0, j > 0 {
-                    let same = forms[i - 1].contains { Self.similar($0, heard[j - 1]) }
+                    let same = forms[i - 1].contains { $0 == heard[j - 1] }
                     let c = cost[i - 1][j - 1] + (same ? Self.matchCost : Self.differentCost)
                     if c < best { best = c; bestMove = same ? .match : .different }
                 }
                 if i > 0 {
                     for count in 2...5 where j >= count {
-                        let together = joined(j, count)
-                        if forms[i - 1].contains(where: { Self.mergeable($0, together) }) {
+                        let together = joined[j][count - 2]
+                        if forms[i - 1].contains(where: { $0 == together }) {
                             let c = cost[i - 1][j - count] + Self.matchCost
                             if c < best { best = c; bestMove = .mergedHeard(count) }
                         }
                     }
                 }
-                if i > 1, j > 0, Self.mergeable(forms[i - 2][0] + forms[i - 1][0], heard[j - 1]) {
+                if i > 1, j > 0, forms[i - 2].contains(where: { left in forms[i - 1].contains { left + $0 == heard[j - 1] } }) {
                     let c = cost[i - 2][j - 1] + 2 * Self.matchCost
                     if c < best { best = c; bestMove = .mergedTokens }
                 }
@@ -327,7 +312,7 @@ struct RecitationTracker {
             case .different:
                 steps.append(Step(kind: .different, token: token, heard: j - 1)); i -= 1; j -= 1
             case .mergedHeard(let count):
-                steps.append(Step(kind: .matched, token: token, heard: j - count)); i -= 1; j -= count
+                steps.append(Step(kind: .matched, token: token, heard: j - count, heardCount: count)); i -= 1; j -= count
             case .mergedTokens:
                 steps.append(Step(kind: .matched, token: token, heard: j - 1))
                 steps.append(Step(kind: .matched, token: token - 1, heard: j - 1)); i -= 2; j -= 1
@@ -340,49 +325,4 @@ struct RecitationTracker {
         return steps.reversed()
     }
 
-    // MARK: Word comparison (UTF-16 letters)
-
-    /// Close enough to count as the same word: one letter off in short words,
-    /// a quarter of the letters in longer ones.
-    static func similar(_ a: [UInt16], _ b: [UInt16]) -> Bool {
-        if a == b { return true }
-        let allowed = max(1, max(a.count, b.count) / 4)
-        guard abs(a.count - b.count) <= allowed else { return false }
-        return distance(a, b) <= allowed
-    }
-
-    /// Looser than `similar`, for judging a word already placed: long vowels
-    /// written or left out (common between the Uthmani text and everyday
-    /// spelling) are ignored, and a third of the letters may differ.
-    static func closeEnough(_ a: [UInt16], _ b: [UInt16]) -> Bool {
-        if similar(a, b) { return true }
-        let alef: UInt16 = 0x0627
-        let x = a.filter { $0 != alef }, y = b.filter { $0 != alef }
-        guard !x.isEmpty, !y.isEmpty else { return false }
-        let allowed = max(1, max(x.count, y.count) / 3)
-        guard abs(x.count - y.count) <= allowed else { return false }
-        return distance(x, y) <= allowed
-    }
-
-    /// Joining or splitting words is only accepted when spelling explains it.
-    static func mergeable(_ a: [UInt16], _ b: [UInt16]) -> Bool {
-        let allowed = max(a.count, b.count) >= 8 ? 1 : 0
-        guard abs(a.count - b.count) <= allowed else { return false }
-        return distance(a, b) <= allowed
-    }
-
-    static func distance(_ a: [UInt16], _ b: [UInt16]) -> Int {
-        if a.isEmpty { return b.count }
-        if b.isEmpty { return a.count }
-        var previous = Array(0...b.count)
-        var current = previous
-        for i in 1...a.count {
-            current[0] = i
-            for j in 1...b.count {
-                current[j] = min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1))
-            }
-            swap(&previous, &current)
-        }
-        return previous[b.count]
-    }
 }
