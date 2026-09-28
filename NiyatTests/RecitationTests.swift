@@ -259,6 +259,20 @@ final class RecitationTrackerTests: XCTestCase {
         XCTAssertEqual(position(tracker), WordID(surah: 14, verse: 1, index: 15))
     }
 
+    /// A clearly different word shows while the reciter carries on, without
+    /// waiting for the pause, and is judged again when the utterance ends.
+    @MainActor
+    func testClearMistakeShowsBeforeThePause() async {
+        var tracker = await makeTracker([(14, 1), (14, 2), (14, 3)])
+        var heard = speech(14, 1)
+        heard[4] = "قلم"
+        _ = tracker.update(heard: Array(heard.prefix(7)), isFinal: false)
+        XCTAssertEqual(tracker.early[4], .mistake)
+        _ = tracker.update(heard: heard, confidences: sure(heard), isFinal: true)
+        XCTAssertTrue(tracker.early.isEmpty)
+        XCTAssertEqual(flagged(tracker), [WordID(surah: 14, verse: 1, index: 4): .mistake])
+    }
+
     /// Words the recogniser didn't hear between two utterances aren't marked.
     @MainActor
     func testWordsLostBetweenUtterancesAreNotFlagged() async {

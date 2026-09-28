@@ -16,7 +16,7 @@ struct MushafOptions: Codable, Equatable {
         var id: String { rawValue }
         var title: String { self == .standard ? "Standard" : "Large" }
         /// How far a line's letters may be narrowed to fit.
-        var squeeze: CGFloat { self == .standard ? 0.9 : 0.8 }
+        var squeeze: CGFloat { self == .standard ? 0.96 : 0.92 }
         /// Side margin, as a share of the screen width.
         var margin: CGFloat { self == .standard ? 0.04 : 0.02 }
     }

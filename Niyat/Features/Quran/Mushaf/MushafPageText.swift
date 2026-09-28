@@ -111,7 +111,7 @@ enum MushafMetrics {
     /// Quran font). Keeps the text the same size on most pages.
     static let typicalLineWidth: CGFloat = 19.5
     /// How much a line's words may be squeezed or stretched to fill it.
-    static let stretch: ClosedRange<CGFloat> = 0.9...1.1
+    static let stretch: ClosedRange<CGFloat> = 0.96...1.1
     /// Lines on a full page.
     static let lineCount = 15
     /// Widest a page gets, as a share of its height (about a printed mushaf).

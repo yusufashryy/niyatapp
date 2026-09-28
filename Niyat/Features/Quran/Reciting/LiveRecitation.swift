@@ -105,6 +105,8 @@ final class LiveRecitation {
     @ObservationIgnored private var pauseTimer: Task<Void, Never>?
     @ObservationIgnored private var finalTimer: Task<Void, Never>?
     @ObservationIgnored private var shownMarks: [WordID: WordMark] = [:]
+    /// Words showing an early mark (see `RecitationTracker.early`).
+    @ObservationIgnored private var earlyShown: Set<WordID> = []
     /// Requests that ended at once with nothing heard (recogniser failing).
     @ObservationIgnored private var quickFailures = 0
     @ObservationIgnored private var requestStarted = Date.distantPast
@@ -224,6 +226,7 @@ final class LiveRecitation {
     func clearReview() {
         tracker = nil
         shownMarks = [:]
+        earlyShown = []
         WordHighlights.shared.clearRecitation()
     }
 
@@ -262,6 +265,7 @@ final class LiveRecitation {
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
+        request.addsPunctuation = false
         if isOnDevice { request.requiresOnDeviceRecognition = true }
         // The words around the place help the recogniser (up to 100 hints).
         let around = tracker.focus
@@ -307,11 +311,11 @@ final class LiveRecitation {
             finalTimer?.cancel()
             startRequest()
         } else {
-            // A pause of about two seconds ends the utterance: ask the
+            // A pause of about a second ends the utterance: ask the
             // recogniser for its final (confidence-rated) result.
             pauseTimer?.cancel()
             pauseTimer = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(1.8))
+                try? await Task.sleep(for: .seconds(1.1))
                 guard !Task.isCancelled else { return }
                 self?.endUtterance(generation: generation)
             }
@@ -323,7 +327,7 @@ final class LiveRecitation {
         requests.set(nil) // endAudio: the final result follows shortly
         finalTimer?.cancel()
         finalTimer = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2.5))
+            try? await Task.sleep(for: .seconds(1.5))
             guard !Task.isCancelled, let self, generation == self.generation, self.isListening else { return }
             // No final result came: judge what was heard, conservatively.
             self.tracker?.finishUtterance()
@@ -399,9 +403,26 @@ final class LiveRecitation {
             }
             if shownMarks[id] != mark { changes[id] = .some(mark) }
         }
-        for (index, kind) in tracker.provisional where kind == .matched && tracker.committed[index] == nil {
+        // Clear mistakes shown early (see below) that a revised hearing dropped.
+        let earlyNow = Set(tracker.early.keys.filter { tracker.committed[$0] == nil }.map { tracker.tokens[$0].id })
+        for id in earlyShown.subtracting(earlyNow) where changes[id] == nil {
+            let index = tracker.tokens.firstIndex { $0.id == id }
+            if let index, tracker.committed[index] != nil { continue }
+            let matched = index.map { tracker.provisional[$0] == .matched } ?? false
+            let mark: WordMark? = matched ? .correct : nil
+            changes[id] = .some(mark)
+        }
+        earlyShown = earlyNow
+        // Clear mistakes in the utterance still going on: shown straight away.
+        for (index, result) in tracker.early where tracker.committed[index] == nil {
             let id = tracker.tokens[index].id
-            if shownMarks[id] == nil { changes[id] = .some(.correct) }
+            let mark: WordMark = result == .skipped ? .skipped : .mistake
+            if shownMarks[id] != mark { changes[id] = .some(mark) }
+        }
+        for (index, kind) in tracker.provisional
+        where kind == .matched && tracker.committed[index] == nil && tracker.early[index] == nil {
+            let id = tracker.tokens[index].id
+            if shownMarks[id] == nil, changes[id] == nil { changes[id] = .some(.correct) }
         }
         if changes.values.contains(where: { $0 == .mistake }) { mistakeNotice += 1 }
         for (id, mark) in changes { shownMarks[id] = mark }

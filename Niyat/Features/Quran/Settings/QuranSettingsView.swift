@@ -88,7 +88,7 @@ struct QuranSettingsView: View {
                         ForEach(QuranTextWeight.allCases) { Text($0.title).tag($0.rawValue) }
                     }
                     VStack(alignment: .leading) {
-                        LabeledContent("Line spacing", value: lineHeight <= QuranLineSpacing.standard + 0.01 ? "Tight, like print" : String(format: "%.1f×", lineHeight))
+                        LabeledContent("Line spacing", value: abs(lineHeight - QuranLineSpacing.standard) < 0.01 ? "Standard" : String(format: "%.1f×", lineHeight))
                         Slider(value: $lineHeight, in: QuranLineSpacing.range, step: 0.1)
                     }
                     Text("بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ")

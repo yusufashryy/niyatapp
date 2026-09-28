@@ -304,6 +304,7 @@ final class QuranTextCanvas: UIView {
     private static let fontKey = NSAttributedString.Key(kCTFontAttributeName as String)
 
     private static let strokeKey = NSAttributedString.Key(kCTStrokeWidthAttributeName as String)
+    private static let kernKey = NSAttributedString.Key(kCTKernAttributeName as String)
 
     private static func baseAttributes(_ style: QuranTextStyle) -> [NSAttributedString.Key: Any] {
         var attributes: [NSAttributedString.Key: Any] = [fontKey: font(style.fontSize), colorKey: style.ink.cgColor]
@@ -418,8 +419,12 @@ final class QuranTextCanvas: UIView {
             let string = NSMutableAttributedString()
             var words: [(id: WordID, core: NSRange, whole: NSRange)] = []
             let space = NSAttributedString(string: " ", attributes: Self.baseAttributes(style))
+            var spaces: [Int] = []
             for index in range {
-                if index > range.lowerBound { string.append(space) }
+                if index > range.lowerBound {
+                    spaces.append(string.length)
+                    string.append(space)
+                }
                 let unit = units[index]
                 let location = string.length
                 string.append(unit.text)
@@ -433,13 +438,18 @@ final class QuranTextCanvas: UIView {
             var scale: CGFloat = 1
             if justify, naturalWidth > 0 {
                 // Squeeze or stretch the words a little (within the style's
-                // range), then widen the spaces for the rest.
+                // range), then widen the spaces for the rest. Only the spaces:
+                // CoreText's own justification stretches letters inside words
+                // (kashida), which leaves the harakat out of place.
                 scale = min(max(width / naturalWidth, style.stretch.lowerBound), style.stretch.upperBound)
                 let target = width / scale
-                if range.count > 1, naturalWidth < target,
-                   let justified = CTLineCreateJustifiedLine(natural, 1.0, Double(target)) {
-                    ctLine = justified
-                    lineWidth = target
+                if !spaces.isEmpty, naturalWidth < target {
+                    let extra = (target - naturalWidth) / CGFloat(spaces.count)
+                    for location in spaces {
+                        string.addAttribute(Self.kernKey, value: extra, range: NSRange(location: location, length: 1))
+                    }
+                    ctLine = CTLineCreateWithAttributedString(string as CFAttributedString)
+                    lineWidth = CGFloat(CTLineGetTypographicBounds(ctLine, nil, nil, nil))
                 }
             }
             // Never wider than the view.

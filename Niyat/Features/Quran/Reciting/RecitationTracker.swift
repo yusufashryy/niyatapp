@@ -49,6 +49,11 @@ struct RecitationTracker {
     private(set) var committed: [Int: Result] = [:]
     /// Words passed in the current utterance, before it is judged.
     private(set) var provisional: [Int: Kind] = [:]
+    /// Words in the utterance still going on that were clearly not what the
+    /// text says, with two words heard correctly after them: shown straight
+    /// away rather than at the next pause. Worked out again with every
+    /// update, then replaced by the judgement when the utterance ends.
+    private(set) var early: [Int: Result] = [:]
     private var expected = 0
     private var locked = false
     private var searchRange: Range<Int> = 0..<0
@@ -144,6 +149,24 @@ struct RecitationTracker {
         }
         position = last
 
+        early = [:]
+        if !isFinal {
+            for (offset, step) in steps.enumerated() {
+                guard let token = step.token, token <= last, provisional[token] != .matched else { continue }
+                let before = steps[..<offset].filter { $0.kind == .matched }.count
+                let after = steps[(offset + 1)...].filter { $0.kind == .matched }.count
+                guard before >= 1, after >= 2 else { continue }
+                switch step.kind {
+                case .different:
+                    if let h = step.heard, clearlyDifferent(kept[h], token: token) { early[token] = .mistake }
+                case .skipped:
+                    if before >= 2 { early[token] = .skipped }
+                case .matched:
+                    break
+                }
+            }
+        }
+
         if isFinal {
             judge(steps: steps, heard: kept, confidences: keptConfidences)
             expected = last + 1
@@ -156,13 +179,22 @@ struct RecitationTracker {
         for (token, kind) in provisional {
             switch kind {
             case .matched: committed[token] = .correct
-            case .different: committed[token] = .uncertain
+            case .different: committed[token] = early[token] ?? .uncertain
             // Not heard at all: left unmarked rather than guessed at.
             case .skipped: break
             }
         }
         provisional = [:]
+        early = [:]
         if let position { expected = position + 1 }
+    }
+
+    /// Nothing like any accepted spelling of the word.
+    private func clearlyDifferent(_ heard: [UInt16], token: Int) -> Bool {
+        tokens[token].forms.allSatisfy { form in
+            let target = Array(form.utf16)
+            return !Self.closeEnough(target, heard) && Self.distance(heard, target) * 2 > max(heard.count, target.count)
+        }
     }
 
     private mutating func judge(steps: [Step], heard: [[UInt16]], confidences: [Float]) {
