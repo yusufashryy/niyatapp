@@ -179,6 +179,9 @@ final class GroupSync {
             }
             groups = result.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             errorMessage = nil
+        } catch let error where Self.isCancellation(error) {
+            // Superseded by another refresh (or the screen closed): not a failure.
+            return
         } catch {
             errorMessage = "Couldn't load your groups: \(Self.explain(error))"
         }
@@ -251,6 +254,13 @@ final class GroupSync {
             errorMessage = "Couldn't create the group: \(Self.explain(error))"
             return nil
         }
+    }
+
+    /// A request that was cancelled rather than failed (CKError code 20).
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        let cause = GroupCloudErrors.rootCause(in: [error]) ?? error
+        return (cause as? CKError)?.code == .operationCancelled || cause is CancellationError
     }
 
     /// A readable reason, including the one a developer can fix: the Groups

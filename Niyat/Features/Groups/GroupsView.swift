@@ -60,7 +60,9 @@ struct GroupsView: View {
             }
             .padding(16)
         }
-        .refreshable { await sync.refresh() }
+        // Its own task: pull-to-refresh cancels its work when the gesture
+        // ends, which would cut the iCloud requests off half way.
+        .refreshable { await Task { await sync.refresh() }.value }
         .niyatBackground()
         .navigationTitle("Groups")
         .toolbar {
