@@ -5,7 +5,7 @@ JazakAllahu khayran for helping! Niyat is free and always will be.
 1. Fork the repo and create a branch.
 2. Follow **Running it** in the README to build (`make`, or `make full` with a paid Apple account).
 3. Keep changes focused. Match the style around you: SwiftUI, the `Palette` colours, `glassPanel` for floating elements and `surface` for content.
-4. Push. GitHub Actions builds both variants, runs the tests and records a demo tour of the app. Check the screenshots of the screens you touched.
+4. Push. GitHub Actions builds the full app and runs the tests. For screenshots of every screen (iPhone and iPad), run the workflow by hand: Actions › Build & Test › Run workflow.
 5. Open a pull request.
 
 Rules that matter:

@@ -4,7 +4,14 @@ on:
   push:
     branches: [main, "claude/**"]
   pull_request:
+  # Actions › Build & Test › Run workflow: builds, tests, and (ticked by
+  # default) takes the App Store screenshots on iPhone and iPad.
   workflow_dispatch:
+    inputs:
+      screenshots:
+        description: Take the App Store screenshots (iPhone and iPad demo tour)
+        type: boolean
+        default: true
 
 permissions:
   contents: write  # lets the demo job update the demo-media branch
@@ -15,33 +22,57 @@ concurrency:
 
 jobs:
   build:
-    name: ${{ matrix.variant }}
+    name: Build and test
     runs-on: xcode-27  # macOS 27 + Xcode 27 (iOS 27 SDK and simulator)
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        # basic = free Apple ID build, full = with Prayer Lock (Screen Time)
-        variant: [basic, full]
+    env:
+      # Screenshots only when asked for (Run workflow with the box ticked).
+      SCREENSHOTS: ${{ github.event_name == 'workflow_dispatch' && inputs.screenshots }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # full history, for the file dates below
 
-      - run: mkdir -p demo
+      # Reusing the last build: Xcode only rebuilds files whose date changed,
+      # but a fresh checkout dates every file "now". Give each file the date
+      # of the last commit that changed it instead, and tell Xcode not to
+      # treat the new checkout's disk IDs as changes.
+      - name: Date files by their last commit
+        run: |
+          python3 - <<'PY'
+          import os, subprocess
+          log = subprocess.run(["git", "log", "--format=@%ct", "--name-only"], capture_output=True, text=True, check=True).stdout
+          seen, when = set(), 0
+          for line in log.splitlines():
+              if line.startswith("@"):
+                  when = int(line[1:])
+              elif line and line not in seen:
+                  seen.add(line)
+                  if os.path.exists(line):
+                      os.utime(line, (when, when))
+          PY
+          defaults write com.apple.dt.XCBuild IgnoreFileSystemDeviceInodeChanges -bool YES
+
+      - name: Reuse the last build
+        uses: actions/cache@v4
+        with:
+          path: build/DerivedData
+          key: deriveddata-${{ runner.os }}-${{ hashFiles('project.yml', 'Config/*.yml') }}-${{ github.sha }}
+          restore-keys: |
+            deriveddata-${{ runner.os }}-${{ hashFiles('project.yml', 'Config/*.yml') }}-
+            deriveddata-${{ runner.os }}-
 
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      # The full app: Prayer Lock, Groups, Time Sensitive alerts and Apple Watch.
       - name: Generate Xcode project
-        run: make ${{ matrix.variant == 'full' && 'full' || 'project' }}
+        run: make full
 
-      - name: Check Prayer Lock targets are ${{ matrix.variant == 'full' && 'included' || 'left out' }}
-        run: |
-          if grep -q "FocusMonitor" Niyat.xcodeproj/project.pbxproj; then has=yes; else has=no; fi
-          echo "Prayer Lock targets present: $has"
-          [ "$has" = "${{ matrix.variant == 'full' && 'yes' || 'no' }}" ]
+      - name: Check Prayer Lock targets are included
+        run: grep -q "FocusMonitor" Niyat.xcodeproj/project.pbxproj
 
       - name: Check Groups uses the entitled iCloud container
-        if: matrix.variant == 'full'
         run: |
           grep -A1 "NiyatCloudContainer" Niyat/Support/Info.plist | grep -q 'iCloud\.$(BUNDLE_ID_PREFIX)\.niyat'
           grep -A2 "icloud-container-identifiers" Niyat/Support/Niyat.entitlements | grep -q 'iCloud\.$(BUNDLE_ID_PREFIX)\.niyat'
@@ -50,7 +81,7 @@ jobs:
         run: |
           count=$(grep -c "PrivacyInfo.xcprivacy in Resources" Niyat.xcodeproj/project.pbxproj || true)
           echo "Privacy manifests in Resources: $count"
-          [ "$count" -ge ${{ matrix.variant == 'full' && '6' || '2' }} ]
+          [ "$count" -ge 6 ]
 
       - name: Pick an iPhone simulator
         run: |
@@ -76,42 +107,18 @@ jobs:
             -scheme Niyat \
             -destination "id=$SIMULATOR_ID" \
             -only-testing:NiyatTests \
+            -derivedDataPath build/DerivedData \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify --renderer github-actions
 
-      # An unsigned .ipa of the basic build, for friends to install with a
-      # sideloading tool (Sideloadly, AltStore), which signs it with their own Apple ID.
-      - name: Build unsigned .ipa for sideloading
-        if: matrix.variant == 'basic'
-        run: |
-          set -o pipefail
-          xcodebuild build \
-            -project Niyat.xcodeproj \
-            -scheme Niyat \
-            -configuration Release \
-            -destination "generic/platform=iOS" \
-            -derivedDataPath build/ipa \
-            -skipPackagePluginValidation \
-            CODE_SIGNING_ALLOWED=NO \
-            | xcbeautify --renderer github-actions
-          mkdir -p build/ipa/Payload
-          cp -R build/ipa/Build/Products/Release-iphoneos/Niyat.app build/ipa/Payload/
-          (cd build/ipa && zip -qry ../../Niyat-unsigned.ipa Payload)
-          ls -la Niyat-unsigned.ipa
-
-      - name: Upload .ipa
-        if: matrix.variant == 'basic'
-        uses: actions/upload-artifact@v7
-        with:
-          name: Niyat-unsigned-ipa
-          path: Niyat-unsigned.ipa
-
-      # Demo tour: taps through every screen and saves a screenshot of each.
+      # Demo tour (only when asked for): taps through every screen and saves
+      # a screenshot of each, on the biggest iPhone and then the biggest iPad.
       - name: Run demo tour
-        if: matrix.variant == 'full'
+        if: env.SCREENSHOTS == 'true'
         run: |
           set -o pipefail
+          mkdir -p demo
           xcrun simctl boot "$SIMULATOR_ID" || true
           xcrun simctl bootstatus "$SIMULATOR_ID" -b
           xcrun simctl status_bar "$SIMULATOR_ID" override \
@@ -124,6 +131,7 @@ jobs:
             -only-testing:NiyatUITests \
             -parallel-testing-enabled NO \
             -resultBundlePath demo/tour.xcresult \
+            -derivedDataPath build/DerivedData \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify --renderer github-actions
@@ -131,7 +139,7 @@ jobs:
       # The same tour on the biggest iPad, for the App Store's iPad screenshots
       # (13", 2064 × 2752). Screenshots only: it doesn't fail the build.
       - name: Run demo tour on iPad
-        if: matrix.variant == 'full'
+        if: env.SCREENSHOTS == 'true'
         continue-on-error: true
         timeout-minutes: 25
         run: |
@@ -158,12 +166,13 @@ jobs:
             -only-testing:NiyatUITests \
             -parallel-testing-enabled NO \
             -resultBundlePath demo/tour-ipad.xcresult \
+            -derivedDataPath build/DerivedData \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify --renderer github-actions
 
       - name: Export demo screenshots
-        if: always() && matrix.variant == 'full'
+        if: always() && env.SCREENSHOTS == 'true'
         run: |
           python3 - <<'PY'
           import json, pathlib, shutil, subprocess
@@ -198,7 +207,7 @@ jobs:
           ls -la demo/screenshots demo/screenshots-ipad || true
 
       - name: Upload demo
-        if: always() && matrix.variant == 'full'
+        if: always() && env.SCREENSHOTS == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: demo
@@ -209,7 +218,7 @@ jobs:
       # Also keep the latest demo on a separate branch (no shared history with
       # the code) so screenshots can be linked from the README.
       - name: Publish demo to the demo-media branch
-        if: always() && matrix.variant == 'full' && github.event_name == 'push' && !startsWith(github.ref_name, 'dependabot/')
+        if: always() && env.SCREENSHOTS == 'true'
         # Screenshots only: a slow upload to GitHub shouldn't fail the build.
         continue-on-error: true
         env:
