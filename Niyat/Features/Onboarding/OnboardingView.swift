@@ -70,10 +70,10 @@ struct OnboardingView: View {
         VStack(spacing: 20) {
             stepIcon("location.fill")
             Text("Where are you?").font(.display(32))
-            Text("Prayer times depend on where you are. Your location never leaves your phone.")
+            Text("Prayer times depend on where you are. Your location never leaves your device.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white.opacity(0.75))
-            LocationPickerView { location in
+            LocationPickerView(locateTitle: "Continue") { location in
                 model.setLocation(location)
                 step = 2
             }
@@ -89,16 +89,17 @@ struct OnboardingView: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.white.opacity(0.75))
             }
-            primaryButton("Turn on adhan notifications") {
+            Text("Niyat can notify you at each adhan. You choose which prayers and when in Settings.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.white.opacity(0.75))
+            // Neutral wording before the permission request (App Review 5.1.1).
+            primaryButton("Continue") {
                 Task {
                     await NotificationScheduler.requestAuthorization()
                     model.refresh()
                     step = 3
                 }
             }
-            Button("Not now") { step = 3 }
-                .buttonStyle(.glass)
-                .controlSize(.large)
         }
     }
 

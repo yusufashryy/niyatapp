@@ -81,7 +81,7 @@ struct TutorialNotificationSetup: View {
                         model.refresh()
                     }
                 } label: {
-                    Label("Allow notifications", systemImage: "bell.fill")
+                    Label("Continue", systemImage: "bell.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)

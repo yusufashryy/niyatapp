@@ -2,6 +2,9 @@ import SwiftUI
 
 /// "Use my location" plus a city search. Used in onboarding and Settings.
 struct LocationPickerView: View {
+    /// "Continue" when the button follows an explanation of the location
+    /// request (onboarding): App Review asks for neutral wording there.
+    var locateTitle = "Use my current location"
     let onPick: (SavedLocation) -> Void
 
     @State private var query = ""
@@ -17,7 +20,7 @@ struct LocationPickerView: View {
             } label: {
                 HStack {
                     if isLocating { ProgressView().tint(.black) } else { Image(systemName: "location.fill") }
-                    Text("Use my current location")
+                    Text(locateTitle)
                 }
                 .font(.headline)
                 .foregroundStyle(.black)

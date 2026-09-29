@@ -21,11 +21,11 @@ struct FocusView: View {
 
                     if authorization != .approved {
                         Section {
-                            Button("Allow Screen Time access") {
+                            Button("Continue") {
                                 Task { await requestAuthorization() }
                             }
                         } footer: {
-                            Text("Niyat needs Screen Time permission to lock apps. Nothing leaves your phone. Apple doesn't even tell Niyat which apps you pick.")
+                            Text("Niyat needs Screen Time permission to lock apps. Nothing leaves your device. Apple doesn't even tell Niyat which apps you pick.")
                         }
                     } else {
                         if FocusScheduler.isLocked, let until = FocusStore.lockedUntil, until > context.date {

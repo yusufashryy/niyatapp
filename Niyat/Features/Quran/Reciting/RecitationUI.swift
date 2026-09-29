@@ -150,7 +150,7 @@ struct ReciteIntroSheet: View {
                     dismiss()
                     onStart()
                 } label: {
-                    Text("Start reciting").font(.headline).frame(maxWidth: .infinity)
+                    Text("Continue").font(.headline).frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)
                 .controlSize(.large)
@@ -159,7 +159,7 @@ struct ReciteIntroSheet: View {
             .niyatBackground()
             .navigationTitle("Recite with Niyat")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Not now") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
         .presentationDetents([.large])
     }
