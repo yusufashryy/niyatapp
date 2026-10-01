@@ -119,40 +119,89 @@ def recognition_forms():
 
 # --- Proposed normalisation fixes (what the report recommends) ---
 
-def harakat_v2(word):
-    """harakat(), plus: madda alef (آ) counts as fatha + alef, as Uthmani writes
-    it (ءَا), and marks on one letter are put in a fixed order (shadda first)."""
-    word = word.replace("آ", "ءَا")
-    out, cluster = [], []
-    for ch in word:
+DAGGER = "\u0670"
+SHADDA, SUKUN = "\u0651", "\u0652"
+
+
+def letter_variants(word):
+    """letters(), with the dagger alef read both ways: the model writes
+    العالمين (with alef) but الرحمن (without) for Uthmani ٱلْعَٰلَمِينَ, ٱلرَّحْمَٰنِ."""
+    return {letters(word), letters(word.replace(DAGGER, ""))}
+
+
+def clusters(word):
+    """[(letter, marks)] for the harakat check. Madda alef (آ) is read as ءَا,
+    as Uthmani writes it; a hamza, or a tatweel carrying one, is its own letter."""
+    out = []
+    for ch in word.replace("آ", "ءَا"):
         h = harakat(ch)
         if h:
-            cluster.append(h)
-        elif letters(ch) or ch in "ءٔـ":
-            out += sorted(cluster, key=lambda m: (m != "ّ", m))
-            cluster = []
-    out += sorted(cluster, key=lambda m: (m != "ّ", m))
-    return "".join(out)
+            if out:
+                out[-1][1].add(h)
+        elif ch in "ءـ":
+            out.append(("ء", set()))
+        elif ch == "ٔ":
+            if not out or out[-1][0] != "ء":
+                out.append(("ء", set()))
+        elif letters(ch):
+            out.append((letters(ch), set()))
+    return out
+
+
+def harakat_check(want, got, last_in_ayah):
+    """Compare harakat letter by letter. Returns (checked marks, differing marks).
+    - Only letters the model actually vowelled are checked (it often writes none).
+    - A missing sukun is not an error (sukun vs nothing is the same sound).
+    - Shadda on the first letter is skipped (idgham from the previous word: لَّهُۥ).
+    - The last letter of an ayah's last word is skipped (the reciter stops: waqf)."""
+    a, b = clusters(want), clusters(got)
+    if not any(m for _, m in b):
+        return 0, 0
+    checked = differ = 0
+    sm = difflib.SequenceMatcher(a=[x for x, _ in a], b=[x for x, _ in b], autojunk=False)
+    for op, a0, a1, b0, b1 in sm.get_opcodes():
+        if op != "equal":
+            continue
+        for i, j in zip(range(a0, a1), range(b0, b1)):
+            if last_in_ayah and i == len(a) - 1:
+                continue
+            ma, mb = set(a[i][1]) - {SUKUN}, set(b[j][1]) - {SUKUN}
+            if i == 0:
+                ma.discard(SHADDA)
+                mb.discard(SHADDA)
+            if not b[j][1]:
+                continue
+            checked += 1
+            differ += ma != mb
+    return checked, differ
+
+
+def harakat_v2(word):
+    """The marks of a word in a fixed order, for the text-only spelling check."""
+    return "".join("".join(sorted(m, key=lambda x: (x != SHADDA, x))) for _, m in clusters(word))
 
 
 def compare_v2(exp, heard, forms=None, surah=None):
     """Like compare(), but with the fixes a shipped matcher would need:
-    - an expected word also matches its everyday spelling from recognition-forms.json;
+    - an expected word also matches its everyday spelling from recognition-forms.json,
+      and its spelling with the dagger alef dropped (ٱلرَّحْمَٰنِ = الرحمن);
     - two heard words that join into one expected word count as that word
       (يا أيها -> يَٰٓأَيُّهَا, يا قوم -> يَٰقَوْمِ);
-    - harakat compared with harakat_v2.
-    Returns the same (rows, stats) as compare()."""
+    - harakat checked with harakat_check (only where the model wrote harakat).
+    Returns (rows, stats) like compare(); stats also has "unchecked": matched
+    words the harakat check couldn't look at because the model wrote no harakat."""
     forms = forms or {}
     keys = []          # accepted letter forms per expected word
     index = collections.Counter()
     for verse, w in exp:
         i = index[verse]
         index[verse] += 1
-        alts = {letters(w)}
+        alts = letter_variants(w)
         if surah is not None:
             alts |= set(forms.get(f"{surah}:{verse}:{i}", []))
         keys.append(alts)
     wanted = set().union(*keys) if keys else set()
+    last = {i for i in range(len(exp)) if i + 1 == len(exp) or exp[i + 1][0] != exp[i][0]}
 
     # Join adjacent heard words when together they spell an expected word.
     merged, j = [], 0
@@ -166,19 +215,22 @@ def compare_v2(exp, heard, forms=None, surah=None):
             j += 1
     heard = merged
 
-    canon = {}
+    canon = {letters(w): letters(w) for _, w in exp}  # a word's own spelling always wins
     for alts, (_, w) in zip(keys, exp):
         for a in alts:
             canon.setdefault(a, letters(w))
     want = [letters(w) for _, w in exp]
     got = [canon.get(letters(w), letters(w)) for w in heard]
-    rows, stats = [], {"correct": 0, "haraka": 0, "different": 0, "missed": 0, "extra": 0}
+    rows = []
+    stats = {"correct": 0, "haraka": 0, "different": 0, "missed": 0, "extra": 0, "unchecked": 0}
     for op, a0, a1, b0, b1 in difflib.SequenceMatcher(a=want, b=got, autojunk=False).get_opcodes():
         if op == "equal":
             for i, j in zip(range(a0, a1), range(b0, b1)):
                 verse, word = exp[i]
-                same = harakat_v2(word) == harakat_v2(heard[j])
+                checked, differ = harakat_check(word, heard[j], i in last)
+                same = differ == 0
                 stats["correct" if same else "haraka"] += 1
+                stats["unchecked"] += checked == 0
                 rows.append(("ok" if same else "HARAKA", verse, word, heard[j]))
             continue
         for k in range(max(a1 - a0, b1 - b0)):
@@ -199,12 +251,15 @@ def metrics(stats):
     """Letters-only WER, word accuracy (letters), harakat agreement on matched words."""
     n = stats["correct"] + stats["haraka"] + stats["different"] + stats["missed"]
     matched = stats["correct"] + stats["haraka"]
+    checked = matched - stats.get("unchecked", 0)
     errors = stats["different"] + stats["missed"] + stats["extra"]
     return {
         "words": n,
         "wer": errors / n if n else 0.0,
         "word_acc": matched / n if n else 0.0,
-        "harakat_agree": stats["correct"] / matched if matched else 0.0,
+        # v2: among matched words the model wrote harakat on
+        "harakat_agree": (stats["correct"] - stats.get("unchecked", 0)) / checked if checked else 0.0,
+        "harakat_checked": checked / matched if matched else 0.0,
     }
 
 
@@ -345,6 +400,7 @@ def build_clips(args, cache, failures):
     ayat = QUICK_AYAT if args.quick else AYAT
     reciters = SEEN[:2] if args.quick else SEEN
     for rec in reciters:
+        say(f"  {rec}")
         for s, f, l in ayat:
             for a in range(f, l + 1):
                 p = fetch(f"https://everyayah.com/data/{rec}/{s:03d}{a:03d}.mp3",
@@ -353,6 +409,7 @@ def build_clips(args, cache, failures):
                     clips.append(("seen", rec, s, a, a, p))
     if not args.quick:
         for rec, pattern in UNSEEN_SURAH_FILES.items():
+            say(f"  {rec}")
             for s in UNSEEN_SURAHS:
                 p = fetch(pattern.format(s=s), os.path.join(cache, "mp3quran", rec, f"{s:03d}.mp3"), failures)
                 if p:
@@ -368,40 +425,60 @@ def build_clips(args, cache, failures):
 
 def retasy_clips(cache, limit):
     """RetaSy/quranic_audio_dataset: recitations by non-Arabic speakers with
-    correctness labels. Column names are guessed defensively; check them."""
+    correctness labels. Streamed (only `limit` clips are downloaded), audio kept
+    as raw bytes so no torch is needed. Column names are detected, and printed."""
     try:
-        from datasets import load_dataset
+        from datasets import Audio, load_dataset
     except ImportError:
-        print("  ! --retasy needs: python3 -m pip install datasets soundfile")
+        print("  ! --retasy needs: python3 -m pip install datasets")
         return []
     try:
-        ds = load_dataset("RetaSy/quranic_audio_dataset", split="train")
+        ds = load_dataset("RetaSy/quranic_audio_dataset", split="train", streaming=True)
+        audio_c = next((c for c, f in (ds.features or {}).items() if isinstance(f, Audio)), "audio")
+        ds = ds.cast_column(audio_c, Audio(decode=False))
+        rows = iter(ds)
+        first = next(rows)
     except Exception as e:  # noqa: BLE001
         print(f"  ! could not load RetaSy/quranic_audio_dataset: {e}")
         return []
-    import soundfile as sf
-    cols = {c.lower(): c for c in ds.column_names}
-    surah_c = next((cols[c] for c in cols if "surah" in c or "sura" in c), None)
-    ayah_c = next((cols[c] for c in cols if c in ("aya", "ayah", "verse") or "aya" in c), None)
-    label_c = next((cols[c] for c in cols if "label" in c), None)
+    print(f"  RetaSy columns: { {k: (v if k != audio_c else '<audio>') for k, v in first.items()} }")
+
+    def number_col(*names):
+        for c in first:
+            if any(n in c.lower() for n in names):
+                try:
+                    int(first[c])
+                    return c
+                except (TypeError, ValueError):
+                    pass
+        return None
+    surah_c, ayah_c = number_col("surah", "sura", "chapter"), number_col("aya", "verse")
+    label_c = next((c for c in first if "label" in c.lower()), None)
     if not (surah_c and ayah_c):
-        print(f"  ! RetaSy columns not recognised: {ds.column_names}")
+        print("  ! RetaSy: no surah/ayah number columns recognised, skipping")
         return []
-    out = []
-    for i, row in enumerate(ds):
+    out, i = [], 0
+    for row in [first, *rows]:
         if len(out) >= limit:
             break
+        i += 1
         try:
             s, a = int(row[surah_c]), int(row[ayah_c])
-        except (TypeError, ValueError):
+            if not 1 <= a <= len(quran()[str(s)]):
+                continue
+        except (TypeError, ValueError, KeyError):
             continue
-        label = str(row[label_c]).lower() if label_c else "unknown"
-        path = os.path.join(cache, "retasy", f"{i}.wav")
+        blob = row[audio_c]
+        ext = os.path.splitext(blob.get("path") or "x.wav")[1] or ".wav"
+        path = os.path.join(cache, "retasy", f"{i}{ext}")
         if not os.path.exists(path):
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            sf.write(path, row["audio"]["array"], row["audio"]["sampling_rate"])
-        group = "amateur" if label in ("correct", "1", "true") else f"amateur-{label}"
+            with open(path, "wb") as f:
+                f.write(blob["bytes"])
+        label = str(row[label_c]).strip().lower() if label_c else "unknown"
+        group = "amateur" if label in ("correct", "1", "true") else f"amateur ({label})"
         out.append((group, "retasy", s, a, a, path))
+    print(f"  RetaSy: {len(out)} clips")
     return out
 
 
@@ -456,6 +533,10 @@ class Model:
         return stream.result.text.strip(), time.perf_counter() - t
 
 
+def say(*args):
+    print(*args, flush=True)
+
+
 def score(text, surah, first, last, forms):
     heard = strip_bismillah(words(text))
     exp = expected(surah, first, last)
@@ -465,14 +546,100 @@ def score(text, surah, first, last, forms):
 
 
 def table(title, groups):
-    print(f"\n### {title}\n")
-    print("| group | clips | words | letters-WER | word acc | harakat agree | sequence acc | "
-          "letters-WER (v2) | harakat agree (v2) | sequence acc (v2) |")
-    print("|---|---|---|---|---|---|---|---|---|---|")
+    say(f"\n### {title}\n")
+    say("| group | clips | words | letters-WER | word acc | harakat agree | sequence acc | "
+        "letters-WER (v2) | harakat agree (v2) | words with harakat | sequence acc (v2) |")
+    say("|---|---|---|---|---|---|---|---|---|---|---|")
     for g, (n, tot, seq, tot2, seq2) in groups.items():
         m, m2 = metrics(tot), metrics(tot2)
-        print(f"| {g} | {n} | {m['words']} | {m['wer']:.2%} | {m['word_acc']:.2%} | {m['harakat_agree']:.2%} | "
-              f"{seq / n:.1%} | {m2['wer']:.2%} | {m2['harakat_agree']:.2%} | {seq2 / n:.1%} |")
+        say(f"| {g} | {n} | {m['words']} | {m['wer']:.2%} | {m['word_acc']:.2%} | {m['harakat_agree']:.2%} | "
+            f"{seq / n:.1%} | {m2['wer']:.2%} | {m2['harakat_agree']:.2%} | {m2['harakat_checked']:.0%} | "
+            f"{seq2 / n:.1%} |")
+
+
+def report(records, threshold=0.5, examples=15):
+    """Print every table from transcript records (fresh, or loaded by `rescore`).
+    Scores are recomputed here, so a scoring fix needs no new decoding."""
+    forms = recognition_forms()
+    rng = random.Random(7)
+    groups, noisy = collections.OrderedDict(), collections.OrderedDict()
+    flags = collections.defaultdict(list)
+    harakat_fa = {"v1": [0, 0], "v2": [0, 0]}
+    single = {}
+    speed = [r for r in records if r.get("kind") == "speed"]
+    for r in records:
+        if r.get("kind") == "speed":
+            continue
+        rows, st, rows2, st2 = score(r["text"], r["surah"], r["first"], r["last"], forms)
+        aug = r.get("aug") or ""
+        key = aug if aug else f"{r['group']} [{r['model']}]"
+        g = (noisy if aug else groups).setdefault(key, [0, {}, 0, {}, 0])
+        g[0] += 1
+        add(g[1], st)
+        g[2] += letter_errors(st) == 0
+        add(g[3], st2)
+        g[4] += letter_errors(st2) == 0
+        if aug or r["model"] != "mixed":
+            continue
+        if r["first"] == r["last"]:
+            single[(r["speaker"], r["surah"], r["first"])] = r["text"]
+        if r["group"] == "seen":
+            harakat_fa["v1"][0] += st["haraka"]
+            harakat_fa["v1"][1] += st["haraka"] + st["correct"]
+            harakat_fa["v2"][0] += st2["haraka"]
+            harakat_fa["v2"][1] += st2["haraka"] + st2["correct"] - st2["unchecked"]
+        for lab, verse, want, got in rows2:
+            if lab != "ok":
+                flags[r["group"]].append((r["speaker"], f"{r['surah']}:{verse}" if verse else f"{r['surah']}",
+                                          lab, want, got))
+    table("Accuracy by group (v2 = proposed normalisation)", groups)
+    if noisy:
+        table(f"Robustness, mixed model, {next(iter(noisy.values()))[0]} seen clips", noisy)
+
+    say("\n### Mistake detection (mixed model, clean single-ayah clips)\n")
+    n = wrong = clean_low = skip_n = skip_hit = skip_other = clean_flag = 0
+    for (spk, s, a), text in sorted(single.items()):
+        if a + 1 > len(quran()[str(s)]):
+            continue
+        heard = strip_bismillah(words(text))
+        exp = expected(s, a, a)
+        _, st = compare_v2(exp, heard, forms, s)
+        n += 1
+        clean_flag += letter_errors(st) > 0
+        clean_low += metrics(st)["word_acc"] < threshold
+        _, st2 = compare_v2(expected(s, a + 1, a + 1), heard, forms, s)
+        wrong += metrics(st2)["word_acc"] < threshold
+        if len(exp) >= 3:
+            pos = rng.randrange(1, len(exp))
+            test = exp[:pos] + [(a, rng.choice(ayah_words(s, a + 1)))] + exp[pos:]
+            rows, st3 = compare_v2(test, heard, forms, s)
+            hit = [x for x in rows if x[0] != "EXTRA"][pos][0] in ("MISSED", "DIFFERENT")
+            skip_n += 1
+            skip_hit += hit
+            skip_other += letter_errors(st3) - hit
+    if n:
+        say(f"- {n} clips. Correct recitation flagged with any letter error: {clean_flag / n:.1%}")
+        say(f"- Wrong verse (ayah N audio vs ayah N+1 text) caught at word acc < {threshold}: {wrong / n:.1%}; "
+            f"correct ayah below the same threshold (false alarm): {clean_low / n:.1%}")
+        say(f"- Skipped word caught: {skip_hit / max(skip_n, 1):.1%} of {skip_n}; "
+            f"other words flagged per test: {skip_other / max(skip_n, 1):.2f}")
+    for k, (bad, tot) in harakat_fa.items():
+        if tot:
+            say(f"- Harakat false alarms on seen professional audio ({k}): {bad}/{tot} checked words = {bad / tot:.2%}")
+
+    if speed:
+        say("\n### Decode speed (real-time factor = decode time / audio length; lower is faster)\n")
+        say("| model | threads | clips | audio s | decode s | RTF |")
+        say("|---|---|---|---|---|---|")
+        for r in speed:
+            say(f"| {r['model']} | {r['threads']} | {r['clips']} | {r['audio']:.0f} | {r['decode']:.1f} | "
+                f"{r['decode'] / r['audio']:.3f} |")
+
+    say("\n### Example flags (mixed, v2)\n")
+    for group, items in flags.items():
+        say(f"{group}: {len(items)} flags")
+        for spk, ref, lab, want, got in items[:examples]:
+            say(f"  {spk:<28} {ref:<7} {lab:<9} expected {want or '-'}  heard {got or '-'}")
 
 
 def audio_mode(args):
@@ -489,106 +656,47 @@ def audio_mode(args):
     os.makedirs(args.out, exist_ok=True)
     cache = os.path.join(args.out, "audio")
     failures = {}
-    forms = recognition_forms()
     rng = random.Random(7)
 
-    print("Downloading audio...")
+    say("Downloading audio (cached after the first run)...")
     clips = build_clips(args, cache, failures)
     if failures:
-        print(f"Unreachable hosts (files failed): {failures}")
+        say(f"Unreachable hosts (files failed): {failures}")
     if not clips:
         sys.exit("No audio could be fetched: nothing to evaluate.")
     audio = {c[5]: load_audio(c[5]) for c in clips}
-    log = open(os.path.join(args.out, "transcripts.jsonl"), "w", encoding="utf-8")
+    out_path = os.path.join(args.out, "transcripts.jsonl")
+    log = open(out_path, "w", encoding="utf-8")
+    records = []
+
+    def keep(rec):
+        records.append(rec)
+        log.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        log.flush()
 
     models = {k: Model(p, tokens, args.threads) for k, p in paths.items()}
-    groups = collections.OrderedDict()
-    failures_shown = collections.defaultdict(list)
-    harakat_flags = {"v1": [0, 0], "v2": [0, 0]}
-    clean_texts = {}  # (speaker, surah, ayah) -> mixed transcript, for mistake tests
     for key, model in models.items():
-        if key == "q8" and not args.full_q8:
-            subset = [c for c in clips if c[0] == "seen"][: args.q8_clips]
-        else:
-            subset = clips
-        for group, spk, s, f, l, path in subset:
+        subset = clips if key == "mixed" or args.full_q8 else [c for c in clips if c[0] == "seen"][: args.q8_clips]
+        say(f"Transcribing {len(subset)} clips with {key}...")
+        for done, (group, spk, s, f, l, path) in enumerate(subset, 1):
             text, took = model(audio[path])
-            rows, st, rows2, st2 = score(text, s, f, l, forms)
-            g = groups.setdefault(f"{group} [{key}]", [0, {}, 0, {}, 0])
-            g[0] += 1
-            add(g[1], st)
-            g[2] += letter_errors(st) == 0
-            add(g[3], st2)
-            g[4] += letter_errors(st2) == 0
-            log.write(json.dumps({"model": key, "group": group, "speaker": spk, "surah": s, "first": f, "last": l,
-                                  "seconds": len(audio[path]) / SR, "decode": took, "text": text,
-                                  "stats": st, "stats_v2": st2}, ensure_ascii=False) + "\n")
-            if key == "mixed":
-                if f == l:
-                    clean_texts[(spk, s, f)] = text
-                if group == "seen":
-                    harakat_flags["v1"][0] += st["haraka"]
-                    harakat_flags["v1"][1] += st["haraka"] + st["correct"]
-                    harakat_flags["v2"][0] += st2["haraka"]
-                    harakat_flags["v2"][1] += st2["haraka"] + st2["correct"]
-                for lab, verse, want, got in rows2:
-                    if lab != "ok":
-                        failures_shown[group].append((spk, f"{s}:{verse}" if verse else f"{s}", lab, want, got))
-    table("Accuracy by group (letters-WER etc.; v2 = proposed normalisation)", groups)
+            keep({"model": key, "group": group, "speaker": spk, "surah": s, "first": f, "last": l,
+                  "seconds": len(audio[path]) / SR, "decode": took, "text": text})
+            if done % 50 == 0:
+                say(f"  {done}/{len(subset)}")
 
-    # Robustness on a subset of seen clean single-ayah clips.
     seen = [c for c in clips if c[0] == "seen" and c[3] == c[4]]
     rng.shuffle(seen)
     subset = seen[: args.noise_clips]
     pool = [audio[c[5]] for c in seen[args.noise_clips: args.noise_clips + 40]] or [audio[c[5]] for c in subset]
-    noisy = collections.OrderedDict()
+    say(f"Noise / phone / speed variants on {len(subset)} clips...")
     for group, spk, s, f, l, path in subset:
         for name, samples in augmentations(audio[path], rng, pool):
             text, _ = models["mixed"](samples)
-            _, st, _, st2 = score(text, s, f, l, forms)
-            g = noisy.setdefault(name, [0, {}, 0, {}, 0])
-            g[0] += 1
-            add(g[1], st)
-            g[2] += letter_errors(st) == 0
-            add(g[3], st2)
-            g[4] += letter_errors(st2) == 0
-    table(f"Robustness, mixed model, {len(subset)} seen clips", noisy)
+            keep({"model": "mixed", "group": group, "speaker": spk, "surah": s, "first": f, "last": l,
+                  "aug": name, "text": text})
 
-    # Synthetic mistake detection on single-ayah clean clips.
-    print("\n### Mistake detection (mixed model, clean single-ayah clips)\n")
-    n = wrong = clean_low = skip_n = skip_hit = skip_other = clean_flag = 0
-    for (spk, s, a), text in clean_texts.items():
-        if a + 1 > len(quran()[str(s)]):
-            continue
-        heard = strip_bismillah(words(text))
-        exp = expected(s, a, a)
-        _, st = compare_v2(exp, heard, forms, s)
-        n += 1
-        clean_flag += letter_errors(st) > 0
-        clean_low += metrics(st)["word_acc"] < args.threshold
-        _, st2 = compare_v2(expected(s, a + 1, a + 1), heard, forms, s)
-        wrong += metrics(st2)["word_acc"] < args.threshold
-        if len(exp) >= 3:
-            pos = rng.randrange(1, len(exp))
-            test = exp[:pos] + [(a, rng.choice(ayah_words(s, a + 1)))] + exp[pos:]
-            rows, st3 = compare_v2(test, heard, forms, s)
-            hit = [r for r in rows if r[0] != "EXTRA"][pos][0] in ("MISSED", "DIFFERENT")
-            skip_n += 1
-            skip_hit += hit
-            skip_other += letter_errors(st3) - hit
-    print(f"- {n} clips. Correct recitation flagged with any letter error: {clean_flag / n:.1%}")
-    print(f"- Wrong verse (ayah N audio vs ayah N+1 text) caught at word acc < {args.threshold}: {wrong / n:.1%}; "
-          f"correct ayah below the same threshold (false alarm): {clean_low / n:.1%}")
-    print(f"- Skipped word caught: {skip_hit / max(skip_n, 1):.1%} of {skip_n}; "
-          f"other words flagged per test: {skip_other / max(skip_n, 1):.2f}")
-    for k, (bad, tot) in harakat_flags.items():
-        if tot:
-            print(f"- Harakat false alarms on seen professional audio ({k}): {bad}/{tot} matched words = {bad / tot:.2%}")
-
-    # Speed.
-    print("\n### Decode speed (real-time factor = decode time / audio length; lower is faster)\n")
-    print("| model | threads | clips | audio s | decode s | RTF |")
-    print("|---|---|---|---|---|---|")
+    say("Timing...")
     timing = sorted(seen, key=lambda c: c[5])[: args.speed_clips]
     for key, path in paths.items():
         for threads in (1, 2):
@@ -599,14 +707,33 @@ def audio_mode(args):
                 _, took = m(audio[c[5]])
                 total += took
                 total_audio += len(audio[c[5]]) / SR
-            print(f"| {key} | {threads} | {len(timing)} | {total_audio:.0f} | {total:.1f} | {total / total_audio:.3f} |")
+            keep({"kind": "speed", "model": key, "threads": threads, "clips": len(timing),
+                  "audio": total_audio, "decode": total})
+    log.close()
+    report(records, args.threshold)
+    say(f"\nAll transcripts: {out_path}")
 
-    print("\n### Example flags (mixed, v2)\n")
-    for group, items in failures_shown.items():
-        print(f"{group}:")
-        for spk, ref, lab, want, got in items[:15]:
-            print(f"  {spk:<28} {ref:<7} {lab:<9} expected {want or '-'}  heard {got or '-'}")
-    print(f"\nAll transcripts: {os.path.join(args.out, 'transcripts.jsonl')}")
+
+def rescore_mode(args):
+    records = [json.loads(line) for line in open(args.transcripts, encoding="utf-8") if line.strip()]
+    report(records, args.threshold, args.examples)
+
+
+def inspect_mode(args):
+    """Which marks can the model write? Read from tokens.txt."""
+    path = os.path.join(args.model_dir, "tokens.txt")
+    marks = collections.Counter()
+    n = 0
+    for line in open(path, encoding="utf-8"):
+        tok = line.rsplit(" ", 1)[0]
+        n += 1
+        for ch in tok:
+            if not letters(ch) and not ch.isspace() and ch != "▁":
+                marks[ch] += 1
+    say(f"{n} tokens. Non-letter characters the model can write:")
+    for ch, c in marks.most_common():
+        import unicodedata
+        say(f"  U+{ord(ch):04X} {unicodedata.name(ch, '?'):<45} in {c} tokens")
 
 
 def main():
@@ -626,8 +753,14 @@ def main():
     a.add_argument("--noise-clips", type=int, default=60)
     a.add_argument("--speed-clips", type=int, default=40)
     a.add_argument("--threshold", type=float, default=0.5, help="word accuracy below this = wrong verse")
+    r = sub.add_parser("rescore", help="recompute all tables from a transcripts.jsonl (no model needed)")
+    r.add_argument("transcripts", nargs="?", default=os.path.join(DEFAULT_DIR, "eval", "transcripts.jsonl"))
+    r.add_argument("--threshold", type=float, default=0.5)
+    r.add_argument("--examples", type=int, default=15)
+    i = sub.add_parser("inspect", help="list the marks the model can output (reads tokens.txt)")
+    i.add_argument("--model-dir", default=DEFAULT_DIR)
     args = p.parse_args()
-    text_mode(args) if args.mode == "text" else audio_mode(args)
+    {"text": text_mode, "audio": audio_mode, "rescore": rescore_mode, "inspect": inspect_mode}[args.mode](args)
 
 
 if __name__ == "__main__":

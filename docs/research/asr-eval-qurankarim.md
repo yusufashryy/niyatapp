@@ -5,65 +5,99 @@ Date: 2026-10-01. Research only, no app code changed.
 Model: [TheGreatQuran/QuranKarim-SpeechToText-onnxModel](https://huggingface.co/TheGreatQuran/QuranKarim-SpeechToText-onnxModel),
 an NVIDIA FastConformer CTC model fine-tuned on `tarteel-ai/everyayah`. It writes Arabic with harakat
 and runs with sherpa-onnx (`OfflineRecognizer.from_nemo_ctc`, 16 kHz mono). Files:
-`qurankarim-fastconformer-mixed.onnx` (87 MB), `-q8.onnx`, the full-precision `.onnx` (458 MB), and `tokens.txt`.
+`qurankarim-fastconformer-mixed.onnx` (83 MB), `-q8.onnx` (166 MB: twice the size of "mixed",
+not smaller), the full-precision `.onnx` (458 MB), and `tokens.txt`.
 The model card claims 0.14% WER. Nobody has checked that figure.
 
 ## Summary (read this first)
 
-**The audio part of this evaluation could not be run.** The cloud container used for it has a
-network policy that blocks every host the test needs. Each request was refused with
-`403 CONNECT tunnel failed`, on the first attempt and again on a retry:
+**Status: smoke test done on a Mac (22 clips); the full run is pending.** The cloud container
+that wrote this could not reach any of the hosts the test needs (`huggingface.co`, `everyayah.com`,
+`server*.mp3quran.net`, `cdn.islamic.network` were all refused by its network policy). So the
+audio runs happen on the owner's Mac, and the transcripts come back here for scoring.
 
-| Host | Needed for | Result |
+What we know so far:
+
+1. **Speed is a non-issue.** On a MacBook Pro (Apple silicon) CPU, one thread decodes 1 second
+   of audio in 0.05 s (mixed) or 0.025 s (q8). That is 20-40× faster than real time.
+2. **q8 is the better file, despite the name**: it's twice as fast and at least as accurate as "mixed" on the smoke
+   test, but it's the bigger download (166 MB vs 83 MB).
+3. **The model often writes no harakat, or only some** (بسم, الله, المستقِيم). A harakat check
+   can only look at words where it did write them. In the smoke test, the old checker reported
+   30% harakat false alarms on professional audio, mostly because of this. The checker is now fixed (see below).
+4. **It sometimes garbles a word** (العالمينِينَ, الددِّّينِ, a lone َّح for ٱلرَّحْمَٰنِ), even
+   on Alafasy, a reciter it was trained on. That gave 9% letters-WER on 22 seen clips, far from the card's 0.14%.
+   This needs the full run to quantify, and a check of the model card's own example code in case
+   our sherpa-onnx settings (`feature_dim=80`, greedy search) differ from the author's.
+5. **Babble noise (other voices) hurts a lot** (27% letters-WER at SNR 10, 52% at SNR 5); white
+   noise, phone band and speed changes barely matter.
+6. Spelling differences between Uthmani and everyday Arabic, not recognition errors, would cause
+   most false alarms with the old comparison (text-only results below). `compare_v2` removes them.
+
+**Verdict for now: not yet decidable**, but the smoke test leans towards "follow-along only, no
+red words, no harakat flags" unless the full run looks better. The card's 0.14% WER is almost
+certainly measured on EveryAyah test clips, the same reciters the model trained on.
+
+## Smoke test (Mac, `audio --quick`, old scoring)
+
+Alafasy and Husary, 1:1-7 and 112:1-4 (22 clips, 88 words). Scored with the first version of
+`compare_v2`, before the fixes it prompted, so treat the harakat columns as wrong.
+
+| group | clips | letters-WER | word acc | harakat agree (old) | sequence acc |
+|---|---|---|---|---|---|
+| seen, mixed | 22 | 9.09% | 92.05% | 70.37% | 68.2% |
+| seen, q8 | 22 | 7.95% | 92.05% | 70.37% | 68.2% |
+| + white noise SNR 20 / 10 / 5 | 22 each | 10.2% / 9.1% / 12.5% | | | |
+| + babble SNR 10 / 5 | 22 each | 27.3% / 52.3% | | | |
+| + phone band 300-3400 Hz | 22 | 9.1% | | | |
+| + tempo 0.9× / 1.15× | 22 each | 10.2% / 14.8% | | | |
+
+| model | threads | RTF (decode time / audio time) |
 |---|---|---|
-| `huggingface.co` | the model files and `tokens.txt`; RetaSy / Tarteel datasets | blocked |
-| `everyayah.com` | seen-reciter per-ayah audio | blocked |
-| `server*.mp3quran.net` | unseen-reciter whole-surah audio | blocked |
-| `cdn.islamic.network` | alternative per-ayah audio | blocked |
+| mixed | 1 / 2 | 0.049 / 0.028 |
+| q8 | 1 / 2 | 0.025 / 0.014 |
 
-So this report has **no measured accuracy, robustness, mistake-detection or speed numbers for
-the model.** It does not make any up. What it has:
+Mistake checks (18 single-ayah clips): wrong verse caught 88.9% with 0% false alarms; skipped
+word caught 14/14; correct ayat flagged with at least one letter error 38.9%.
 
-1. `scripts/eval_quran_asr.py`, the full evaluation, ready to run on a Mac (or in a cloud
-   environment that allows those hosts). It covers seen reciters, unseen reciters, amateurs
-   (your own clips or RetaSy), noise/phone/speed variants, the wrong-verse and skipped-word tests,
-   the harakat false-alarm rate, and mixed vs q8 speed at 1 and 2 threads. Any host it can't
-   reach is reported, not hidden. The download, noise, band-limit and speed code was tested
-   here on synthetic audio: measured SNRs come out at exactly 20 / 10 / 5 dB.
-2. **Measured, text-only results** that don't need the model (below). They show that the
-   current comparison in `try_quran_asr.py` would raise many false alarms from *spelling
-   differences alone*, which would make any model look worse than it is. They also show what
-   fixes that. The fixes are implemented as `compare_v2` / `harakat_v2` in the evaluation script.
-3. Limits for the go/no-go decision, so the audio run gives a clear answer.
+The smoke test exposed three scoring problems, all now fixed in `compare_v2`:
 
-**Verdict for now: not yet decidable.** The text results show the comparison side is in good
-shape once normalised. Whether the *model* is good enough depends on the amateur and unseen-reciter
-numbers, which need the audio run. The card's 0.14% WER is almost certainly measured on EveryAyah,
-which is the same reciters the model trained on. Our roadmap notes that EveryAyah-trained models
-have reached about 23% WER on crowd-sourced recitation. Expect the gap to be large until measured
-otherwise.
+| Flag in the smoke test | Why it was wrong | Fix |
+|---|---|---|
+| ٱلرَّحْمَٰنِ / الرحمن (DIFFERENT) | the dagger alef was always read as a full alef, but the model drops it in some words (الرحمن) and writes it in others (العالمين) | accept both readings |
+| بِسْمِ / بسم, ٱللَّهِ / الله (HARAKA) | the model wrote no harakat, which was scored as all wrong | only letters the model vowelled are checked; the share of words checked is reported |
+| نَسْتَعِينُ / نَسْتَعِين, ٱلصَّمَدُ / الصمد | the reciter stops at the end of the ayah, so the final vowel is dropped (waqf). That's correct recitation | skip the last letter of an ayah's last word |
+| لَّهُۥ / لَهُ | Uthmani writes the idgham shadda from the previous word on the first letter | skip shadda on a word's first letter |
 
-## How to run the real evaluation
+The harakat check is now letter by letter. A missing sukun doesn't count. Real mistakes are still caught
+(نُعْبُدُ for نَعْبُدُ, الْحَمْدَ for الْحَمْدُ, يُلِدْ for يَلِدْ are all flagged).
 
-On a Mac (Terminal), from the repo folder:
+## How to run the evaluation
+
+On a Mac (Terminal). Python 3.12 is used because sherpa-onnx may not support the newest Python yet.
 
 ```sh
-brew install ffmpeg
-python3 -m pip install sherpa-onnx numpy
-mkdir -p ~/niyat-asr && cd ~/niyat-asr
+brew install ffmpeg python@3.12
+mkdir -p ~/niyat-asr
+python3.12 -m venv ~/niyat-asr/venv
+source ~/niyat-asr/venv/bin/activate          # again in every new Terminal window
+pip install sherpa-onnx numpy datasets soundfile
+cd ~/niyat-asr
 for f in qurankarim-fastconformer-mixed.onnx qurankarim-fastconformer-q8.onnx tokens.txt; do
   curl -LO https://huggingface.co/TheGreatQuran/QuranKarim-SpeechToText-onnxModel/resolve/main/$f
 done
-cd -   # back to the repo
-python3 scripts/eval_quran_asr.py audio --quick          # 2-minute smoke test
-python3 scripts/eval_quran_asr.py audio                  # full run (seen + unseen)
-python3 scripts/eval_quran_asr.py audio --retasy         # + amateurs (pip install datasets soundfile)
+cd ~/niyatapp
+python3 scripts/eval_quran_asr.py inspect                 # which marks can the model write?
+python3 scripts/eval_quran_asr.py audio --quick           # 2-minute smoke test
+python3 scripts/eval_quran_asr.py audio --retasy          # full run, with amateurs
 python3 scripts/eval_quran_asr.py audio --manifest mine.csv   # + your own recordings
+python3 scripts/eval_quran_asr.py rescore                 # tables again from saved transcripts
 ```
 
-It prints Markdown tables you can paste into this file. Every transcript goes to
-`~/niyat-asr/eval/transcripts.jsonl`. In a Claude cloud session, first allow `huggingface.co`,
-`everyayah.com`, `mp3quran.net` and `cdn.islamic.network` in the environment's network settings.
+Every transcript (including the noisy variants and the timings) goes to
+`~/niyat-asr/eval/transcripts.jsonl`. `rescore` rebuilds every table from that file without the
+model, so a scoring change never needs a new run. To hand results to a cloud session, commit that
+file as `docs/research/asr-eval-transcripts.jsonl`.
 
 `mine.csv` looks like this (one row per recording; `group` is any label, such as `amateurs`):
 
@@ -114,12 +148,12 @@ itself. "Heard" here is Tanzil's Imla'i edition of the same Hafs text
 | Comparison | Scope | Words | letters-WER | Harakat agreement | Ayat with zero flags |
 |---|---|---|---|---|---|
 | current `compare()` | whole Qur'an, 6,236 ayat | 77,433 | 2.72% | 98.06% | 63.9% |
-| `compare_v2` | whole Qur'an | 77,433 | **0.00%** | **99.99%** | **99.9%** |
+| `compare_v2` | whole Qur'an | 77,433 | **0.00%** | **99.91%** | **98.9%** |
 | current `compare()` | the 94 eval ayat | 695 | 0.86% | 96.81% | 76.6% |
 | `compare_v2` | the 94 eval ayat | 695 | **0.00%** | **99.86%** | **98.9%** |
 
 So with today's script, **about 1 in 3 perfectly recited ayat would be flagged** across the Qur'an
-because of spelling alone. With the fixes, it is about 1 in 1,000.
+because of spelling alone. With the fixes, it is about 1 in 100.
 
 What causes it, and what `compare_v2` changes:
 
@@ -131,9 +165,10 @@ What causes it, and what `compare_v2` changes:
 | Marks on one letter in a different order (shadda + vowel) | | `harakat_v2` puts each letter's marks in a fixed order (shadda first) |
 
 What is left after the fixes: 1 letter case (يَبْنَؤُمَّ / يَا ابْنَ أُمَّ, three words in Imla'i,
-20:94) and 4 harakat cases (مَجْر۪ىٰهَا with imala, عِوَجَا vs عِوَجًا at a pause in 18:1,
-ءَاتَىٰنِۦَ, and ءَا۬عْجَمِىٌّ with tas-heel). All of these are genuine reading features, and the
-checker should probably skip harakat on them.
+20:94) and about 70 harakat cases, nearly all where the two editions seat a hamza differently
+(يَبْدَؤُا۟ / يَبْدَأُ, رَءَا / رَأَى, ٱلْمَلَؤُا۟ / الْمَلَأُ, ٱلَّٰٓـِٔى / اللَّائِي), plus a few genuine
+reading features (مَجْر۪ىٰهَا with imala, ءَا۬عْجَمِىٌّ with tas-heel). The checker should skip
+harakat on hamza letters and on these words.
 
 ### Marks in the Uthmani file, and how the comparison treats them
 
@@ -178,10 +213,10 @@ What this means:
   gate: CTC per-token scores, flagging only when the same word is wrong twice, or only after
   the user finishes the ayah. Or the model's error rate on real users must be well under 2%.
 
-## Results that could not be measured
+## Full run (pending)
 
-The tables below come from `scripts/eval_quran_asr.py audio`. **They are empty because the
-audio and model hosts were blocked.** Fill them from the script's output.
+The tables below will come from `scripts/eval_quran_asr.py audio --retasy`, scored with the fixed
+`compare_v2`.
 
 | Group | clips | letters-WER | word acc | harakat agree | sequence acc |
 |---|---|---|---|---|---|
@@ -191,8 +226,8 @@ audio and model hosts were blocked.** Fill them from the script's output.
 | Amateurs (mixed) | not run | | | | |
 | Noisy / phone / speed (mixed) | not run | | | | |
 
-Not run: mistake detection on real transcripts, the harakat false-alarm rate on professional
-audio, decode speed (RTF), and failure examples.
+Also pending: mistake detection and the harakat false-alarm rate on the full set, the
+unseen-reciter and amateur failure examples. Speed is already measured (smoke test).
 
 ## Go/no-go limits for the audio run
 
@@ -207,7 +242,7 @@ all measured with `compare_v2`:
 | Wrong verse caught at acc < 0.5 | ≥ 95% | ≥ 90% | < 90% |
 | Harakat false alarms, professional audio | ≤ 2% | ≤ 5%, harakat check off by default | > 5%: never show harakat flags |
 | mixed RTF, 1 thread, container CPU | ≤ 0.3 | ≤ 0.6 | > 1 (slower than real time) |
-| q8 vs mixed letters-WER | q8 within 0.5 points means ship q8 (smaller download) | | |
+| q8 vs mixed letters-WER | q8 within 0.5 points means ship q8 (2× faster, though a 166 MB download vs 83 MB) | | |
 
 For speed, a recent iPhone CPU core is roughly comparable to one desktop core, so 1-thread
 RTF is a fair rough proxy. Core ML / ANE would be faster but needs a conversion step.
