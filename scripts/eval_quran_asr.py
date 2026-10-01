@@ -103,11 +103,25 @@ def expected(surah, first, last):
 BISMILLAH = [letters(w) for w in ayah_words(1, 1)]
 
 
-def strip_bismillah(heard):
-    """Reciters often start a surah with the Bismillah: don't count it as extra."""
-    if [letters(w) for w in heard[:4]] == BISMILLAH:
-        return heard[4:]
-    return heard
+ISTIADHA = "اعوذباللهمنالشيطانالرجيم"
+
+
+def strip_bismillah(heard, surah=None, first=None):
+    """Don't count an opening أعوذ بالله من الشيطان الرجيم and/or Bismillah as
+    extra words. Matched loosely, because the model often garbles them. Kept when
+    it is the expected text itself (Al-Fatiha 1; 1:3 الرحمن الرحيم)."""
+    basmala = "".join(BISMILLAH)
+    targets = [ISTIADHA] if (surah, first) == (1, 1) else [ISTIADHA, basmala, ISTIADHA + basmala]
+    own = [letters(w) for _, w in expected(surah, first, first)] if surah else []
+    best_k, best = 0, 0.0
+    for k in range(2, min(len(heard), 11) + 1):
+        got = "".join(letters(w) for w in heard[:k])
+        mine = difflib.SequenceMatcher(a="".join(own[:k]), b=got, autojunk=False).ratio()
+        for t in targets:
+            r = difflib.SequenceMatcher(a=t, b=got, autojunk=False).ratio()
+            if r > best and r > mine:
+                best_k, best = k, r
+    return heard[best_k:] if best >= 0.75 else heard
 
 
 def recognition_forms():
@@ -423,7 +437,24 @@ def build_clips(args, cache, failures):
     return clips
 
 
-def retasy_clips(cache, limit):
+def ayah_key(text):
+    """Letters of a whole ayah, with Persian/Urdu letter forms folded (RetaSy writes ی)."""
+    text = text.replace("ی", "ي").replace("ک", "ك").replace("ۀ", "ه")
+    return "".join(letters(w) for w in words(text))
+
+
+_ayah_index = {}
+
+
+def ayah_index():
+    if not _ayah_index:
+        for s in range(1, 115):
+            for a in range(1, len(quran()[str(s)]) + 1):
+                _ayah_index.setdefault(ayah_key(" ".join(ayah_words(s, a))), (s, a))
+    return _ayah_index
+
+
+def retasy_clips(cache, limit, scan=4000):
     """RetaSy/quranic_audio_dataset: recitations by non-Arabic speakers with
     correctness labels. Streamed (only `limit` clips are downloaded), audio kept
     as raw bytes so no torch is needed. Column names are detected, and printed."""
@@ -453,20 +484,26 @@ def retasy_clips(cache, limit):
                     pass
         return None
     surah_c, ayah_c = number_col("surah", "sura", "chapter"), number_col("aya", "verse")
+    text_c = next((c for c in first if c.lower() in ("aya", "ayah", "verse", "text")), None)
     label_c = next((c for c in first if "label" in c.lower()), None)
-    if not (surah_c and ayah_c):
-        print("  ! RetaSy: no surah/ayah number columns recognised, skipping")
+    if not (surah_c and ayah_c) and not text_c:
+        print("  ! RetaSy: no surah/ayah columns recognised, skipping")
         return []
-    out, i = [], 0
+    index = ayah_index()
+    out, i, unmatched = [], 0, 0
     for row in [first, *rows]:
-        if len(out) >= limit:
+        if len(out) >= limit or i >= scan:
             break
         i += 1
         try:
-            s, a = int(row[surah_c]), int(row[ayah_c])
+            if surah_c and ayah_c:
+                s, a = int(row[surah_c]), int(row[ayah_c])
+            else:
+                s, a = index[ayah_key(row[text_c])]
             if not 1 <= a <= len(quran()[str(s)]):
                 continue
         except (TypeError, ValueError, KeyError):
+            unmatched += 1
             continue
         blob = row[audio_c]
         ext = os.path.splitext(blob.get("path") or "x.wav")[1] or ".wav"
@@ -475,9 +512,11 @@ def retasy_clips(cache, limit):
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "wb") as f:
                 f.write(blob["bytes"])
-        label = str(row[label_c]).strip().lower() if label_c else "unknown"
-        group = "amateur" if label in ("correct", "1", "true") else f"amateur ({label})"
-        out.append((group, "retasy", s, a, a, path))
+        label = row.get(label_c) if label_c else None
+        label = str(label).strip().lower() if label not in (None, "") else "unlabelled"
+        out.append((f"amateur ({label})", "retasy", s, a, a, path))
+    if unmatched:
+        print(f"  RetaSy: {unmatched} rows whose ayah text didn't match the Qur'an text, skipped")
     print(f"  RetaSy: {len(out)} clips")
     return out
 
@@ -525,7 +564,11 @@ class Model:
             model=path, tokens=tokens, num_threads=threads, sample_rate=SR, feature_dim=80,
             decoding_method="greedy_search")
 
-    def __call__(self, samples):
+    def __call__(self, samples, pad=0.0):
+        if pad:
+            import numpy as np
+            silence = np.zeros(int(pad * SR), dtype=np.float32)
+            samples = np.concatenate([silence, samples, silence])
         t = time.perf_counter()
         stream = self.rec.create_stream()
         stream.accept_waveform(SR, samples)
@@ -538,7 +581,7 @@ def say(*args):
 
 
 def score(text, surah, first, last, forms):
-    heard = strip_bismillah(words(text))
+    heard = strip_bismillah(words(text), surah, first)
     exp = expected(surah, first, last)
     rows, st = compare(exp, heard)
     rows2, st2 = compare_v2(exp, heard, forms, surah)
@@ -594,14 +637,15 @@ def report(records, threshold=0.5, examples=15):
                                           lab, want, got))
     table("Accuracy by group (v2 = proposed normalisation)", groups)
     if noisy:
-        table(f"Robustness, mixed model, {next(iter(noisy.values()))[0]} seen clips", noisy)
+        table("Variants (noise / phone / speed: mixed model, seen clips; pad: silence added before and after)",
+              noisy)
 
     say("\n### Mistake detection (mixed model, clean single-ayah clips)\n")
     n = wrong = clean_low = skip_n = skip_hit = skip_other = clean_flag = 0
     for (spk, s, a), text in sorted(single.items()):
         if a + 1 > len(quran()[str(s)]):
             continue
-        heard = strip_bismillah(words(text))
+        heard = strip_bismillah(words(text), s, a)
         exp = expected(s, a, a)
         _, st = compare_v2(exp, heard, forms, s)
         n += 1
@@ -679,7 +723,7 @@ def audio_mode(args):
         subset = clips if key == "mixed" or args.full_q8 else [c for c in clips if c[0] == "seen"][: args.q8_clips]
         say(f"Transcribing {len(subset)} clips with {key}...")
         for done, (group, spk, s, f, l, path) in enumerate(subset, 1):
-            text, took = model(audio[path])
+            text, took = model(audio[path], args.pad)
             keep({"model": key, "group": group, "speaker": spk, "surah": s, "first": f, "last": l,
                   "seconds": len(audio[path]) / SR, "decode": took, "text": text})
             if done % 50 == 0:
@@ -692,7 +736,7 @@ def audio_mode(args):
     say(f"Noise / phone / speed variants on {len(subset)} clips...")
     for group, spk, s, f, l, path in subset:
         for name, samples in augmentations(audio[path], rng, pool):
-            text, _ = models["mixed"](samples)
+            text, _ = models["mixed"](samples, args.pad)
             keep({"model": "mixed", "group": group, "speaker": spk, "surah": s, "first": f, "last": l,
                   "aug": name, "text": text})
 
@@ -710,6 +754,31 @@ def audio_mode(args):
             keep({"kind": "speed", "model": key, "threads": threads, "clips": len(timing),
                   "audio": total_audio, "decode": total})
     log.close()
+    report(records, args.threshold)
+    say(f"\nAll transcripts: {out_path}")
+
+
+def padtest_mode(args):
+    """Does silence around the clip fix the dropped last syllables? Seen clips,
+    both models, several pad lengths. Audio comes from the cache of an earlier run."""
+    tokens = os.path.join(args.model_dir, "tokens.txt")
+    clips = build_clips(argparse.Namespace(quick=args.quick, manifest=None, retasy=False),
+                        os.path.join(args.out, "audio"), {})
+    clips = [c for c in clips if c[0] == "seen"]
+    audio = {c[5]: load_audio(c[5]) for c in clips}
+    out_path = os.path.join(args.out, "padtest.jsonl")
+    records = []
+    with open(out_path, "w", encoding="utf-8") as log:
+        for key in ("mixed", "q8"):
+            model = Model(os.path.join(args.model_dir, f"qurankarim-fastconformer-{key}.onnx"), tokens, 2)
+            for pad in (0.0, 0.25, 0.5, 1.0):
+                say(f"{key}, {pad} s of silence: {len(clips)} clips")
+                for group, spk, s, f, l, path in clips:
+                    text, _ = model(audio[path], pad)
+                    rec = {"model": key, "group": group, "speaker": spk, "surah": s, "first": f, "last": l,
+                           "aug": f"pad {pad} s [{key}]", "text": text}
+                    records.append(rec)
+                    log.write(json.dumps(rec, ensure_ascii=False) + "\n")
     report(records, args.threshold)
     say(f"\nAll transcripts: {out_path}")
 
@@ -734,6 +803,14 @@ def inspect_mode(args):
             if ch not in PLAIN_LETTERS and not ch.isspace() and ch != "▁":
                 marks[ch] += 1
     say(f"{n} tokens. Characters other than the 28 plain letters that the model can write:")
+    try:
+        import onnx
+        for key in ("mixed", "q8"):
+            m = onnx.load(os.path.join(args.model_dir, f"qurankarim-fastconformer-{key}.onnx"),
+                          load_external_data=False)
+            say(f"{key} metadata: { {p.key: p.value[:60] for p in m.metadata_props} }")
+    except ImportError:
+        say("(pip install onnx to also print the models' metadata)")
     for ch, c in marks.most_common():
         import unicodedata
         say(f"  U+{ord(ch):04X} {unicodedata.name(ch, '?'):<45} in {c} tokens")
@@ -756,14 +833,21 @@ def main():
     a.add_argument("--noise-clips", type=int, default=60)
     a.add_argument("--speed-clips", type=int, default=40)
     a.add_argument("--threshold", type=float, default=0.5, help="word accuracy below this = wrong verse")
+    a.add_argument("--pad", type=float, default=0.0, help="seconds of silence added before and after each clip")
     r = sub.add_parser("rescore", help="recompute all tables from a transcripts.jsonl (no model needed)")
     r.add_argument("transcripts", nargs="?", default=os.path.join(DEFAULT_DIR, "eval", "transcripts.jsonl"))
     r.add_argument("--threshold", type=float, default=0.5)
     r.add_argument("--examples", type=int, default=15)
+    t = sub.add_parser("padtest", help="seen clips with 0 / 0.25 / 0.5 / 1 s of silence added, both models")
+    t.add_argument("--model-dir", default=DEFAULT_DIR)
+    t.add_argument("--out", default=os.path.join(DEFAULT_DIR, "eval"))
+    t.add_argument("--quick", action="store_true")
+    t.add_argument("--threshold", type=float, default=0.5)
     i = sub.add_parser("inspect", help="list the marks the model can output (reads tokens.txt)")
     i.add_argument("--model-dir", default=DEFAULT_DIR)
     args = p.parse_args()
-    {"text": text_mode, "audio": audio_mode, "rescore": rescore_mode, "inspect": inspect_mode}[args.mode](args)
+    {"text": text_mode, "audio": audio_mode, "rescore": rescore_mode, "inspect": inspect_mode,
+     "padtest": padtest_mode}[args.mode](args)
 
 
 if __name__ == "__main__":
