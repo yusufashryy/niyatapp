@@ -177,7 +177,7 @@ Counted over all of `quran-uthmani.json`:
 | Mark | Count | Treated as |
 |---|---|---|
 | fatha / kasra / damma / sukun U+0652 / shadda / tanween | 3,741-123,396 each | harakat |
-| **U+06E1 (Uthmani round sukun)** | **0** | This file uses the plain sukun U+0652 throughout. `harakat()` already maps U+06E1 to sukun in case the *model* writes it. Check the model's `tokens.txt` for U+06E1 when the files can be downloaded. |
+| **U+06E1 (Uthmani round sukun)** | **0** | This file uses the plain sukun U+0652 throughout, and so does the model (its vocabulary has no U+06E1). No normalisation needed. |
 | U+0670 dagger alef ٰ | 9,838 | letters: folded to ا (so ٱلْعَٰلَمِينَ = العالمين). harakat: ignored. Fine. |
 | U+0653 maddah above | 5,376 | ignored |
 | U+06DF small high rounded zero (letter written but not read, e.g. ءَامَنُوا۟) | 3,988 | ignored. The silent letter is still counted for letters, which matches Imla'i spelling (آمَنُوا keeps the alef). Fine. |
@@ -258,8 +258,14 @@ RTF is a fair rough proxy. Core ML / ANE would be faster but needs a conversion 
    last letter's vowel at the end of an ayah, because a reciter stopping there drops it (waqf).
 3. **Don't flag on one word alone**: use the wrong-verse threshold (0.5) for "you're on a different
    verse", and require a per-word confidence threshold before marking a word red.
-4. When `tokens.txt` can be downloaded, list which marks the model can output (does it use U+06E1,
-   dagger alef, U+0671 alef wasla?) and add any it writes to the fold tables.
+4. ~~List which marks the model can output.~~ Done (`inspect`, 1,025 tokens): it writes only
+   fatha, kasra, damma, sukun **U+0652**, shadda, the three tanween and hamza ء, plus Arabic
+   punctuation (، . ؟) and its special tokens `<unk>` / `<blk>`. **It never writes U+06E1** or any
+   small Qur'anic sign (small high letters, small meem, U+06DF). So the Uthmani text's extra marks
+   need no mapping, only ignoring, which the checker already does. (The first `inspect` folded letter
+   variants into plain alef, so whether it writes the dagger alef U+0670 or alef wasla U+0671 is
+   still to check with the updated `inspect`; the smoke test transcripts suggest it doesn't:
+   العالمين, الرحمن, الله.)
 
 ## Files
 

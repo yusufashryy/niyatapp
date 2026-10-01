@@ -719,6 +719,9 @@ def rescore_mode(args):
     report(records, args.threshold, args.examples)
 
 
+PLAIN_LETTERS = set("ابتثجحخدذرزسشصضطظعغفقكلمنهوي")
+
+
 def inspect_mode(args):
     """Which marks can the model write? Read from tokens.txt."""
     path = os.path.join(args.model_dir, "tokens.txt")
@@ -728,9 +731,9 @@ def inspect_mode(args):
         tok = line.rsplit(" ", 1)[0]
         n += 1
         for ch in tok:
-            if not letters(ch) and not ch.isspace() and ch != "▁":
+            if ch not in PLAIN_LETTERS and not ch.isspace() and ch != "▁":
                 marks[ch] += 1
-    say(f"{n} tokens. Non-letter characters the model can write:")
+    say(f"{n} tokens. Characters other than the 28 plain letters that the model can write:")
     for ch, c in marks.most_common():
         import unicodedata
         say(f"  U+{ord(ch):04X} {unicodedata.name(ch, '?'):<45} in {c} tokens")
