@@ -591,12 +591,13 @@ def score(text, surah, first, last, forms):
 def table(title, groups):
     say(f"\n### {title}\n")
     say("| group | clips | words | letters-WER | word acc | harakat agree | sequence acc | "
-        "letters-WER (v2) | harakat agree (v2) | words with harakat | sequence acc (v2) |")
-    say("|---|---|---|---|---|---|---|---|---|---|---|")
+        "letters-WER (v2) | word acc (v2) | harakat agree (v2) | words with harakat | sequence acc (v2) |")
+    say("|---|---|---|---|---|---|---|---|---|---|---|---|")
     for g, (n, tot, seq, tot2, seq2) in groups.items():
         m, m2 = metrics(tot), metrics(tot2)
         say(f"| {g} | {n} | {m['words']} | {m['wer']:.2%} | {m['word_acc']:.2%} | {m['harakat_agree']:.2%} | "
-            f"{seq / n:.1%} | {m2['wer']:.2%} | {m2['harakat_agree']:.2%} | {m2['harakat_checked']:.0%} | "
+            f"{seq / n:.1%} | {m2['wer']:.2%} | {m2['word_acc']:.2%} | {m2['harakat_agree']:.2%} | "
+            f"{m2['harakat_checked']:.0%} | "
             f"{seq2 / n:.1%} |")
 
 
