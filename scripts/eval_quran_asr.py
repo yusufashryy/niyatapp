@@ -759,8 +759,9 @@ def audio_mode(args):
 
 
 def padtest_mode(args):
-    """Does silence around the clip fix the dropped last syllables? Seen clips,
-    both models, several pad lengths. Audio comes from the cache of an earlier run."""
+    """Do silence around the clip, or faint noise (like the dither used in
+    training), fix the dropped last syllables? Seen clips, both models.
+    Audio comes from the cache of an earlier run."""
     tokens = os.path.join(args.model_dir, "tokens.txt")
     clips = build_clips(argparse.Namespace(quick=args.quick, manifest=None, retasy=False),
                         os.path.join(args.out, "audio"), {})
@@ -771,12 +772,24 @@ def padtest_mode(args):
     with open(out_path, "w", encoding="utf-8") as log:
         for key in ("mixed", "q8"):
             model = Model(os.path.join(args.model_dir, f"qurankarim-fastconformer-{key}.onnx"), tokens, 2)
-            for pad in (0.0, 0.25, 0.5, 1.0):
-                say(f"{key}, {pad} s of silence: {len(clips)} clips")
+            rng = random.Random(7)
+            variants = [(f"pad {p} s", p, None) for p in (0.0, 0.25, 0.5, 1.0)] + \
+                       [("noise SNR 40", 0.0, 40), ("noise SNR 30", 0.0, 30), ("noise SNR 30 + pad 0.5 s", 0.5, 30)]
+            for name, pad, snr in variants:
+                say(f"{key}, {name}: {len(clips)} clips")
                 for group, spk, s, f, l, path in clips:
-                    text, _ = model(audio[path], pad)
+                    samples = audio[path]
+                    if pad and snr:  # pad first, so the added silence gets the same faint noise
+                        import numpy as np
+                        silence = np.zeros(int(pad * SR), dtype=np.float32)
+                        samples, pad_now = np.concatenate([silence, samples, silence]), 0.0
+                    else:
+                        pad_now = pad
+                    if snr:
+                        samples = add_noise(samples, snr, rng)
+                    text, _ = model(samples, pad_now)
                     rec = {"model": key, "group": group, "speaker": spk, "surah": s, "first": f, "last": l,
-                           "aug": f"pad {pad} s [{key}]", "text": text}
+                           "aug": f"{name} [{key}]", "text": text}
                     records.append(rec)
                     log.write(json.dumps(rec, ensure_ascii=False) + "\n")
     report(records, args.threshold)
@@ -838,7 +851,7 @@ def main():
     r.add_argument("transcripts", nargs="?", default=os.path.join(DEFAULT_DIR, "eval", "transcripts.jsonl"))
     r.add_argument("--threshold", type=float, default=0.5)
     r.add_argument("--examples", type=int, default=15)
-    t = sub.add_parser("padtest", help="seen clips with 0 / 0.25 / 0.5 / 1 s of silence added, both models")
+    t = sub.add_parser("padtest", help="seen clips with silence padding / faint noise added, both models")
     t.add_argument("--model-dir", default=DEFAULT_DIR)
     t.add_argument("--out", default=os.path.join(DEFAULT_DIR, "eval"))
     t.add_argument("--quick", action="store_true")
