@@ -609,7 +609,7 @@ def report(records, threshold=0.5, examples=15):
     groups, noisy = collections.OrderedDict(), collections.OrderedDict()
     flags = collections.defaultdict(list)
     harakat_fa = {"v1": [0, 0], "v2": [0, 0]}
-    single = {}
+    single = []  # (group, surah, ayah, text) of clean single-ayah clips
     speed = [r for r in records if r.get("kind") == "speed"]
     for r in records:
         if r.get("kind") == "speed":
@@ -626,7 +626,7 @@ def report(records, threshold=0.5, examples=15):
         if aug or r["model"] != "mixed":
             continue
         if r["first"] == r["last"]:
-            single[(r["speaker"], r["surah"], r["first"])] = r["text"]
+            single.append((r["group"], r["surah"], r["first"], r["text"]))
         if r["group"] == "seen":
             harakat_fa["v1"][0] += st["haraka"]
             harakat_fa["v1"][1] += st["haraka"] + st["correct"]
@@ -641,33 +641,41 @@ def report(records, threshold=0.5, examples=15):
         table("Variants (noise / phone / speed: mixed model, seen clips; pad: silence added before and after)",
               noisy)
 
-    say("\n### Mistake detection (mixed model, clean single-ayah clips)\n")
-    n = wrong = clean_low = skip_n = skip_hit = skip_other = clean_flag = 0
-    for (spk, s, a), text in sorted(single.items()):
-        if a + 1 > len(quran()[str(s)]):
-            continue
-        heard = strip_bismillah(words(text), s, a)
-        exp = expected(s, a, a)
-        _, st = compare_v2(exp, heard, forms, s)
-        n += 1
-        clean_flag += letter_errors(st) > 0
-        clean_low += metrics(st)["word_acc"] < threshold
-        _, st2 = compare_v2(expected(s, a + 1, a + 1), heard, forms, s)
-        wrong += metrics(st2)["word_acc"] < threshold
-        if len(exp) >= 3:
-            pos = rng.randrange(1, len(exp))
-            test = exp[:pos] + [(a, rng.choice(ayah_words(s, a + 1)))] + exp[pos:]
-            rows, st3 = compare_v2(test, heard, forms, s)
-            hit = [x for x in rows if x[0] != "EXTRA"][pos][0] in ("MISSED", "DIFFERENT")
-            skip_n += 1
-            skip_hit += hit
-            skip_other += letter_errors(st3) - hit
-    if n:
-        say(f"- {n} clips. Correct recitation flagged with any letter error: {clean_flag / n:.1%}")
-        say(f"- Wrong verse (ayah N audio vs ayah N+1 text) caught at word acc < {threshold}: {wrong / n:.1%}; "
-            f"correct ayah below the same threshold (false alarm): {clean_low / n:.1%}")
-        say(f"- Skipped word caught: {skip_hit / max(skip_n, 1):.1%} of {skip_n}; "
-            f"other words flagged per test: {skip_other / max(skip_n, 1):.2f}")
+    say("\n### Mistake detection (mixed model, single-ayah clips)\n")
+    say(f"Wrong verse = audio of ayah N scored against the text of N+1, caught when word accuracy < {threshold}; "
+        "false alarm = the right ayah scoring below the same threshold. Skipped word = one word inserted "
+        "into the expected text.\n")
+    say("| group | clips | correct ayah with any letter flag | wrong verse caught | wrong-verse false alarm | "
+        "skipped word caught | other words flagged per skip test |")
+    say("|---|---|---|---|---|---|---|")
+    by_group = collections.OrderedDict()
+    for group, s, a, text in single:
+        by_group.setdefault(group, []).append((s, a, text))
+    for group, items in by_group.items():
+        n = wrong = clean_low = skip_n = skip_hit = skip_other = clean_flag = 0
+        for s, a, text in items:
+            if a + 1 > len(quran()[str(s)]):
+                continue
+            heard = strip_bismillah(words(text), s, a)
+            exp = expected(s, a, a)
+            _, st = compare_v2(exp, heard, forms, s)
+            n += 1
+            clean_flag += letter_errors(st) > 0
+            clean_low += metrics(st)["word_acc"] < threshold
+            _, st2 = compare_v2(expected(s, a + 1, a + 1), heard, forms, s)
+            wrong += metrics(st2)["word_acc"] < threshold
+            if len(exp) >= 3:
+                pos = rng.randrange(1, len(exp))
+                test = exp[:pos] + [(a, rng.choice(ayah_words(s, a + 1)))] + exp[pos:]
+                rows, st3 = compare_v2(test, heard, forms, s)
+                hit = [x for x in rows if x[0] != "EXTRA"][pos][0] in ("MISSED", "DIFFERENT")
+                skip_n += 1
+                skip_hit += hit
+                skip_other += letter_errors(st3) - hit
+        if n:
+            skips = f"{skip_hit / skip_n:.1%} of {skip_n} | {skip_other / skip_n:.2f}" if skip_n else "- | -"
+            say(f"| {group} | {n} | {clean_flag / n:.1%} | {wrong / n:.1%} | {clean_low / n:.1%} | {skips} |")
+    say("")
     for k, (bad, tot) in harakat_fa.items():
         if tot:
             say(f"- Harakat false alarms on seen professional audio ({k}): {bad}/{tot} checked words = {bad / tot:.2%}")

@@ -11,44 +11,58 @@ The model card claims 0.14% WER. Nobody has checked that figure.
 
 ## Summary (read this first)
 
-**Status: full run done on a Mac (seen + unseen reciters, noise, speed); amateurs (RetaSy) and a
-silence/dither test still to run.** The cloud container that wrote this could not reach any of
-the audio or model hosts (`huggingface.co`, `everyayah.com`, `server*.mp3quran.net`,
-`cdn.islamic.network` were refused by its network policy). So the owner ran the audio on a Mac,
-committed the transcripts (`docs/research/asr-eval-transcripts.jsonl`), and every number here
-is recomputed from that file with `eval_quran_asr.py rescore`.
+**Status: complete.** Professional reciters (seen and unseen), amateurs (RetaSy), noise / phone /
+tempo variants, a silence and dither test, and speed have all been measured. The cloud container that wrote this
+couldn't reach the audio or model hosts (its network policy refused `huggingface.co`,
+`everyayah.com`, `server*.mp3quran.net`, `cdn.islamic.network`). So the owner ran the audio on a
+Mac and committed the transcripts (`docs/research/asr-eval-transcripts.jsonl`,
+`docs/research/asr-eval-padtest.jsonl`). Every number below is recomputed from those files with
+`eval_quran_asr.py rescore`.
 
-**Verdict so far: not good enough to mark mistakes. Good enough to follow along**
-(working out which ayah you're on, catching a wrong or skipped ayah), and fast enough to run
-on-device with no trouble. In plain terms:
+### Verdict: don't ship it, not even as an optional download
 
-| Question | Answer | Evidence |
-|---|---|---|
-| Is it fast enough for an iPhone? | **Yes, easily** | 1 CPU thread on a Mac decodes about 30-55× faster than real time |
-| Does it know which ayah you're reciting? | **Yes** | wrong verse caught 97% of the time, 2.4% false alarms |
-| Does it notice a skipped word? | **Yes** | 98% of skipped words flagged |
-| Can it say "this word was wrong"? | **No, not yet** | 41% of *correctly* recited ayat by trained-on professionals get at least one false red word |
-| Can it check harakat? | **Partly** | when it writes harakat it's reliable (0.16% false alarms), but it only writes them on 2 of 3 words |
-| Does it work on reciters it wasn't trained on? | **Poorly** | 31% letters-WER (2 reciters, 12 surah files) |
-| Does it work on ordinary voices? | **Not measured yet** | RetaSy needs one more run (fixed) |
+It works on the professional reciters it was trained on, and it's fast. But **on ordinary
+learners' voices it gets about half the words wrong, and it can't reliably tell which ayah they're
+on**. Those are the people a "check my recitation" feature is for.
+
+| Question | Professionals it was trained on | Professionals it wasn't | Amateurs (non-Arabic speakers) |
+|---|---|---|---|
+| Words wrong (letters-WER) | 8.3% (q8: 6.6%) | 31% | **56%** (29% on the 14 clips labelled correct) |
+| Correctly recited ayah gets at least one false red word | 41% | n/a (whole surahs) | **69%** |
+| Right ayah mistaken for a wrong one (follow-along false alarm) | 2.4% | n/a | **41%** |
+| Wrong ayah caught | 97% | n/a | 93% |
+| Skipped word caught | 98% | n/a | 98%, but 2.4 other words falsely flagged each time |
+| Harakat false alarms (where it writes harakat) | 0.16% | 0% | 2% |
+| Speed, 1 Mac CPU thread | 30-55× faster than real time | | |
 
 Main findings:
 
-1. **Accuracy is far below the card's 0.14% WER**: 8.3% letters-WER even on the six EveryAyah
-   reciters it was trained on, and 31% on two unseen reciters.
-2. **Most errors are bits of words dropped or doubled at token boundaries**, not real
-   mis-hearings: يُؤْمِنُونَ heard as يُؤْمِن or يُؤْمِنُونَُونَ, ٱلدِّينِ as الددِّّينِ. The **last word
-   of an ayah fails 19% of the time, against 6% elsewhere**. And faint white noise *improves*
-   accuracy (5.4% at SNR 10 vs 8.3% clean). Together these point to a mismatch in how the
-   audio is fed in (the end of the clip cut off, or missing the noise floor or "dither" the model was trained
-   with), which may be fixable without retraining. `padtest` checks this; results to come.
-3. **Speed and size**: q8 is 2× faster than "mixed" and as accurate (letters-WER 8.9% vs 8.3% on the
-   same subset is within noise), but it's the bigger file (166 MB vs 83 MB).
-4. **The model writes Imla'i (everyday) spelling, never Uthmani signs**: no U+06E1, no dagger
-   alef, no alef wasla, no small high letters. So the matcher must compare against everyday
-   spellings. `compare_v2` does this, and it brings spelling-only false alarms from about 1 in 3 ayat to about 1 in 100.
-5. **Background voices hurt badly** (13% letters-WER at SNR 10, 31% at SNR 5). Phone-quality audio
-   and tempo changes barely matter.
+1. **The card's 0.14% WER doesn't hold up anywhere we tested.** Even on its own training reciters
+   it's 6.6-8.3%.
+2. **The errors come from the model, not from our setup.** The ONNX metadata matches sherpa-onnx's
+   NeMo settings (80 mel features, per-feature normalisation, blank id 1024 = last). Adding silence
+   makes things worse (8.3% becomes 17% with 1 s of padding). Faint noise barely helps. Most errors
+   are word pieces dropped or repeated (يُؤْمِنُونَ heard as يُؤْمِن or يُؤْمِنُونَُونَ), worst on an ayah's
+   last word (19% vs 6% for the other words).
+3. **q8 is the better file**: 6.6% vs 8.3% letters-WER on the same 564 clips, and 2× faster.
+   But it's the larger download (166 MB vs 83 MB; both files are quantised).
+4. **The model writes everyday (Imla'i) spelling only.** No Uthmani signs at all: no U+06E1, no
+   dagger alef, no alef wasla, no small high letters. The matcher must compare against everyday
+   spellings. `compare_v2` does, and it brings spelling-only false alarms from about 1 in 3 ayat
+   to about 1 in 100.
+5. **Background voices hurt badly** (13% letters-WER at SNR 10, 31% at SNR 5). Phone-band audio
+   and tempo changes barely matter. Strong white noise (SNR 10) actually *lowers* errors on the
+   same clips (8.7% to 5.4%), a sign the model was trained on noisier audio than studio recordings.
+
+### What would change the verdict
+
+- **Fine-tune for ordinary voices** (roadmap step 3): EveryAyah plus crowd-sourced recitation
+  (Tarteel v1, RetaSy's labelled clips), with noise augmentation. Re-run this script on the result.
+  The bar: amateurs ≤ 15% letters-WER for follow-along, ≤ 5% for marking mistakes.
+- **Or evaluate a different model** with the same script: `audio --manifest` takes any clips, and
+  only the `Model` class needs swapping.
+- **If it ships to anyone before that, make it follow-along for professionals' recordings only**
+  (it's reliable there), with no red words and no harakat flags.
 
 ## Smoke test (Mac, `audio --quick`, old scoring)
 
@@ -103,6 +117,7 @@ python3 scripts/eval_quran_asr.py inspect                 # which marks can the 
 python3 scripts/eval_quran_asr.py audio --quick           # 2-minute smoke test
 python3 scripts/eval_quran_asr.py audio --retasy          # full run, with amateurs
 python3 scripts/eval_quran_asr.py audio --manifest mine.csv   # + your own recordings
+python3 scripts/eval_quran_asr.py padtest                 # silence / faint-noise variants (seen clips)
 python3 scripts/eval_quran_asr.py rescore                 # tables again from saved transcripts
 ```
 
@@ -149,7 +164,7 @@ Each metric is reported with the current `compare()` and with the proposed `comp
 - *Skipped word*: one word (taken from the next ayah) is inserted into the expected text, so the reciter "skipped" it. It counts as caught if that exact word is flagged missed or different. Words flagged elsewhere are counted too.
 - *Harakat false alarms*: matched words whose harakat differ, on clean professional audio, where the reciters are assumed correct.
 
-## Results that could be measured (text only)
+## Text-only results (no model needed)
 
 These answer one question: if the model heard everything perfectly but wrote it the way it
 probably writes (everyday Imla'i spelling with tashkeel, like most Qur'an ASR training text), how
@@ -227,53 +242,84 @@ What this means:
 
 ## Full run (Mac, `audio --retasy`, scored with `compare_v2`)
 
-Seen: 6 EveryAyah reciters × 94 ayat (564 clips). Unseen: Islam Sobhi and Raad Al-Kurdi, whole-surah
-files of 1, 103, 108, 112, 113, 114 from mp3quran.net (12 files). The third unseen reciter's URL
-(Abdulrahman Mosad, server16) returned 404. RetaSy loaded, but its surah and ayah columns are a
-name and the ayah text, which the first version of the script didn't recognise, so **no amateur clips
-were tested**. Fixed: the ayah is now found from its text.
+Data:
+- **Seen**: 6 EveryAyah reciters × 94 ayat = 564 clips.
+- **Unseen**: Islam Sobhi and Raad Al-Kurdi, whole-surah files of 1, 103, 108, 112, 113, 114 from
+  mp3quran.net (12 files). The third unseen reciter's URL (Abdulrahman Mosad, server16) returned 404.
+- **Amateurs**: the first 232 rows of `RetaSy/quranic_audio_dataset` (train split, streamed).
+  82 were skipped because their ayah text didn't match any ayah; the other 150 were used. Mostly
+  Al-Fatiha (61) and the last short surahs (114: 19, 112: 18, 109: 15, ...), median 3.5 s. RetaSy
+  gives the surah as a name and the ayah as Uthmani text, so the ayah is found by its letters.
+  Labels: 118 unlabelled, 14 `correct`, 12 `in_correct`, and 2 each of `not_related_quran`,
+  `multiple_aya`, `not_match_aya`.
 
 | Group | clips | words | letters-WER | word acc | harakat agree (where written) | words with harakat | sequence acc |
 |---|---|---|---|---|---|---|---|
 | Seen reciters, mixed | 564 | 4,170 | **8.27%** | 92.0% | 99.84% | 66% | 59.8% |
-| Seen reciters, q8 (first 150) | 150 | 1,159 | 8.89% | 91.1% | 99.80% | 94% | 57.3% |
+| Seen reciters, q8 | 564 | 4,170 | **6.64%** | 93.5% | 99.74% | 58% | 65.2% |
 | Unseen reciters, mixed | 12 | 222 | **30.63%** | 78.8% | 100% | 89% | 16.7% |
-| Amateurs | 0 | | not run | | | | |
+| Amateurs, unlabelled, mixed | 118 | 514 | **55.84%** | 55.6% | 97.85% | 98% | 29.7% |
+| Amateurs, labelled correct, mixed | 14 | 49 | 28.57% | 71.4% | 100% | 91% | 42.9% |
+| Amateurs, labelled incorrect, mixed | 12 | 53 | 39.62% | 60.4% | 100% | 100% | 41.7% |
 
-(Word acc and sequence acc are computed the same way as letters-WER. "Sequence acc" = clips with zero letter errors.)
+(The q8 row is from `padtest` with no padding. The 150-clip q8 subset in the main run gave 8.89%
+against mixed's 8.27% on all clips; on the same 564 clips q8 is clearly better. "Sequence acc" =
+clips with zero letter errors.)
 
-Letters-WER by seen reciter: Abdullah Basfar 4.3%, Husary 4.7%, Alafasy 7.3%, Minshawy 8.6%,
-Ghamadi (40 kbps) 9.8%, Abdul Basit 14.8%. The slower and more melodic the recitation, the worse it does.
+Letters-WER by seen reciter (mixed): Abdullah Basfar 4.3%, Husary 4.7%, Alafasy 7.3%, Minshawy
+8.6%, Ghamadi (40 kbps) 9.8%, Abdul Basit 14.8%. The slower and more melodic the recitation, the worse.
 
-**Variants** (60 random seen clips, mixed model):
+Amateur ayat are short (2-4 words), so one wrong word costs 25-50% of a clip. Results are uneven
+rather than uniformly poor: many clips come back perfect (إِنَّ الْإِنْسَانَ لَفِي خُسْرٍ, إِنَّا أَعْطَيْنَاكَ
+الْكَوْثَرَ), others are nonsense (113:4 وَمِن شَرِّ ٱلنَّفَّٰثَٰتِ فِى ٱلْعُقَدِ heard as بط نفاتعاب).
 
-| Variant | letters-WER | sequence acc |
+**Variants** (mixed model, seen clips):
+
+| Variant | clips | letters-WER | sequence acc |
+|---|---|---|---|
+| clean, same 60 clips as the rows below | 60 | 8.72% | |
+| white noise SNR 20 / 10 / 5 | 60 | 7.83% / 5.37% / 5.37% | 51.7% / 65.0% / 65.0% |
+| babble (4 other reciters) SNR 10 / 5 | 60 | 13.20% / 31.10% | 48.3% / 23.3% |
+| phone band 300-3400 Hz | 60 | 6.71% | 50.0% |
+| tempo 0.9× / 1.15× | 60 | 10.74% / 6.71% | 51.7% / 63.3% |
+
+**Silence and dither** (`padtest`, all 564 seen clips; silence added before and after):
+
+| | mixed | q8 |
 |---|---|---|
-| clean (same reciters, all clips) | 8.27% | 59.8% |
-| white noise SNR 20 / 10 / 5 | 7.83% / 5.37% / 5.37% | 51.7% / 65.0% / 65.0% |
-| babble (4 other reciters) SNR 10 / 5 | 13.20% / 31.10% | 48.3% / 23.3% |
-| phone band 300-3400 Hz | 6.71% | 50.0% |
-| tempo 0.9× / 1.15× | 10.74% / 6.71% | 51.7% / 63.3% |
+| as is | 8.27% | 6.64% |
+| + 0.25 / 0.5 / 1 s silence | 9.57% / 11.70% / 17.39% | 7.34% / 10.53% / 16.67% |
+| + faint noise SNR 40 / 30 | 8.87% / 7.48% | 6.93% / 7.05% |
+| + SNR 30 noise and 0.5 s padding | 7.65% | 7.75% |
 
-**Mistake detection** (540 clean single-ayah clips, mixed):
-- Wrong verse (audio of ayah N scored against ayah N+1) caught at word accuracy < 0.5: **97.0%**;
-  correct ayat below the same threshold: **2.4%**.
-- Skipped word: **98.1%** caught (474 tests), with 0.73 other words wrongly flagged per test.
-- Correct recitation with at least one letter flag: **41.1%**.
-- Harakat false alarms on professional audio: **0.16%** of checked words with `compare_v2` (4 of
-  2,546), against 49.7% with the original `compare()`.
+So the clip ends are not being cut off. Silence hurts, because `per_feature` normalisation
+averages over the whole clip. **In the app, trim silence or cut live audio into speech segments
+with a voice-activity detector (sherpa-onnx ships Silero VAD) before decoding.**
+
+**Mistake detection** (mixed model, single-ayah clips):
+
+| Group | clips | correct ayah with any letter flag | wrong verse caught (acc < 0.5) | right ayah below 0.5 (false alarm) | skipped word caught | other words flagged per skip test |
+|---|---|---|---|---|---|---|
+| Seen reciters | 540 | 41.1% | 97.0% | 2.4% | 97.9% of 474 | 0.73 |
+| Amateurs, unlabelled | 88 | 69.3% | 93.2% | 40.9% | 97.5% of 79 | 2.42 |
+| Amateurs, labelled correct | 14 | 57.1% | 100% | 28.6% | 100% of 14 | 1.00 |
+| Amateurs, labelled incorrect | 11 | 54.5% | 81.8% | 18.2% | 100% of 10 | 1.10 |
+
+Harakat false alarms on seen professional audio: **0.16%** of checked words with `compare_v2`
+(4 of 2,546), against 49.7% with the original `compare()`.
 
 **Speed** (Apple silicon MacBook Pro CPU, 40 clips, 506 s of audio):
 
 | model | 1 thread RTF | 2 threads RTF |
 |---|---|---|
-| mixed | 0.034 | 0.020 |
+| mixed | 0.033 | 0.020 |
 | q8 | 0.018 | 0.010 |
 
 ### What the errors look like
 
-Of the 345 letter errors on seen reciters: 159 heard only the start of the word, 49 doubled a letter,
-34 repeated a piece, 10 lost the start, 61 were other substitutions, 21 words were missed and 11 were extra.
+Of the 345 letter errors on seen reciters (mixed): 159 heard only the start of the word, 49 doubled
+a letter, 34 repeated a piece, 10 lost the start, 61 were other substitutions, 21 words were missed
+and 11 were extra. The first word of an ayah fails 5.3% of the time, middle words 6.4%, the last word 19.3%.
 
 | Kind | Expected | Heard | Where |
 |---|---|---|---|
@@ -283,23 +329,24 @@ Of the 345 letter errors on seen reciters: 159 heard only the start of the word,
 | start lost | ذَهَبَ · هُمُ · وَإِذَا | هَبَ · مُ · ذَا | Alafasy 2:17, 2:13; Abdul Basit 2:14 |
 | mangled | ٱلرَّحْمَٰنِ · لَذَهَبَ | َّح · لهَبَ | Alafasy 1:3, 2:20 |
 | unseen, mangled | نَعْبُدُ · نَسْتَعِينُ · ٱلْمُسْتَقِيمَ | نَعُْدُ · نَسْعِين · الْمُسْتَقَ | Islam Sobhi 1:5-6 |
+| amateur, ending lost | إِلَٰهِ · يَوْمِ · ٱلْمُسْتَقِيمَ | إِل · يَوِ · الْمُْتَقِيمَ | RetaSy 114:3, 1:4, 1:6 |
+| amateur, nonsense | وَمِن شَرِّ ٱلنَّفَّٰثَٰتِ فِى ٱلْعُقَدِ | بط نفاتعاب | RetaSy 113:4 |
+| amateur labelled correct | مَٰلِكِ يَوْمِ ٱلدِّينِ | مك ... عيد | RetaSy 1:4 |
 
-The first word of an ayah fails 5.3% of the time, middle words 6.4%, the last word 19.3%.
-
-Unseen whole-surah files also include things a real user would do and the scoring counts as errors: Islam Sobhi
-repeats ayat in 112, and both reciters open with a garbled isti'adha and Bismillah (now stripped
-loosely before scoring, which brought unseen letters-WER from 39.6% to 30.6%).
+Unseen whole-surah files also include things real users do that count as errors: Islam Sobhi repeats
+ayat in 112, and both reciters open with a garbled isti'adha and Bismillah (stripped loosely
+before scoring, which brought unseen letters-WER from 39.6% to 30.6%).
 
 ### Against the go/no-go limits
 
 | Measure | Result | Band |
 |---|---|---|
-| Amateurs letters-WER | not run | ? |
-| Unseen reciters letters-WER | 30.6% | don't ship |
-| Correct ayat with any false flag (seen) | 41% | don't ship (red words) |
-| Wrong verse caught | 97.0% (2.4% false) | ship |
-| Harakat false alarms | 0.16% (on the 66% of words it vowels) | ship, but only as "harakat where heard" |
-| RTF, 1 thread | 0.018-0.034 | ship |
+| Amateurs letters-WER | 56% (29% labelled correct) | **don't ship** |
+| Unseen reciters letters-WER | 30.6% | **don't ship** |
+| Correct ayat (amateur) with any false flag | 69% | **don't ship** |
+| Wrong verse caught | 97% pros / 93% amateurs, but 41% false alarms on amateurs | ship for pros only |
+| Harakat false alarms | 0.16% pros / 2% amateurs, on words it vowels | ship, as "harakat where heard" |
+| RTF, 1 thread | 0.018-0.033 | ship |
 
 ## Go/no-go limits for the audio run
 
@@ -334,12 +381,18 @@ RTF is a fair rough proxy. Core ML / ANE would be faster but needs a conversion 
    fatha, kasra, damma, sukun **U+0652**, shadda, the three tanween and hamza ء, plus Arabic
    punctuation (، . ؟) and its special tokens `<unk>` / `<blk>`. **It never writes U+06E1** or any
    small Qur'anic sign (small high letters, small meem, U+06DF). So the Uthmani text's extra marks
-   need no mapping, only ignoring, which the checker already does. (The first `inspect` folded letter
-   variants into plain alef, so whether it writes the dagger alef U+0670 or alef wasla U+0671 is
-   still to check with the updated `inspect`; the smoke test transcripts suggest it doesn't:
-   العالمين, الرحمن, الله.)
+   need no mapping, only ignoring, which the checker already does. The full `inspect` confirms it
+   writes no dagger alef (U+0670) and no alef wasla (U+0671). Its letter forms are the everyday ones:
+   أ إ آ ى ة ئ ؤ.
+5. **Trim silence / use a VAD before decoding** (padding with silence raised letters-WER from 8.3%
+   to 17%).
 
 ## Files
 
-- `scripts/eval_quran_asr.py`: the evaluation (`text` mode produced every number above; `audio` mode is the full run).
+- `scripts/eval_quran_asr.py`: the evaluation. Modes: `text` (spelling floor, simulated mistakes),
+  `audio` (the full run), `padtest` (silence and dither), `rescore` (every table from saved
+  transcripts, no model needed), `inspect` (the model's output characters and metadata).
+- `docs/research/asr-eval-transcripts.jsonl`: every transcript from the final Mac run (seen, unseen,
+  amateurs, noise variants, timings). `python3 scripts/eval_quran_asr.py rescore docs/research/asr-eval-transcripts.jsonl`
+- `docs/research/asr-eval-padtest.jsonl`: the silence and dither transcripts (`rescore` works on it too).
 - `scripts/try_quran_asr.py`: unchanged; its `letters()`, `harakat()`, `words()`, `compare()` and `expected_words()` are reused.
