@@ -8,9 +8,11 @@ is sloppy (يُؤْمِن for يُؤْمِنُونَ). This script asks a differ
 
 It runs the ONNX model directly (onnxruntime) to get, for every ~80 ms frame,
 the probability of every token. Then, for a target text, CTC forced alignment
-finds the best way to lay those tokens over the audio, and each word gets a
-score: the average log-probability of its tokens where they were placed
-(0 = certain, more negative = the audio doesn't fit). From that:
+finds the best way to lay tokens spelling that text over the audio. Any
+spelling counts: harakat are optional and letter forms (أ/ا, ة/ه, ى/ي) are
+equal, so a correctly recited word isn't penalised for how the model would have
+written it. Each word gets a score: the average best log-probability of the
+pieces used for it (0 = certain, more negative = the audio doesn't fit). From that:
 
   - per-word false alarms on correct recitation, at several thresholds;
   - a skipped word: one extra word inserted into the target (no audio for it);
@@ -42,7 +44,7 @@ from try_quran_asr import DEFAULT_DIR, load_audio, words  # noqa: E402
 SR = 16000
 HARAKAT = "ًٌٍَُِّْ"
 THRESHOLDS = (-0.5, -1.0, -2.0, -3.0, -5.0)
-VARIANTS = ("vowelled", "bare")
+VARIANTS = ("letters",)
 SCORED_GROUPS = ("seen", "amateur (correct)", "amateur (unlabelled)", "amateur (in_correct)")
 
 
@@ -78,24 +80,41 @@ def mel_filters(n_mels=80, n_fft=512, sr=SR):
 _MEL = None
 
 
-def features(samples, n_fft=512, win=400, hop=160):
-    """NeMo AudioToMelSpectrogramPreprocessor at inference: pre-emphasis 0.97,
-    centred STFT (Hann 400 in a 512 FFT, hop 160), power, 80 Slaney mels,
-    log(x + 2^-24), then per-feature normalisation. Returns (80, T)."""
+def features(samples, mode="nemo", n_fft=512, win=400, hop=160):
+    """80 log-mel features, per-feature normalised. mode "nemo" follows NeMo's
+    AudioToMelSpectrogramPreprocessor (pre-emphasis 0.97, centred STFT with a
+    Hann 400 window in a 512 FFT, hop 160, Slaney mels, log(x + 2^-24)); mode
+    "kaldi" follows kaldi-native-fbank as sherpa-onnx configures it for NeMo
+    models. The self-check picks whichever reproduces sherpa-onnx. Returns (80, T)."""
     import numpy as np
     global _MEL
     if _MEL is None:
         _MEL = mel_filters()
     x = np.asarray(samples, dtype=np.float64)
-    x = np.concatenate([x[:1], x[1:] - 0.97 * x[:-1]])
-    x = np.pad(x, (n_fft // 2, n_fft // 2))
-    window = np.zeros(n_fft)
-    left = (n_fft - win) // 2
-    window[left:left + win] = np.hanning(win)
-    frames = 1 + (len(x) - n_fft) // hop
-    idx = np.arange(n_fft)[None, :] + hop * np.arange(frames)[:, None]
-    spec = np.abs(np.fft.rfft(x[idx] * window, n=n_fft)) ** 2
-    feats = np.log(_MEL @ spec.T.astype(np.float32) + 2.0 ** -24)
+    if mode == "kaldi":
+        # kaldi-native-fbank with snip_edges=false (what sherpa-onnx uses): frames
+        # centred on multiples of the hop, edges reflected, pre-emphasis per frame,
+        # 400-sample Hann window zero-padded to 512, log floored at float epsilon.
+        n = len(x)
+        frames = max(1, (n + hop // 2) // hop)
+        idx = np.arange(win)[None, :] + (hop * np.arange(frames) + hop // 2 - win // 2)[:, None]
+        idx = np.where(idx < 0, -idx - 1, idx)
+        idx = np.where(idx >= n, 2 * n - 1 - idx, idx)
+        fr = x[np.clip(idx, 0, n - 1)]
+        fr = np.concatenate([fr[:, :1] * (1 - 0.97), fr[:, 1:] - 0.97 * fr[:, :-1]], axis=1)
+        fr = fr * (0.5 - 0.5 * np.cos(2 * np.pi * np.arange(win) / (win - 1)))
+        spec = np.abs(np.fft.rfft(fr, n=n_fft)) ** 2
+        feats = np.log(np.maximum(_MEL @ spec.T.astype(np.float32), np.finfo(np.float32).eps))
+    else:
+        x = np.concatenate([x[:1], x[1:] - 0.97 * x[:-1]])
+        x = np.pad(x, (n_fft // 2, n_fft // 2))
+        window = np.zeros(n_fft)
+        left = (n_fft - win) // 2
+        window[left:left + win] = np.hanning(win)
+        frames = 1 + (len(x) - n_fft) // hop
+        idx = np.arange(n_fft)[None, :] + hop * np.arange(frames)[:, None]
+        spec = np.abs(np.fft.rfft(x[idx] * window, n=n_fft)) ** 2
+        feats = np.log(_MEL @ spec.T.astype(np.float32) + 2.0 ** -24)
     mean = feats.mean(axis=1, keepdims=True)
     std = feats.std(axis=1, ddof=1, keepdims=True) if feats.shape[1] > 1 else np.ones_like(mean)
     return ((feats - mean) / (std + 1e-5)).astype(np.float32)
@@ -131,10 +150,10 @@ class CTCModel:
         self.max_piece = max(len(p) for p in self.vocab)
         self.space = "▁" if any(p.startswith("▁") for p in self.vocab) else None
 
-    def logprobs(self, samples):
+    def logprobs(self, samples, mode="nemo"):
         """(T', V) log-probabilities."""
         import numpy as np
-        f = features(samples)
+        f = features(samples, mode)
         x = f[None] if self.channels_first else f.T[None]
         feeds = {self.feat_in.name: x}
         if self.len_in is not None:
@@ -154,90 +173,126 @@ class CTCModel:
         text = "".join(out)
         return (text.replace("▁", " ") if self.space else text).strip()
 
-    def tokenize(self, word):
-        """Greedy longest match against the vocabulary (an approximation of the
-        model's SentencePiece segmentation; CTC can score any segmentation)."""
-        s = (self.space or "") + word
-        ids, i = [], 0
-        while i < len(s):
-            for j in range(min(len(s), i + self.max_piece), i, -1):
-                if s[i:j] in self.id_of:
-                    ids.append(self.id_of[s[i:j]])
-                    i = j
-                    break
+    def build_groups(self):
+        """Group the vocabulary by what each piece spells in letters only
+        (harakat dropped, alef / ya / ta marbuta forms folded, as in the matcher).
+        Pieces that spell nothing (pure harakat, punctuation, <unk>) are fillers,
+        like the blank: they can be emitted anywhere without consuming a letter."""
+        import numpy as np
+        groups = collections.defaultdict(list)
+        filler = [self.blank]
+        for i, piece in enumerate(self.vocab):
+            if i == self.blank or not piece:
+                continue
+            space = self.space and piece.startswith(self.space)
+            body = ev.letters(piece[1:] if space else piece)
+            key = ("▁" if space else "") + body
+            if key:
+                groups[key].append(i)
             else:
-                if self.unk is not None:
-                    ids.append(self.unk)
-                i += 1
-        return ids
+                filler.append(i)
+        self.group_keys = list(groups)
+        self.group_of = {k: g for g, k in enumerate(self.group_keys)}
+        self.group_members = [np.array(groups[k]) for k in self.group_keys]
+        self.filler = np.array(filler)
+        self.max_group = max(len(k) for k in self.group_keys)
+
+    def group_logprobs(self, lp):
+        """(T, G) best log-prob of any piece in each letter group, and (T,) filler."""
+        import numpy as np
+        g = np.stack([lp[:, m].max(axis=1) for m in self.group_members], axis=1)
+        return g, lp[:, self.filler].max(axis=1)
 
 
-def model_spelling(word, variant):
-    """An Imla'i word written the way the model writes: no dagger alef (it
-    writes الرحمن, ذلك), and for 'bare' no harakat either."""
-    word = word.replace("ٰ", "")
-    if variant == "bare":
-        word = "".join(c for c in word if c not in HARAKAT)
-    return word
+def model_spelling(word):
+    """An Imla'i word reduced to the letters the model writes: no dagger alef
+    (it writes الرحمن, ذلك), harakat and letter forms ignored by ev.letters."""
+    return ev.letters(word.replace("ٰ", ""))
 
 
 # ---------------------------------------------------------------- alignment
 
-def force_align(lp, token_lists, blank):
-    """CTC Viterbi alignment of a word sequence. Returns (word scores, total
-    path log-prob), or None if the audio is too short for the tokens."""
+def lattice_align(lpg, lpf, model, word_list):
+    """CTC Viterbi alignment of a word sequence where each word may be spelled
+    with ANY sequence of vocabulary pieces whose letters spell it (harakat and
+    letter forms ignored). States: "between pieces at letter position p" (blank
+    or filler emitted) or "inside piece arc k". Returns (word scores, total
+    path log-prob) or None when the audio is too short for the letters.
+    A word's score is the mean, over the pieces used for it, of the best
+    log-probability that piece reached."""
     import numpy as np
-    tokens, owner = [], []
-    for w, ids in enumerate(token_lists):
-        tokens += ids
-        owner += [w] * len(ids)
-    T, L = lp.shape[0], len(tokens)
-    if L == 0:
+    text, word_of = "", []
+    for w, word in enumerate(word_list):
+        piece = "▁" + model_spelling(word)
+        text += piece
+        word_of += [w] * len(piece)
+    P = len(text)
+    starts, ends, gids = [], [], []
+    for i in range(P):
+        for j in range(i + 1, min(P, i + model.max_group) + 1):
+            g = model.group_of.get(text[i:j])
+            if g is not None:
+                starts.append(i)
+                ends.append(j)
+                gids.append(g)
+    if not starts:
         return None
-    ext = [blank]
-    for t in tokens:
-        ext += [t, blank]
-    ext = np.array(ext)
-    S = len(ext)
-    skip_ok = np.zeros(S, dtype=bool)
-    skip_ok[2:] = (ext[2:] != blank) & (ext[2:] != ext[:-2])
-    neg = -1e30
-    dp = np.full(S, neg)
-    dp[0] = lp[0, ext[0]]
-    dp[1] = lp[0, ext[1]]
-    back = np.zeros((T, S), dtype=np.int8)
+    starts, ends, gids = np.array(starts), np.array(ends), np.array(gids)
+    T, neg = lpg.shape[0], -1e30
+    B = np.full(P + 1, neg)
+    B[0] = lpf[0]
+    A = np.where(starts == 0, lpg[0, gids], neg)
+    stay_bt = np.zeros((T, len(starts)), dtype=bool)
+    src_bt = np.full((T, P + 1), -1, dtype=np.int64)
+
+    def entry(A, B):
+        order = np.lexsort((A, ends))
+        e_sorted = ends[order]
+        last = np.r_[e_sorted[1:] != e_sorted[:-1], True]
+        E = np.full(P + 1, neg)
+        Eidx = np.full(P + 1, -1, dtype=np.int64)
+        E[e_sorted[last]] = A[order[last]]
+        Eidx[e_sorted[last]] = order[last]
+        better = E > B
+        return np.where(better, E, B), np.where(better, Eidx, -1)
+
     for t in range(1, T):
-        c1 = np.concatenate([[neg], dp[:-1]])
-        c2 = np.where(skip_ok, np.concatenate([[neg, neg], dp[:-2]]), neg)
-        stacked = np.stack([dp, c1, c2])
-        choice = stacked.argmax(axis=0)
-        dp = stacked[choice, np.arange(S)] + lp[t, ext]
-        back[t] = choice
-    end = S - 1 if dp[S - 1] >= dp[S - 2] else S - 2
-    total = dp[end]
-    if total <= neg / 2:
+        ent, src = entry(A, B)
+        from_entry = ent[starts]
+        stay = A >= from_entry
+        A = np.where(stay, A, from_entry) + lpg[t, gids]
+        B = ent + lpf[t]
+        stay_bt[t], src_bt[t] = stay, src
+    ent, src = entry(A, B)
+    if ent[P] <= neg / 2:
         return None
-    states = np.empty(T, dtype=np.int64)
-    s = end
+    # Backtrack. State: ("arc", k) or ("pos", p).
+    state = ("pos", P) if src[P] == -1 else ("arc", int(src[P]))
+    best = {}
     for t in range(T - 1, -1, -1):
-        states[t] = s
-        s -= int(back[t, s])
-    best = collections.defaultdict(lambda: neg)
-    for t, s in enumerate(states):
-        if s % 2 == 1:
-            k = s // 2
-            best[k] = max(best[k], lp[t, ext[s]])
+        kind, v = state
+        if kind == "arc":
+            best[v] = max(best.get(v, neg), lpg[t, gids[v]])
+            if t == 0 or stay_bt[t, v]:
+                continue
+            p = int(starts[v])
+        else:
+            if t == 0:
+                break
+            p = v
+        k = int(src_bt[t, p])
+        state = ("pos", p) if k == -1 else ("arc", k)
     per_word = collections.defaultdict(list)
-    for k, w in enumerate(owner):
-        per_word[w].append(best[k])
-    scores = [float(np.mean(per_word[w])) if w in per_word else neg for w in range(len(token_lists))]
-    return scores, float(total)
+    for k, score in best.items():
+        per_word[word_of[int(starts[k])]].append(score)
+    scores = [float(np.mean(per_word[w])) if w in per_word else neg for w in range(len(word_list))]
+    return scores, float(ent[P])
 
 
-def ayah_fit(lp, model, word_list, variant):
+def ayah_fit(lp, lpg, lpf, model, word_list):
     """(word scores, per-frame fit) of the audio against a word list; per-frame
     fit = (forced path log-prob - best free path log-prob) / frames, <= 0."""
-    res = force_align(lp, [model.tokenize(model_spelling(w, variant)) for w in word_list], model.blank)
+    res = lattice_align(lpg, lpf, model, word_list)
     if res is None:
         return None, float("-inf")
     scores, total = res
@@ -247,34 +302,43 @@ def ayah_fit(lp, model, word_list, variant):
 # ---------------------------------------------------------------- experiment
 
 def experiment(lp, model, s, a, rng):
-    """Every test for one single-ayah clip, both spellings."""
+    """Every test for one single-ayah clip."""
+    lpg, lpf = model.group_logprobs(lp)
     n_ayat = len(ev.quran()[str(s)])
     target = ev.ayah_words(s, a, ev.IMLAEI)
-    rec = {}
-    for v in VARIANTS:
-        clean, fit = ayah_fit(lp, model, target, v)
-        r = {"clean": clean, "fit": fit}
-        # Which ayah fits best, among this one and up to two either side.
-        cands = {}
-        for b in range(max(1, a - 2), min(n_ayat, a + 2) + 1):
-            cands[b] = fit if b == a else ayah_fit(lp, model, ev.ayah_words(s, b, ev.IMLAEI), v)[1]
-        r["candidates"] = cands
-        other = a + 1 if a < n_ayat else a - 1
-        if other != a:
-            r["wrong_fit"] = cands.get(other)
-            pool = ev.ayah_words(s, other, ev.IMLAEI)
-            if len(target) >= 2:
-                pos = rng.randrange(0, len(target) + 1)
-                extra = rng.choice(pool)
-                sk, _ = ayah_fit(lp, model, target[:pos] + [extra] + target[pos:], v)
-                r["skip"] = {"pos": pos, "scores": sk}
-                pos = rng.randrange(0, len(target))
-                swaps = [w for w in pool if ev.letters(w) != ev.letters(target[pos])]
-                if swaps:
-                    sub, _ = ayah_fit(lp, model, target[:pos] + [rng.choice(swaps)] + target[pos + 1:], v)
-                    r["sub"] = {"pos": pos, "scores": sub}
-        rec[v] = r
-    return rec
+    clean, fit = ayah_fit(lp, lpg, lpf, model, target)
+    r = {"clean": clean, "fit": fit}
+    # Which ayah fits best, among this one and up to two either side.
+    cands = {}
+    for b in range(max(1, a - 2), min(n_ayat, a + 2) + 1):
+        cands[b] = fit if b == a else ayah_fit(lp, lpg, lpf, model, ev.ayah_words(s, b, ev.IMLAEI))[1]
+    r["candidates"] = cands
+    other = a + 1 if a < n_ayat else a - 1
+    if other != a:
+        r["wrong_fit"] = cands.get(other)
+        pool = ev.ayah_words(s, other, ev.IMLAEI)
+        if len(target) >= 2:
+            pos = rng.randrange(0, len(target) + 1)
+            extra = rng.choice(pool)
+            sk, _ = ayah_fit(lp, lpg, lpf, model, target[:pos] + [extra] + target[pos:])
+            r["skip"] = {"pos": pos, "scores": sk}
+            pos = rng.randrange(0, len(target))
+            swaps = [w for w in pool if model_spelling(w) != model_spelling(target[pos])]
+            if swaps:
+                sub, _ = ayah_fit(lp, lpg, lpf, model, target[:pos] + [rng.choice(swaps)] + target[pos + 1:])
+                r["sub"] = {"pos": pos, "scores": sub}
+    return {VARIANTS[0]: r}
+
+
+def check_stats(pairs):
+    """(exact letter matches, mean letter similarity) of (ours, sherpa) transcripts."""
+    import difflib
+    same, sims = 0, []
+    for ours, theirs in pairs:
+        a, b = ev.letters("".join(words(ours))), ev.letters("".join(words(theirs)))
+        same += a == b
+        sims.append(difflib.SequenceMatcher(a=a, b=b, autojunk=False).ratio() if (a or b) else 1.0)
+    return same, sum(sims) / max(len(sims), 1)
 
 
 def summarise(records):
@@ -284,15 +348,17 @@ def summarise(records):
             groups[r["group"]].append(r)
     checks = [r for r in records if "greedy" in r]
     if checks:
-        same = sum(ev.letters("".join(words(r["greedy"]))) == ev.letters("".join(words(r["sherpa"])))
-                   for r in checks)
-        print(f"\n### Self-check\n\nGreedy decoding of this script's probabilities matched sherpa-onnx's transcript "
-              f"(letters) on {same} of {len(checks)} clips. "
-              + ("Features match: scores below are trustworthy." if same >= 0.9 * len(checks) else
-                 "**Too many mismatches: the audio features differ from sherpa-onnx's; don't trust the scores.**"))
+        same, sim = check_stats([(r["greedy"], r["sherpa"]) for r in checks])
+        mode = checks[0].get("features", "nemo")
+        print(f"\n### Self-check\n\nWith `{mode}` features, greedy decoding of this script's probabilities "
+              f"matched sherpa-onnx's transcript exactly (letters) on {same} of {len(checks)} clips; average "
+              f"letter similarity {sim:.1%}. "
+              + ("Close enough: the scores below come from the same model output sherpa-onnx sees."
+                 if sim >= 0.97 else
+                 "**The features still differ noticeably from sherpa-onnx's; treat the scores with caution.**"))
 
     for v in VARIANTS:
-        print(f"\n### Target spelling: {v}\n")
+        print("\n### Word and ayah scores (any spelling of the expected letters)\n")
         print("Word-level: a correct word is a false alarm when its score is below the threshold; "
               "a skipped word (inserted into the target, no audio) or a wrong word (swapped for a word "
               "from the next ayah) is caught when its score is below it.\n")
@@ -329,14 +395,15 @@ def summarise(records):
     inc = groups.get("amateur (in_correct)", [])
     cor = groups.get("amateur (correct)", [])
     if inc and cor:
-        print("\n### Real mistakes (RetaSy labels, bare spelling)\n")
+        print("\n### Real mistakes (RetaSy labels)\n")
         print("Clip flagged = at least one word below the threshold. A good checker flags the "
               "`in_correct` clips and not the `correct` ones.\n")
         print("| threshold | in_correct clips flagged | correct clips flagged |")
         print("|---|---|---|")
         for thr in THRESHOLDS:
-            fi = sum(any(x < thr for x in r["bare"]["clean"] or []) for r in inc)
-            fc = sum(any(x < thr for x in r["bare"]["clean"] or []) for r in cor)
+            v = VARIANTS[0]
+            fi = sum(any(x < thr for x in r[v]["clean"] or []) for r in inc)
+            fc = sum(any(x < thr for x in r[v]["clean"] or []) for r in cor)
             print(f"| {thr} | {fi}/{len(inc)} | {fc}/{len(cor)} |")
 
 
@@ -349,6 +416,8 @@ def main():
     p.add_argument("--retasy-limit", type=int, default=150)
     p.add_argument("--quick", action="store_true")
     p.add_argument("--checks", type=int, default=40, help="clips to cross-check against sherpa-onnx")
+    p.add_argument("--features", default="auto", choices=("auto", "nemo", "kaldi"),
+                   help="audio feature recipe; auto = whichever reproduces sherpa-onnx best")
     p.add_argument("--rescore", help="summarise a saved align.jsonl instead of running the model")
     args = p.parse_args()
     if args.rescore:
@@ -381,6 +450,24 @@ def main():
             sherpa = ev.Model(path, tokens, 2)
         except Exception as e:  # noqa: BLE001
             print(f"  ! sherpa-onnx not available for the self-check: {e}")
+    mode = args.features
+    if sherpa is not None and mode == "auto":
+        print(f"Self-check on {min(args.checks, len(clips))} clips: which audio features reproduce sherpa-onnx?",
+              flush=True)
+        pairs = {"nemo": [], "kaldi": []}
+        for c in clips[: args.checks]:
+            samples = load_audio(c[5])
+            theirs = sherpa(samples)[0]
+            for m in pairs:
+                pairs[m].append((model.greedy(model.logprobs(samples, m)), theirs))
+        results = {m: check_stats(p) for m, p in pairs.items()}
+        for m, (same, sim) in results.items():
+            print(f"  {m}: {same}/{len(pairs[m])} exact, {sim:.1%} letter similarity", flush=True)
+        mode = max(results, key=lambda m: (results[m][1], results[m][0]))
+        print(f"  using {mode}", flush=True)
+    elif mode == "auto":
+        mode = "nemo"
+    model.build_groups()
     rng = random.Random(7)
     os.makedirs(args.out, exist_ok=True)
     out_path = os.path.join(args.out, "align.jsonl")
@@ -388,9 +475,9 @@ def main():
     with open(out_path, "w", encoding="utf-8") as log:
         for n, (group, spk, s, a, _, clip) in enumerate(clips, 1):
             samples = load_audio(clip)
-            lp = model.logprobs(samples)
+            lp = model.logprobs(samples, mode)
             rec = {"group": group, "speaker": spk, "surah": s, "ayah": a, "seconds": len(samples) / SR,
-                   "frames": int(lp.shape[0])}
+                   "frames": int(lp.shape[0]), "features": mode}
             if sherpa is not None and n <= args.checks:
                 rec["greedy"] = model.greedy(lp)
                 rec["sherpa"] = sherpa(samples)[0]
