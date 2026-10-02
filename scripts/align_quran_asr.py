@@ -221,7 +221,7 @@ def force_align(lp, token_lists, blank):
     s = end
     for t in range(T - 1, -1, -1):
         states[t] = s
-        s -= back[t, s]
+        s -= int(back[t, s])
     best = collections.defaultdict(lambda: neg)
     for t, s in enumerate(states):
         if s % 2 == 1:
