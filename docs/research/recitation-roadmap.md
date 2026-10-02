@@ -62,3 +62,23 @@ Models trained on EveryAyah reach ~23% WER on crowd-sourced recitation
 Testing on real users' recitations means recording them, which the app and
 privacy policy currently rule out. Any collection needs its own opt-in and a
 policy update.
+
+## Next update: smoother live highlighting (noted 2026-10-02)
+
+To ship with the recitation update, once the recognition questions in
+`asr-eval-qurankarim.md` are settled. Reference: a screen recording of
+Tarteel's live mode, which shows:
+
+- **Two-level highlight.** The current ayah gets a soft pill behind the whole
+  line, and a darker pill inside it slides from word to word (about one word
+  every half second), animating between positions instead of jumping.
+- **Live transcript.** A small strip at the bottom shows what is being heard,
+  plus an elapsed-time counter and a large stop button.
+- Mistake, tashkeel and tajweed checking sit behind their paywall, so the
+  smoothness in the recording comes from tracking plus animation, not from
+  mistake detection.
+
+For Niyat this is mostly UI work in `RecitationUI.swift` on top of the
+existing tracker (`LiveRecitation.swift`): slide the word pill with an
+animation, run slightly ahead of or behind the recogniser until it confirms,
+and keep colours from `Palette`. It doesn't depend on which model wins.
