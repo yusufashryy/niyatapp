@@ -18,7 +18,7 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "1.1.1"
-    CURRENT_PROJECT_VERSION: "12"
+    CURRENT_PROJECT_VERSION: "13"
     # iPhone and iPad.
     TARGETED_DEVICE_FAMILY: "1,2"
     # Xcode's recommended settings.
@@ -104,6 +104,23 @@ targets:
             echo "error: The recitation model is missing. In Terminal, in the project folder, run: make model (then make full)"
             exit 1
           fi
+    # ONNX Runtime's prebuilt onnxruntime.framework has a MinimumOSVersion App Store
+    # Connect rejects (ITMS-90208). Set it to the app's own minimum iOS, then re-sign
+    # the framework (its signature covers the Info.plist).
+    postBuildScripts:
+      - name: Fix ONNX Runtime's minimum iOS version
+        basedOnDependencyAnalysis: false
+        script: |
+          FW="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/onnxruntime.framework"
+          [ -d "$FW" ] || exit 0
+          PLIST="$FW/Info.plist"
+          echo "onnxruntime.framework MinimumOSVersion was: $(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$PLIST" 2>/dev/null || echo missing)"
+          /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion $IPHONEOS_DEPLOYMENT_TARGET" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string $IPHONEOS_DEPLOYMENT_TARGET" "$PLIST"
+          echo "onnxruntime.framework MinimumOSVersion now: $IPHONEOS_DEPLOYMENT_TARGET"
+          if [ "$CODE_SIGNING_ALLOWED" != "NO" ] && [ -n "$EXPANDED_CODE_SIGN_IDENTITY" ]; then
+            codesign --force --sign "$EXPANDED_CODE_SIGN_IDENTITY" --preserve-metadata=identifier,flags --timestamp=none "$FW"
+          fi
     scheme:
       testTargets: [NiyatTests, NiyatUITests]
       # Test the Support Niyat tips in Xcode without App Store Connect.
@@ -111,6 +128,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).Niyat
+        # The ONNX Runtime fix-up script edits and re-signs the embedded framework.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
 
