@@ -11,29 +11,52 @@ The model card claims 0.14% WER. Nobody has checked that figure.
 
 ## Summary (read this first)
 
-**Status: complete.** Professional reciters (seen and unseen), amateurs (RetaSy), noise / phone /
-tempo variants, a silence and dither test, and speed have all been measured. The cloud container that wrote this
+**Status: complete, plus a forced-alignment follow-up that changes the verdict.** Professional
+reciters (seen and unseen), amateurs (RetaSy), noise / phone / tempo variants, a silence and dither
+test, speed, and forced alignment have all been measured. The cloud container that wrote this
 couldn't reach the audio or model hosts (its network policy refused `huggingface.co`,
 `everyayah.com`, `server*.mp3quran.net`, `cdn.islamic.network`). So the owner ran the audio on a
 Mac and committed the transcripts (`docs/research/asr-eval-transcripts.jsonl`,
 `docs/research/asr-eval-padtest.jsonl`). Every number below is recomputed from those files with
 `eval_quran_asr.py rescore`.
 
-### Verdict: don't ship it, not even as an optional download
+### Verdict (updated after the forced-alignment test)
 
-It works on the professional reciters it was trained on, and it's fast. But **on ordinary
-learners' voices it gets about half the words wrong, and it can't reliably tell which ayah they're
-on**. Those are the people a "check my recitation" feature is for.
+**Used the obvious way, it isn't shippable. Used with forced alignment, it is**, for tracking
+where the user is and catching skipped or wrong words, as an optional on-device download.
+It still can't judge pronunciation or tajweed.
 
-| Question | Professionals it was trained on | Professionals it wasn't | Amateurs (non-Arabic speakers) |
+The obvious way is to let the model write down what it heard and compare spellings. Its spelling is
+sloppy (يُؤْمِن for يُؤْمِنُونَ), so correct recitation gets flagged constantly, and on ordinary
+learners' voices about half the words come out wrong:
+
+| Free transcription + compare | Professionals it was trained on | Professionals it wasn't | Amateurs (non-Arabic speakers) |
 |---|---|---|---|
-| Words wrong (letters-WER) | 8.3% (q8: 6.6%) | 31% | **56%** (29% on the 14 clips labelled correct) |
-| Correctly recited ayah gets at least one false red word | 41% | n/a (whole surahs) | **69%** |
-| Right ayah mistaken for a wrong one (follow-along false alarm) | 2.4% | n/a | **41%** |
-| Wrong ayah caught | 97% | n/a | 93% |
-| Skipped word caught | 98% | n/a | 98%, but 2.4 other words falsely flagged each time |
-| Harakat false alarms (where it writes harakat) | 0.16% | 0% | 2% |
-| Speed, 1 Mac CPU thread | 30-55× faster than real time | | |
+| Words wrong (letters-WER) | 8.3% (q8: 6.6%) | 31% | 56% (29% on the 14 clips labelled correct) |
+| Correctly recited ayah gets at least one false red word | 41% | n/a | 69% |
+| Right ayah mistaken for a wrong one | 2.4% | n/a | 41% |
+
+**Forced alignment** asks the model a different question: how well does the audio fit the words
+that *should* have been said, in any spelling of their letters? (`scripts/align_quran_asr.py`,
+q8 model, threshold -3; details in "Forced alignment" below.)
+
+| Forced alignment, threshold -3 | Professionals (564 ayat) | Amateurs labelled correct (14) | Amateurs, unlabelled (113) |
+|---|---|---|---|
+| Correct words flagged | **0.2%** | **0%** | 20% (mostly genuine problems, see below) |
+| Correct ayat with any flag | **1.1%** | **0%** | 34% |
+| Skipped word caught | **99.3%** | 100% | 95.5% |
+| Wrong word caught | **99.5%** | 100% | 94.6% |
+| Right ayah picked (tracking) | **98.8%** | 100% | 78.8% |
+
+For professional recitation that meets the roadmap's targets (false alarms under 2%, tracking
+98-99%). For amateurs, nearly every flag we inspected was a genuine problem: an empty clip, the
+wrong ayah, a whole surah in one clip, a skipped word, or speech too unclear to make out.
+
+What it can't do: RetaSy's `in_correct` clips were mostly recited with the right words, and the
+model's own transcript of them is word-perfect, so their mistakes are pronunciation-level. Only 2 of 12
+were flagged, both with real wrong words. A single wrong letter inside a word (مَلِكِ said as مَلِج)
+scores only -0.5, because a word's score averages its pieces. Scoring by the worst piece is the
+next thing to try.
 
 Main findings:
 
@@ -54,15 +77,19 @@ Main findings:
    and tempo changes barely matter. Strong white noise (SNR 10) actually *lowers* errors on the
    same clips (8.7% to 5.4%), a sign the model was trained on noisier audio than studio recordings.
 
-### What would change the verdict
+### Next steps
 
-- **Fine-tune for ordinary voices** (roadmap step 3): EveryAyah plus crowd-sourced recitation
-  (Tarteel v1, RetaSy's labelled clips), with noise augmentation. Re-run this script on the result.
-  The bar: amateurs ≤ 15% letters-WER for follow-along, ≤ 5% for marking mistakes.
-- **Or evaluate a different model** with the same script: `audio --manifest` takes any clips, and
-  only the `Model` class needs swapping.
-- **If it ships to anyone before that, make it follow-along for professionals' recordings only**
-  (it's reliable there), with no red words and no harakat flags.
+1. **Score words by their worst piece**, not the average, and re-run `align_quran_asr.py --rescore`
+   (needs a small change and one Mac run) to catch single-letter slips like مَلِج.
+2. **Test on your own voice**: `align_quran_asr.py` with `--manifest`-style clips of you reciting
+   correctly and with deliberate mistakes (a skipped word, a wrong word, a wrong letter).
+3. **Live use**: run the same alignment on a sliding window of the last few seconds against the
+   next ~20 expected words (roadmap phase 2). On iOS this means running the ONNX model with ONNX
+   Runtime rather than sherpa-onnx's recogniser, because the alignment needs the per-frame
+   probabilities. The features must be computed the Kaldi way (the self-check showed `kaldi`
+   features reproduce sherpa-onnx at 99.2% letter similarity, against 98.0% for NeMo-style).
+4. **Pronunciation and tajweed need a different model** (phoneme-level, e.g. Quran Muaalem; roadmap
+   phase 4) or fine-tuning on labelled learner recordings.
 
 ## Smoke test (Mac, `audio --quick`, old scoring)
 
@@ -348,6 +375,71 @@ before scoring, which brought unseen letters-WER from 39.6% to 30.6%).
 | Harakat false alarms | 0.16% pros / 2% amateurs, on words it vowels | ship, as "harakat where heard" |
 | RTF, 1 thread | 0.018-0.033 | ship |
 
+## Forced alignment (`scripts/align_quran_asr.py`)
+
+How it works: the q8 ONNX model is run directly with onnxruntime to get the probability of
+every token in every ~80 ms frame. For a target text (the Imla'i edition of the ayah), a CTC Viterbi
+alignment finds the best way to lay pieces spelling that text over the audio. **Any** spelling counts:
+harakat are optional, letter forms (أ/ا, ة/ه, ى/ي) are equal, and pure-harakat or punctuation pieces
+are free fillers. So a correct word isn't penalised for how the model would have written it. A
+word's score is the mean, over the pieces used for it, of the best log-probability each reached
+(0 = certain). The same alignment gives each candidate ayah a fit score, used for "which ayah am I on?".
+
+Self-check: greedy decoding of the script's own probabilities is compared with sherpa-onnx's
+transcripts on 40 clips. `kaldi` features: 27/40 exact, 99.2% letter similarity; NeMo-style:
+23/40, 98.0%. The script picks the closer one automatically.
+
+Two earlier versions failed and are kept in the history. The first forced each word into one
+greedy split into the model's pieces, which flagged 47-67% of correct words and depended on whether
+the target had harakat. The second crashed on long ayat (an int8 overflow under NumPy 2).
+
+Tests per single-ayah clip: the clean ayah; one extra word from the next ayah inserted into the
+target (a skipped word: no audio for it); one word swapped for a word from the next ayah (a wrong
+word); the fit of this ayah against up to two either side.
+
+| group | clips | threshold | correct words flagged | correct ayat with any flag | skipped word caught | wrong word caught |
+|---|---|---|---|---|---|---|
+| seen | 564 | -1 | 1.2% | 6.7% | 99.5% | 99.5% |
+| seen | 564 | -2 | 0.3% | 1.8% | 99.3% | 99.5% |
+| seen | 564 | **-3** | **0.2%** | **1.1%** | **99.3%** | **99.5%** |
+| seen | 564 | -5 | 0.0% | 0.4% | 99.3% | 99.3% |
+| amateur (correct) | 14 | -1 | 2.0% | 7.1% | 100% | 100% |
+| amateur (correct) | 14 | -3 | 0.0% | 0.0% | 100% | 100% |
+| amateur (unlabelled) | 113 | -1 | 30.7% | 50.4% | 97.3% | 96.4% |
+| amateur (unlabelled) | 113 | -3 | 20.4% | 33.6% | 95.5% | 94.6% |
+| amateur (in_correct) | 12 | -3 | 15.1% | 16.7% | 100% | 91.7% |
+
+| group | clips | right ayah picked (of this and up to 2 either side) | wrong verse fits worse than the right one |
+|---|---|---|---|
+| seen | 564 | 98.8% | 100% |
+| amateur (correct) | 14 | 100% | 100% |
+| amateur (unlabelled) | 118 | 78.8% | 87.3% |
+| amateur (in_correct) | 12 | 91.7% | 91.7% |
+
+**What the 38 flagged unlabelled amateur clips (threshold -3) actually contain**, judged against the
+model's free transcription and the clip length:
+
+| What it was | clips | example |
+|---|---|---|
+| empty or nearly silent | ~10 | 97:1, 8.4 s, nothing heard |
+| the wrong ayah | ~5 | labelled 110:2, recites 110:1 إِذَا جَاءَ ... |
+| a whole surah in one clip | 3 | labelled 109:2, 16 s, recites most of Al-Kafirun |
+| real skipped / wrong words | ~11 | 103:3 إِنَّ for إِلَّا; 110:3 بِحَمْدِ skipped; 111:5 جِيدِهَا as زيدها |
+| too unclear to make out | ~10 | 1:5 heard as أيا كبوتو أوزيا ... |
+| possible false alarm | 1-2 | 109:3 أَعْبُدُ at -3, model glued مَا أَعْبُدُ into one word |
+
+**RetaSy labels** (clip flagged = any word below the threshold):
+
+| threshold | in_correct clips flagged | correct clips flagged |
+|---|---|---|
+| -1 | 3/12 | 1/14 |
+| -3 | 2/12 | 0/14 |
+
+The model's own transcript is word-perfect on most `in_correct` clips (1:2, 1:4, 1:6, 113:3), so
+their mistakes are pronunciation-level, outside what a letters model can judge. The two flagged clips
+have real wrong words (112:1 أَحَدٌ as وَهَّبْ, -8.9; 1:7 mostly unintelligible). A one-letter slip
+inside a word stays above the threshold: 114:2 مَلِكِ as مَلِج scores -0.5.
+
 ## Go/no-go limits for the audio run
 
 Suggested bar for shipping it as an **optional on-device download** ("Check my recitation, beta"),
@@ -395,4 +487,6 @@ RTF is a fair rough proxy. Core ML / ANE would be faster but needs a conversion 
 - `docs/research/asr-eval-transcripts.jsonl`: every transcript from the final Mac run (seen, unseen,
   amateurs, noise variants, timings). `python3 scripts/eval_quran_asr.py rescore docs/research/asr-eval-transcripts.jsonl`
 - `docs/research/asr-eval-padtest.jsonl`: the silence and dither transcripts (`rescore` works on it too).
+- `scripts/align_quran_asr.py`: the forced-alignment test (`--rescore` re-summarises without the model).
+- `docs/research/asr-eval-align.jsonl`: its per-word scores from the Mac run.
 - `scripts/try_quran_asr.py`: unchanged; its `letters()`, `harakat()`, `words()`, `compare()` and `expected_words()` are reused.
