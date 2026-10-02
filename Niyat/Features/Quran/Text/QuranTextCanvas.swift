@@ -107,8 +107,49 @@ final class WordHighlights {
     /// Memorisation: words already recited, shown through the hidden text.
     @ObservationIgnored private(set) var revealed: Set<WordID> = []
     @ObservationIgnored private let views = NSHashTable<QuranTextCanvas>.weakObjects()
+    /// The current-word pill sliding from the previous word to the new one.
+    @ObservationIgnored private(set) var slide: (from: WordID, to: WordID, start: CFTimeInterval)?
+    @ObservationIgnored private var slideLink: CADisplayLink?
+    @ObservationIgnored private var slideTarget: DisplayLinkTarget?
+    private static let slideDuration: CFTimeInterval = 0.22
 
     private init() {}
+
+    /// How far the pill has slid to `word` (0...1, eased), or nil if it isn't moving.
+    func slideProgress(to word: WordID) -> CGFloat? {
+        guard let slide, slide.to == word else { return nil }
+        let t = min(1, (CACurrentMediaTime() - slide.start) / Self.slideDuration)
+        return CGFloat(1 - pow(1 - t, 3))
+    }
+
+    private func startSlide(from previous: WordID?, to word: WordID?) {
+        guard let previous, let word, previous.surah == word.surah, !UIAccessibility.isReduceMotionEnabled else {
+            slide = nil
+            return
+        }
+        slide = (previous, word, CACurrentMediaTime())
+        if slideLink == nil {
+            let target = slideTarget ?? DisplayLinkTarget { [weak self] in self?.slideStep() }
+            slideTarget = target
+            let link = CADisplayLink(target: target, selector: #selector(DisplayLinkTarget.tick))
+            link.add(to: .main, forMode: .common)
+            slideLink = link
+        }
+    }
+
+    private func slideStep() {
+        guard let slide else {
+            slideLink?.invalidate()
+            slideLink = nil
+            return
+        }
+        if CACurrentMediaTime() - slide.start >= Self.slideDuration {
+            self.slide = nil
+            slideLink?.invalidate()
+            slideLink = nil
+        }
+        redraw([slide.to.verseKey, slide.from.verseKey])
+    }
 
     func register(_ view: QuranTextCanvas) { views.add(view) }
     func unregister(_ view: QuranTextCanvas) { views.remove(view) }
@@ -125,6 +166,7 @@ final class WordHighlights {
         guard word != current else { return }
         let previous = current
         current = word
+        startSlide(from: previous, to: word)
         redraw([previous?.verseKey, word?.verseKey])
         if let word { activeWord = word }
         if let key = word?.verseKey, key != activeVerse { activeVerse = key }
@@ -167,6 +209,7 @@ final class WordHighlights {
         let verses = Set(marks.keys.map(\.verseKey)).union([current?.verseKey].compactMap { $0 })
         marks = [:]
         current = nil
+        slide = nil
         let wasRevealed = !revealed.isEmpty
         revealed = []
         if wasRevealed, isHidden { for view in views.allObjects { view.contentChanged() } }
@@ -183,6 +226,14 @@ final class WordHighlights {
             view.setNeedsDisplay()
         }
     }
+}
+
+/// Calls a closure on every screen refresh (CADisplayLink needs an NSObject).
+/// The link runs on the main run loop, so the closure runs on the main actor.
+final class DisplayLinkTarget: NSObject {
+    private let action: @MainActor () -> Void
+    init(_ action: @escaping @MainActor () -> Void) { self.action = action }
+    @objc func tick() { MainActor.assumeIsolated { action() } }
 }
 
 // MARK: - Canvas
@@ -525,10 +576,20 @@ final class QuranTextCanvas: UIView {
                 style.correct.setFill()
                 UIBezierPath(roundedRect: self.rect(of: word.core, in: line), cornerRadius: size * 0.3).fill()
             }
-            // The word being recited: a soft highlight.
+            // The word being recited: a soft pill, sliding from the previous
+            // word when that was on the same line.
             if let current = highlights.current, let word = line.words.first(where: { $0.id == current }) {
+                var box = self.rect(of: word.core, in: line)
+                if let progress = highlights.slideProgress(to: current), let from = highlights.slide?.from,
+                   let previous = line.words.first(where: { $0.id == from }) {
+                    let start = self.rect(of: previous.core, in: line)
+                    box = CGRect(x: start.minX + (box.minX - start.minX) * progress,
+                                 y: start.minY + (box.minY - start.minY) * progress,
+                                 width: start.width + (box.width - start.width) * progress,
+                                 height: start.height + (box.height - start.height) * progress)
+                }
                 style.currentWord.setFill()
-                UIBezierPath(roundedRect: self.rect(of: word.core, in: line), cornerRadius: size * 0.3).fill()
+                UIBezierPath(roundedRect: box, cornerRadius: size * 0.3).fill()
             }
         }
 

@@ -278,6 +278,8 @@ struct SurahReaderView: View {
         style.dark = true
         style.highContrast = contrast == .increased
         style.weight = (QuranTextWeight(rawValue: textWeight) ?? .regular).stroke
+        // The ayah being recited (by you or the reciter): a soft band in the theme colour.
+        style.band = UIColor(Palette.highlight).withAlphaComponent(0.12)
         return style
     }
 

@@ -8,6 +8,9 @@ PrayerLock/Shield/Support/
 Watch/App/Support/
 Watch/Widgets/Support/
 
+# The built-in recitation model (166 MB): fetched by `make model`
+Niyat/Resources/RecitationModel/
+
 # Your personal signing settings
 Config/Local.xcconfig
 

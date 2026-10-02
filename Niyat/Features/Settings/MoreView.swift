@@ -215,6 +215,7 @@ struct AboutView: View {
                     credit("Prayer time calculation", "Adhan by Batoul Apps. MIT License.")
                     credit("Mushaf lines", "Line breaks of the Madinah mushaf from the mushaf-layout project by zonetecde (positions only), checked word by word against the Tanzil text.")
                     credit("Tajweed rules", "Quran Tajweed by Collin Fair. CC BY 4.0.")
+                    credit("Recitation model", "QuranKarim SpeechToText (NVIDIA FastConformer fine-tuned on Qur'an recitation) by TheGreatQuran, on Hugging Face. CC BY 4.0. Run with ONNX Runtime by Microsoft, MIT License.")
                     credit("Recitation audio", "Streamed from the Islamic Network CDN (islamic.network), free for non-commercial use, and EveryAyah.com for Yasser Al-Dosari. Each recitation's copyright stays with its reciter.")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -121,7 +121,10 @@ struct ReciteIntroSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var onDevice = SFSpeechRecognizer(locale: Locale(identifier: "ar-SA"))?.supportsOnDeviceRecognition ?? false
 
-    static let seenKey = "quran.reciteIntroSeen.v2"
+    // v3: recitation is checked by the built-in model (Hafs).
+    static let seenKey = "quran.reciteIntroSeen.v3"
+
+    private var usesModel: Bool { LiveRecitation.modelAvailable(for: edition) }
 
     var body: some View {
         NavigationStack {
@@ -130,17 +133,21 @@ struct ReciteIntroSheet: View {
                     point("text.word.spacing", "Follows you word by word",
                           "Recite from anywhere on the page. Niyat finds your place, highlights the word you're on and turns the pages with you.")
                     point("checkmark.bubble", "Helps you review the words",
-                          "Green means the final transcript matched the written word, not that your pronunciation was correct. While listening, words remain unverified. Underlined words may need review. Speech recognition can miss or change words, and Niyat cannot assess harakat, tajweed or makharij. Check your recitation with a qualified teacher.")
+                          usesModel
+                              ? "When you pause, Niyat checks each word you recited against the audio. Green means the word was clearly there; underlined words were missed, sounded different, or weren't clear. Niyat checks words, not pronunciation: it cannot assess harakat, tajweed or makharij. Check your recitation with a qualified teacher."
+                              : "Green means the final transcript matched the written word, not that your pronunciation was correct. While listening, words remain unverified. Underlined words may need review. Speech recognition can miss or change words, and Niyat cannot assess harakat, tajweed or makharij. Check your recitation with a qualified teacher.")
                     point("eye.slash", "Recite from memory",
                           "Hide the text with the eye button. Niyat keeps following and marking words; show the text to see them.")
                     point("lock.shield", "Private",
-                          onDevice
+                          usesModel
+                              ? "Your recitation is checked by Niyat's own Qur'an recitation model, on this iPhone. Nothing is sent anywhere, and Niyat never records or saves your recitation."
+                              : onDevice
                               ? "Your voice is turned into text by Apple's speech recognition on this iPhone. Nothing is sent anywhere, and Niyat never records or saves your recitation."
                               : "Your voice is turned into text by Apple's speech recognition, which on this iPhone runs on Apple's servers (encrypted, as with dictation). Niyat never records or saves your recitation.")
                     point("book", "Your reading",
                           edition.riwayah == .hafs
                               ? "Words are checked against the \(edition.title) text (\(edition.riwayah.title))."
-                              : "Words are checked against the \(edition.riwayah.title) text. Arabic speech recognition isn't trained on each riwayah, so expect more words marked as uncertain.")
+                              : "Words are checked against the \(edition.riwayah.title) text with Apple's speech recognition (Niyat's recitation model knows Hafs only). It isn't trained on each riwayah, so expect more words marked as uncertain.")
                 }
                 .padding(20)
             }

@@ -17,8 +17,8 @@ configFiles:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "11"
+    MARKETING_VERSION: "1.2.0"
+    CURRENT_PROJECT_VERSION: "12"
     # iPhone and iPad.
     TARGETED_DEVICE_FAMILY: "1,2"
     # Xcode's recommended settings.
@@ -33,6 +33,10 @@ packages:
   Adhan:
     url: https://github.com/batoulapps/adhan-swift
     from: "1.5.0"
+  # Runs the built-in recitation model on the iPhone.
+  onnxruntime:
+    url: https://github.com/microsoft/onnxruntime-swift-package-manager
+    from: "1.20.0"
 
 # Prayer Lock (Screen Time) needs a paid Apple Developer account, so it lives in
 # its own file and is only switched on by `make full`.
@@ -50,6 +54,8 @@ targets:
       - path: Shared
     dependencies:
       - package: Adhan
+      - package: onnxruntime
+        product: onnxruntime
       - target: NiyatWidgets
     info:
       path: Niyat/Support/Info.plist
@@ -85,6 +91,19 @@ targets:
       path: Niyat/Support/Niyat.entitlements
       properties:
         com.apple.security.application-groups: [$(APP_GROUP_ID)]
+    # The recitation model isn't in git (166 MB): stop the build if `make model` hasn't fetched it,
+    # rather than shipping an app that silently falls back to Apple's speech recognition.
+    preBuildScripts:
+      - name: Check the recitation model
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/Niyat/Resources/RecitationModel/qurankarim-fastconformer-q8.onnx
+          - $(SRCROOT)/Niyat/Resources/RecitationModel/recitation-model-tokens.txt
+        script: |
+          if [ ! -s "$SRCROOT/Niyat/Resources/RecitationModel/qurankarim-fastconformer-q8.onnx" ] || [ ! -s "$SRCROOT/Niyat/Resources/RecitationModel/recitation-model-tokens.txt" ]; then
+            echo "error: The recitation model is missing. In Terminal, in the project folder, run: make model (then make full)"
+            exit 1
+          fi
     scheme:
       testTargets: [NiyatTests, NiyatUITests]
       # Test the Support Niyat tips in Xcode without App Store Connect.

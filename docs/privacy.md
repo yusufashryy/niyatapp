@@ -29,7 +29,7 @@ Niyat works offline. A few optional features connect to outside services:
 | Finding a city, or naming your current location | Apple (Core Location geocoding) | The search text or coordinates, handled under [Apple's Privacy Policy](https://www.apple.com/legal/privacy/) |
 | Qur'an recitation audio | Islamic Network CDN (cdn.islamic.network), and EveryAyah.com for one reciter | A normal web request for the audio file, which includes your IP address, as with any website. With word-by-word highlighting on, each verse's file is fetched a second time to line it up with the text on your iPhone. |
 | Groups (optional) | Apple iCloud (CloudKit) | The display name and summary you choose to share (prayers completed, Qur'an goal progress), visible only to people in the groups you create or join. Stored in your iCloud account, not by Niyat. |
-| Reciting with the app (optional, microphone) | Apple speech recognition | While the microphone is on, your voice is turned into text by Apple's speech recognition: on your iPhone when it supports Arabic on the device, otherwise by Apple's servers (encrypted in transit) under [Apple's Privacy Policy](https://www.apple.com/legal/privacy/). See below. |
+| Reciting with the app (optional, microphone) | None for Hafs; Apple speech recognition for other riwayat | For Hafs, your recitation is checked by Niyat's built-in recitation model on your iPhone: nothing is sent anywhere. For Warsh and Qalun, your voice is turned into text by Apple's speech recognition: on your iPhone when it supports Arabic on the device, otherwise by Apple's servers (encrypted in transit) under [Apple's Privacy Policy](https://www.apple.com/legal/privacy/). See below. |
 | Tips (optional) | Apple In-App Purchase | Handled entirely by Apple. Niyat never sees your payment details. |
 | Send feedback (optional) | A private Discord channel read by the developer (or email/GitHub) | Only what you write, an email address if you choose to give one for a reply, plus app version, iOS version and your calculation settings if you leave "Include app details" on. Never your location. |
 
@@ -37,8 +37,9 @@ Niyat works offline. A few optional features connect to outside services:
 
 Reciting with the app is off until you tap the microphone, and Niyat explains what happens before iOS asks for permission.
 
-- Niyat never records, saves or uploads your voice. Audio from the microphone goes straight to Apple's speech recognition and is discarded as it's processed.
-- Where your iPhone can recognise Arabic on the device, nothing leaves it. Otherwise Apple's speech recognition runs on Apple's servers, as for dictation, and Apple's privacy policy applies. The app tells you which one your iPhone uses.
+- Niyat never records, saves or uploads your voice.
+- Reading Hafs, audio from the microphone goes to Niyat's own Qur'an recitation model, which is part of the app and runs on your iPhone. It's kept in memory only until the stretch you just recited has been checked (at most about 20 seconds), then discarded. Nothing leaves your iPhone.
+- Reading Warsh or Qalun, audio goes straight to Apple's speech recognition and is discarded as it's processed. Where your iPhone can recognise Arabic on the device, nothing leaves it. Otherwise Apple's speech recognition runs on Apple's servers, as for dictation, and Apple's privacy policy applies. The app tells you which one your iPhone uses.
 - The words marked for you to review are kept in memory only, and cleared when you leave the page or surah.
 - Your recitation is never used to train anything.
 - Word-by-word highlighting of reciters uses Apple's speech recognition on the reciter's public recording, on your iPhone only; only the time each word starts is kept.

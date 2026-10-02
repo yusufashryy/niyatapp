@@ -173,6 +173,14 @@ struct RecitationTracker {
         if let position { expected = position + 1 }
     }
 
+    /// Replaces the verdict for some words with a better-informed one (the
+    /// recitation model's check of the audio against the expected words).
+    mutating func applyChecked(_ results: [Int: Result]) {
+        for (index, result) in results where tokens.indices.contains(index) {
+            committed[index] = result
+        }
+    }
+
     private mutating func judge(steps: [Step], confidences: [Float]) {
         // Include gaps at request boundaries and weakly anchored omissions.
         for token in provisional.keys { committed[token] = .uncertain }
