@@ -218,8 +218,8 @@ def lattice_align(lpg, lpf, model, word_list):
     letter forms ignored). States: "between pieces at letter position p" (blank
     or filler emitted) or "inside piece arc k". Returns (word scores, total
     path log-prob) or None when the audio is too short for the letters.
-    A word's score is the mean, over the pieces used for it, of the best
-    log-probability that piece reached."""
+    Returns, per word, the best log-probability each piece used for it
+    reached; `word_scores` turns those into one score per word."""
     import numpy as np
     text, word_of = "", []
     for w, word in enumerate(word_list):
@@ -285,12 +285,30 @@ def lattice_align(lpg, lpf, model, word_list):
     per_word = collections.defaultdict(list)
     for k, score in best.items():
         per_word[word_of[int(starts[k])]].append(score)
-    scores = [float(np.mean(per_word[w])) if w in per_word else neg for w in range(len(word_list))]
-    return scores, float(ent[P])
+    pieces = [[float(x) for x in per_word[w]] if w in per_word else [neg] for w in range(len(word_list))]
+    return pieces, float(ent[P])
+
+
+AGGREGATIONS = ("mean", "min")
+
+
+def word_scores(words_pieces, how="mean"):
+    """One score per word: the mean of its pieces' scores, or the worst piece
+    ("min", which a single wrong letter can't hide behind the others). Older
+    result files stored only the mean, as one number per word."""
+    if words_pieces is None:
+        return None
+    out = []
+    for x in words_pieces:
+        if isinstance(x, (int, float)):
+            out.append(float(x))
+        else:
+            out.append(min(x) if how == "min" else sum(x) / len(x))
+    return out
 
 
 def ayah_fit(lp, lpg, lpf, model, word_list):
-    """(word scores, per-frame fit) of the audio against a word list; per-frame
+    """(pieces per word, per-frame fit) of the audio against a word list; per-frame
     fit = (forced path log-prob - best free path log-prob) / frames, <= 0."""
     res = lattice_align(lpg, lpf, model, word_list)
     if res is None:
@@ -357,8 +375,10 @@ def summarise(records):
                  if sim >= 0.97 else
                  "**The features still differ noticeably from sherpa-onnx's; treat the scores with caution.**"))
 
-    for v in VARIANTS:
-        print("\n### Word and ayah scores (any spelling of the expected letters)\n")
+    v = VARIANTS[0]
+    has_pieces = any(isinstance((r[v].get("clean") or [0])[0], list) for rs in groups.values() for r in rs)
+    for how in (AGGREGATIONS if has_pieces else ("mean",)):
+        print(f"\n### Word scores: {how} of each word's pieces\n")
         print("Word-level: a correct word is a false alarm when its score is below the threshold; "
               "a skipped word (inserted into the target, no audio) or a wrong word (swapped for a word "
               "from the next ayah) is caught when its score is below it.\n")
@@ -370,27 +390,30 @@ def summarise(records):
             if not rs:
                 continue
             for thr in THRESHOLDS:
-                words_n = sum(len(r[v]["clean"]) for r in rs)
-                fa = sum(sum(x < thr for x in r[v]["clean"]) for r in rs)
-                any_fa = sum(any(x < thr for x in r[v]["clean"]) for r in rs)
+                clean = [word_scores(r[v]["clean"], how) for r in rs]
+                words_n = sum(len(c) for c in clean)
+                fa = sum(sum(x < thr for x in c) for c in clean)
+                any_fa = sum(any(x < thr for x in c) for c in clean)
                 sk = [r[v]["skip"] for r in rs if r[v].get("skip") and r[v]["skip"]["scores"]]
                 sb = [r[v]["sub"] for r in rs if r[v].get("sub") and r[v]["sub"]["scores"]]
-                skc = sum(x["scores"][x["pos"]] < thr for x in sk)
-                sbc = sum(x["scores"][x["pos"]] < thr for x in sb)
+                skc = sum(word_scores(x["scores"], how)[x["pos"]] < thr for x in sk)
+                sbc = sum(word_scores(x["scores"], how)[x["pos"]] < thr for x in sb)
                 print(f"| {g} | {len(rs)} | {thr} | {fa / words_n:.1%} | {any_fa / len(rs):.1%} | "
                       f"{skc / max(len(sk), 1):.1%} | {sbc / max(len(sb), 1):.1%} |")
-        print("\nAyah-level (follow-along): 'which ayah' picks the best-fitting of this ayah and up to two "
-              "either side; 'wrong verse' compares the fit against the next ayah's text.\n")
-        print("| group | clips | right ayah picked | wrong verse fits worse than the right one |")
-        print("|---|---|---|---|")
-        for g, rs in groups.items():
-            rs = [r for r in rs if r[v].get("candidates")]
-            if not rs:
-                continue
-            picked = sum(int(max(r[v]["candidates"], key=lambda b: r[v]["candidates"][b])) == r["ayah"] for r in rs)
-            wv = [r for r in rs if r[v].get("wrong_fit") is not None]
-            worse = sum(r[v]["wrong_fit"] < r[v]["fit"] for r in wv)
-            print(f"| {g} | {len(rs)} | {picked / len(rs):.1%} | {worse / max(len(wv), 1):.1%} |")
+
+    print("\n### Ayah-level (follow-along)\n")
+    print("'Which ayah' picks the best-fitting of this ayah and up to two either side; 'wrong verse' "
+          "compares the fit against the next ayah's text.\n")
+    print("| group | clips | right ayah picked | wrong verse fits worse than the right one |")
+    print("|---|---|---|---|")
+    for g, rs in groups.items():
+        rs = [r for r in rs if r[v].get("candidates")]
+        if not rs:
+            continue
+        picked = sum(int(max(r[v]["candidates"], key=lambda b: r[v]["candidates"][b])) == r["ayah"] for r in rs)
+        wv = [r for r in rs if r[v].get("wrong_fit") is not None]
+        worse = sum(r[v]["wrong_fit"] < r[v]["fit"] for r in wv)
+        print(f"| {g} | {len(rs)} | {picked / len(rs):.1%} | {worse / max(len(wv), 1):.1%} |")
 
     inc = groups.get("amateur (in_correct)", [])
     cor = groups.get("amateur (correct)", [])
@@ -398,13 +421,13 @@ def summarise(records):
         print("\n### Real mistakes (RetaSy labels)\n")
         print("Clip flagged = at least one word below the threshold. A good checker flags the "
               "`in_correct` clips and not the `correct` ones.\n")
-        print("| threshold | in_correct clips flagged | correct clips flagged |")
-        print("|---|---|---|")
-        for thr in THRESHOLDS:
-            v = VARIANTS[0]
-            fi = sum(any(x < thr for x in r[v]["clean"] or []) for r in inc)
-            fc = sum(any(x < thr for x in r[v]["clean"] or []) for r in cor)
-            print(f"| {thr} | {fi}/{len(inc)} | {fc}/{len(cor)} |")
+        print("| scores | threshold | in_correct clips flagged | correct clips flagged |")
+        print("|---|---|---|---|")
+        for how in (AGGREGATIONS if has_pieces else ("mean",)):
+            for thr in THRESHOLDS:
+                fi = sum(any(x < thr for x in word_scores(r[v]["clean"], how) or []) for r in inc)
+                fc = sum(any(x < thr for x in word_scores(r[v]["clean"], how) or []) for r in cor)
+                print(f"| {how} | {thr} | {fi}/{len(inc)} | {fc}/{len(cor)} |")
 
 
 def main():
