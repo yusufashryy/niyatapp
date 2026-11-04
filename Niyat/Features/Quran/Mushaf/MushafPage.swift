@@ -120,8 +120,10 @@ struct MushafPage: View {
         let linesHeight = max(size.height - MushafMetrics.headerHeight - MushafMetrics.footerHeight, 100)
         let rowHeight = floor(linesHeight / CGFloat(MushafMetrics.lineCount))
         let fontSize = MushafMetrics.fontSize(for: text, width: width, rowHeight: rowHeight, squeeze: textSize.squeeze)
-        let style = colors.textStyle(size: fontSize, tajweed: tajweed, highContrast: highContrast,
+        var style = colors.textStyle(size: fontSize, tajweed: tajweed, highContrast: highContrast,
                                      weight: weight, squeeze: textSize.squeeze)
+        style.ribbon = store.ribbon.map { VerseKey(surah: $0.surah, verse: $0.verse) }
+        style.ribbonColor = QuranTextStyle.ribbonRed.withAlphaComponent(colors.isLight ? 0.13 : 0.24)
         let label = Color(colors.label)
 
         return VStack(spacing: 0) {
@@ -153,7 +155,7 @@ struct MushafPage: View {
         // name and the part number, just reaching the first line.
         .overlay(alignment: .top) {
             if hasRibbon {
-                RibbonMark(color: Color(colors.marker), starColor: Color(colors.paper))
+                RibbonMark(color: Color(QuranTextStyle.ribbonRed), starColor: Color(colors.paper))
                     .frame(width: 18, height: MushafMetrics.headerHeight + 16)
                     .offset(y: -6)
                     .transition(.move(edge: .top).combined(with: .opacity))

@@ -18,7 +18,6 @@ struct QuranSettingsView: View {
     @AppStorage(ReciterWordSync.settingKey) private var wordSync = true
     @AppStorage(ReadingRibbon.followsKey) private var ribbonFollows = true
     @AppStorage("quran.mushafPage") private var mushafPage = 1
-    @AppStorage(RecitationCheckSettings.enabledKey) private var checkEnabled = false
     @State private var speechStatus = SFSpeechRecognizer.authorizationStatus()
     @State private var speechOnDevice = SFSpeechRecognizer(locale: Locale(identifier: "ar-SA"))?.supportsOnDeviceRecognition ?? false
     @State private var showMushaf = false
@@ -53,7 +52,7 @@ struct QuranSettingsView: View {
                     Text("Ribbon")
                 } footer: {
                     Text(ribbonFollows
-                         ? "The ribbon marks your place, like the one in a printed mushaf. It moves once you stay on a page or stop scrolling for a moment. Jumping somewhere (search, the page list, duas, following a recitation) leaves it where it is."
+                         ? "The ribbon marks your place, like the one in a printed mushaf. It moves once you stay on a page or stop scrolling for a moment. Put it on a verse yourself (the bookmark button) and it stays there while you look back, until you read on past it. Jumping somewhere (search, the page list, duas, following a recitation) leaves it where it is. Starred verses are a separate list you keep."
                          : "The ribbon stays put until you move it: tap a verse, or the ribbon button on a mushaf page. Closing the mushaf asks whether to move it to the page you're on.")
                 }
 
@@ -146,20 +145,6 @@ struct QuranSettingsView: View {
                     Text("Recitation")
                 } footer: {
                     if store.edition.riwayah.hasVerseAudio { Text(wordSyncFooter) }
-                }
-
-                if RecitationCheckSettings.isAvailable {
-                    Section {
-                        NavigationLink {
-                            RecitationCheckAboutView()
-                        } label: {
-                            LabeledContent("Recitation check", value: checkEnabled && RecitationCheckSettings.noticeSeen ? "On" : "Off")
-                        }
-                    } header: {
-                        Text("Reciting")
-                    } footer: {
-                        Text("An AI model (Quran Muaalem) checks letters, vowels and some tajweed each time you pause. It can make mistakes and isn't a replacement for a teacher.")
-                    }
                 }
 
                 Section {

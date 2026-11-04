@@ -100,14 +100,13 @@ The microphone button in the reader and on the mushaf pages listens while you re
 
 Tested with the tracker's scenarios (following along, starting mid-ayah, skipping, repeating, pausing, restarting an ayah, unrelated speech) and, while building it, by reciting the whole Qur'an's Imla'i text through it: no word marked as a mistake. See `docs/research/recitation-checker.md`.
 
-## Recitation check (optional, server)
+## The built-in recitation model
 
-When the reader turns it on, each part they recite between pauses is checked by **Quran Muaalem** ([github.com/obadx/quran-muaalem](https://github.com/obadx/quran-muaalem), model `obadx/muaalem-model-v3_2`, Quran Muaalem License 1.0) on Niyat's server (`server/`). The model writes down the sounds it heard in a phonetic script of the Qur'an; the server compares them with the phonetic form of the Uthmani text (from `quran-transcript`, Hafs by way of ash-Shatibiyyah) and marks each word. Nothing from the Qur'an is generated: the text shown is always the bundled Tanzil text, and the server only returns word positions and short fixed notes.
+For Hafs, finding and following a recitation uses **QuranKarim** ([TheGreatQuran/QuranKarim-SpeechToText-onnxModel](https://huggingface.co/TheGreatQuran/QuranKarim-SpeechToText-onnxModel), CC BY 4.0), an NVIDIA FastConformer model fine-tuned on Qur'an recitation. The 8-bit file (`qurankarim-fastconformer-q8.onnx`, 166 MB) is bundled with the app (`make model` fetches it; it isn't in git) and runs on the iPhone with ONNX Runtime. Nothing is sent anywhere.
 
-- **Allowed variations** (`server/niyat_check/tolerance.py`): stopping on any word, going back to repeat, the madd lengths Hafs allows, and sounds at the edges of a part.
-- **Marks:** red only for a letter different or missing and for skipped words; vowels and tajweed are amber ("check this"); doubtful hearing is grey.
-- **Measured** on 564 professional recordings, 12 other reciters and 150 learners: `docs/research/asr-eval-muaalem.md`.
-- **AI notice:** shown before first use and always in Qur'an settings, quoted exactly from the licence in Arabic and English (`AINotice`).
+- **What it's used for:** writing down what was recited, to find the place (anywhere in the Qur'an) and follow it. It doesn't judge recitation: its spelling is too loose for that (`docs/research/asr-eval-qurankarim.md` on `research/asr-eval`).
+- **Finding a place** (`QuranLocator`, `QuranLetterSearch`, `FindConfirmation`): matching pairs of whole words is trusted at once (never wrong on the 726 test recordings); otherwise a looser letter-by-letter search must name the same ayah twice. On the model's transcripts of 564 professional recordings, the word pairs alone found the right ayah 73% of the time with no wrong answers, and the letter search 88%.
+- **Warsh and Qalun** use Apple's speech recognition, which the model wasn't trained on.
 
 ## Word-by-word highlighting of the reciter
 
@@ -123,3 +122,16 @@ Its published file points into a 2017 copy of the Tanzil text whose encoding dif
 - 32 verses: 34 "madd, 2 counts" marks from the published file are not produced, and one extra "madd lazim" mark is.
 
 The tests check every hamzat al-wasl, lam shamsiyyah and qalqalah mark lands on the right letter. Colours are shown only with the Uthmani script (Hafs), the text they were made for. Each rule has a colour for light paper and a brighter one for dark pages; with Increase Contrast on (iOS Settings › Accessibility), both are made 30% deeper or brighter.
+
+### Waqf and sajdah signs
+
+`reading-signs.json` contains word positions of the six Madinah waqf marks,
+the brief-pause (saktah) mark, and 15 sajdah signs for each Hafs script. These
+are separate display annotations; the original text/translation files are unchanged.
+Source: [Tanzil Uthmani/Uthmani Minimal/Simple XML downloads](https://tanzil.net/pub/download/index.php),
+version 1.1, with pause marks and sajdah enabled, retrieved 2026-10-06.
+See [Tanzil's pause-mark reference](https://tanzil.net/docs/pause_marks).
+`scripts/generate_reading_signs.py` verifies all 6,236 verses per edition against
+the bundled source before extracting positions. Warsh and Qalun retain their own
+source signs without adding Hafs annotations. Data SHA-256:
+`d916800d4a978c0b19bc8db49276d5e82c0dd7b6fc018640d8d34c31ec1665dd`.

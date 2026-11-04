@@ -38,11 +38,11 @@ enum RecognitionForms {
 }
 
 /// Live recitation: listens on the current page (or surah) and follows the
-/// reciter word by word, marking words for review. Uses Apple's speech
-/// recognition for Arabic, on the iPhone itself whenever the device supports
-/// it. Audio is never recorded or saved by Niyat.
+/// reciter word by word, going to another surah when they start one. For
+/// Hafs it uses Niyat's built-in recitation model, on the iPhone; for Warsh
+/// and Qalun, Apple's speech recognition. Audio is never recorded or saved.
 ///
-/// Words are only compared, never pronunciation: tajweed is not assessed.
+/// It finds and follows; it doesn't judge recitation.
 @MainActor
 @Observable
 final class LiveRecitation {
@@ -61,20 +61,6 @@ final class LiveRecitation {
         case unavailable(String)
     }
 
-    struct ReviewWord: Identifiable, Hashable {
-        let id: WordID
-        let text: String
-        let mark: WordMark
-        /// What the recitation check noticed (empty without it).
-        var notes: [String] = []
-    }
-
-    struct ReviewVerse: Identifiable, Hashable {
-        let key: VerseKey
-        let words: [ReviewWord]
-        var id: VerseKey { key }
-    }
-
     /// The reciter was found somewhere else in the Qur'an: the reader should
     /// go there (the page or surah), then call `move`.
     struct Jump: Equatable {
@@ -84,8 +70,6 @@ final class LiveRecitation {
 
     private(set) var status = Status.idle
     private(set) var jump: Jump?
-    /// Set briefly when a word sounded clearly different, for a quick notice.
-    private(set) var mistakeNotice: Int = 0
     private(set) var isOnDevice = false
     /// Which reading the words are being compared with.
     private(set) var edition: QuranEdition = .uthmani
@@ -103,24 +87,21 @@ final class LiveRecitation {
     }
 
     @ObservationIgnored private var tracker: RecitationTracker?
-    @ObservationIgnored private var wordText: [WordID: String] = [:]
     @ObservationIgnored private let engine = AVAudioEngine()
     @ObservationIgnored private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "ar-SA"))
     @ObservationIgnored private var task: SFSpeechRecognitionTask?
     @ObservationIgnored private let requests = RequestBox()
-    /// The audio since the last pause, for the recitation check.
-    @ObservationIgnored private let clip = RecitationClipRecorder()
-    /// Where the reciter was when the current part began.
-    @ObservationIgnored private var clipPlace: WordID?
     @ObservationIgnored private var levelTimer: Task<Void, Never>?
+    /// Following with the built-in recitation model (Hafs) instead of Apple's speech.
+    @ObservationIgnored private(set) var usesModel = false
+    @ObservationIgnored private let modelAudio = RecitationAudio()
+    @ObservationIgnored private let modelMeter = VoiceMeter()
+    @ObservationIgnored private var modelLoop: Task<Void, Never>?
     @ObservationIgnored private var generation = 0
     /// What the current utterance has produced so far (for pauses).
     @ObservationIgnored private var lastHeard: [String] = []
     @ObservationIgnored private var pauseTimer: Task<Void, Never>?
     @ObservationIgnored private var finalTimer: Task<Void, Never>?
-    @ObservationIgnored private var shownMarks: [WordID: WordMark] = [:]
-    /// Marks from a partial transcript; removed when a revision retracts them.
-    @ObservationIgnored private var transientShown: Set<WordID> = []
     @ObservationIgnored private var tapInstalled = false
     /// Requests that ended at once with nothing heard (recogniser failing).
     @ObservationIgnored private var quickFailures = 0
@@ -131,6 +112,11 @@ final class LiveRecitation {
     @ObservationIgnored private var lastJumpGeneration = -1
     /// A place found elsewhere, waiting for the next words to confirm it.
     @ObservationIgnored private var jumpCandidate: (index: Int, heard: Int)?
+
+    /// The built-in model is used for this reading (it knows Hafs only).
+    static func modelAvailable(for edition: QuranEdition) -> Bool {
+        edition.riwayah == .hafs && RecitationModel.isBundled
+    }
 
     private init() {}
 
@@ -143,16 +129,19 @@ final class LiveRecitation {
     func start(verses: [VerseWords], edition: QuranEdition, at start: Int, searchingAhead: Int) async {
         guard !isListening else { return }
         status = .starting
-        guard let recognizer, recognizer.isAvailable else {
-            status = .unavailable("Arabic speech recognition isn't available on this iPhone right now. Check your connection, or try again later.")
-            return
-        }
-        let speech = await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
-        }
-        guard speech == .authorized else {
-            status = .unavailable("Allow Speech Recognition for Niyat in the Settings app to recite with the app.")
-            return
+        let model = Self.modelAvailable(for: edition)
+        if !model {
+            guard let recognizer, recognizer.isAvailable else {
+                status = .unavailable("Arabic speech recognition isn't available on this iPhone right now. Check your connection, or try again later.")
+                return
+            }
+            let speech = await withCheckedContinuation { continuation in
+                SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
+            }
+            guard speech == .authorized else {
+                status = .unavailable("Allow Speech Recognition for Niyat in the Settings app to recite with the app.")
+                return
+            }
         }
         guard await AVAudioApplication.requestRecordPermission() else {
             status = .unavailable("Allow the Microphone for Niyat in the Settings app to recite with the app.")
@@ -160,13 +149,21 @@ final class LiveRecitation {
         }
         // Stopped (or the page closed) while permission was being asked.
         guard status == .starting else { return }
+        if model {
+            do {
+                try await RecitationModel.shared.load()
+            } catch {
+                status = .unavailable("Niyat's recitation model couldn't start. Please restart the app and try again.")
+                return
+            }
+            guard status == .starting else { return }
+        }
 
         self.edition = edition
         prepareLocator()
         prepare(verses: verses, at: start, searchingAhead: searchingAhead)
-        RecitationChecker.shared.begin(edition: edition)
-        clip.setOn(RecitationChecker.shared.isActive)
-        isOnDevice = recognizer.supportsOnDeviceRecognition
+        usesModel = model
+        isOnDevice = model || (recognizer?.supportsOnDeviceRecognition ?? false)
         RecitationPlayer.shared.stop()
         do {
             try await AudioSessionQueue.perform {
@@ -187,7 +184,11 @@ final class LiveRecitation {
                 status = .unavailable("The microphone isn't available right now. End any call or recording and try again.")
                 return
             }
-            Self.installTap(on: engine.inputNode, sending: requests, recording: clip)
+            if model {
+                Self.installTap(on: engine.inputNode, collecting: modelAudio, meter: modelMeter)
+            } else {
+                Self.installTap(on: engine.inputNode, sending: requests)
+            }
             tapInstalled = true
             engine.prepare()
             try engine.start()
@@ -200,8 +201,9 @@ final class LiveRecitation {
         }
         status = .searching
         requests.heardVoice()
+        modelMeter.heardVoice()
         watchLevel()
-        startRequest()
+        if model { startModelListening() } else { startRequest() }
     }
 
     /// The reader moved (another page or verse) while listening: look there.
@@ -211,7 +213,7 @@ final class LiveRecitation {
         publish()
         prepare(verses: verses, at: start, searchingAhead: searchingAhead)
         status = .searching
-        startRequest()
+        if usesModel { startModelListening() } else { startRequest() }
     }
 
     /// Hands the audio back to other apps (music resumes), off the main thread.
@@ -224,9 +226,8 @@ final class LiveRecitation {
     /// Stops listening. `pausing`: stopped by itself after a long silence.
     func stop(pausing: Bool = false) {
         guard isListening else { return }
-        sendClip()
-        clip.setOn(false)
-        RecitationChecker.shared.end()
+        modelLoop?.cancel()
+        modelAudio.reset()
         levelTimer?.cancel()
         level = 0
         pauseTimer?.cancel()
@@ -254,19 +255,13 @@ final class LiveRecitation {
 
     /// Clears the marks from the last session.
     func clearReview() {
-        RecitationChecker.shared.clear()
         tracker = nil
-        shownMarks = [:]
-        transientShown = []
         WordHighlights.shared.clearRecitation()
     }
 
     private func prepare(verses: [VerseWords], at start: Int, searchingAhead: Int) {
         // Marks already made stay (see publish): only words judged again change.
         let tokens = RecognitionForms.tokens(for: verses, edition: edition)
-        for verse in verses {
-            for word in verse.words { wordText[word.id] = (verse.text as NSString).substring(with: word.range) }
-        }
         var fresh = RecitationTracker(tokens: tokens)
         fresh.begin(at: start, searchingAhead: searchingAhead)
         tracker = fresh
@@ -274,83 +269,6 @@ final class LiveRecitation {
         jumpCandidate = nil
     }
 
-    // MARK: Review
-
-    /// Words marked in this session (by speech recognition or the recitation
-    /// check), by verse.
-    func review() -> [ReviewVerse] {
-        let notes = RecitationChecker.shared.notes
-        let marked = WordHighlights.shared.marks.filter { $0.value != .correct && wordText[$0.key] != nil }
-        let byVerse = Dictionary(grouping: marked, by: { $0.key.verseKey })
-        return byVerse.keys.sorted().map { key in
-            let words = byVerse[key, default: []].sorted { $0.key < $1.key }
-                .map { ReviewWord(id: $0.key, text: wordText[$0.key] ?? "", mark: $0.value,
-                                  notes: notes[$0.key, default: []].map(\.text)) }
-            return ReviewVerse(key: key, words: words)
-        }
-    }
-
-    /// The recitation check found the reciter somewhere else (another surah,
-    /// or far away): the reader goes there, as with speech recognition's jumps.
-    func jump(to word: WordID) {
-        guard isListening else { return }
-        lastJumpGeneration = generation
-        jump = Jump(word: word, serial: (jump?.serial ?? 0) + 1)
-    }
-
-    // MARK: Recitation check
-
-    /// The part just recited goes to the recitation check, if it's on.
-    private func sendClip() {
-        guard RecitationChecker.shared.isActive else { return }
-        if let samples = clip.cut(), let place = clipPlace {
-            RecitationChecker.shared.submit(samples, at: place)
-        }
-    }
-
-    /// Where the next part starts: the word after the reciter's place, or
-    /// after the last word the check heard when that's further on.
-    private func checkPlace() -> WordID? {
-        guard let tracker, !tracker.tokens.isEmpty else { return nil }
-        let count = tracker.tokens.count
-        var index = min(tracker.position.map { $0 + 1 } ?? tracker.focus, count - 1)
-        if let end = RecitationChecker.shared.lastEnd,
-           let checked = tracker.tokens.firstIndex(where: { $0.id == end }), checked + 1 < count {
-            index = max(index, checked + 1)
-        }
-        return tracker.tokens[index].id
-    }
-
-    /// Speech recognition stopped working, but the recitation check is on:
-    /// carry on with the check alone, sending each part at a pause. The place
-    /// moves on from what the check heard.
-    private func continueWithCheckOnly() {
-        task?.cancel()
-        task = nil
-        pauseTimer?.cancel()
-        finalTimer?.cancel()
-        generation += 1
-        let current = generation
-        status = .following
-        sendClip()
-        clipPlace = checkPlace()
-        requests.set(SilentRequest())
-        pauseTimer = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(200))
-                guard let self, !Task.isCancelled, self.generation == current, self.isListening else { return }
-                if self.requests.secondsSinceVoice >= Self.autoPauseSilence {
-                    self.stop(pausing: true)
-                    return
-                }
-                if self.requests.hasSpeechPause {
-                    self.sendClip()
-                    self.clipPlace = self.checkPlace()
-                    self.requests.set(SilentRequest())
-                }
-            }
-        }
-    }
 
     /// The microphone level for the Recite button, about 12 times a second.
     private func watchLevel() {
@@ -359,7 +277,7 @@ final class LiveRecitation {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(80))
                 guard let self, !Task.isCancelled else { return }
-                let next = self.requests.level
+                let next = self.usesModel ? self.modelMeter.level : self.requests.level
                 if abs(next - self.level) > 0.02 { self.level = next }
             }
         }
@@ -374,9 +292,6 @@ final class LiveRecitation {
         task?.cancel()
         generation += 1
         lastHeard = []
-        // A new part begins: the one just finished goes to the check.
-        sendClip()
-        clipPlace = checkPlace()
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
@@ -416,12 +331,8 @@ final class LiveRecitation {
             if Date.now.timeIntervalSince(requestStarted) < 2 {
                 quickFailures += 1
                 if quickFailures >= 3 {
-                    if RecitationChecker.shared.isActive {
-                        continueWithCheckOnly()
-                    } else {
-                        stop()
-                        status = .unavailable("Speech recognition isn't working right now. Please try again later.")
-                    }
+                    stop()
+                    status = .unavailable("Speech recognition isn't working right now. Please try again later.")
                     return
                 }
             }
@@ -514,50 +425,100 @@ final class LiveRecitation {
         guard let tracker else { return }
         let current = tracker.position.map { tracker.tokens[$0].id }
         WordHighlights.shared.setCurrent(isListening ? current : nil)
-        // Only final, confident exact matches turn green. Provisional marks
-        // are recomputed, including removal when a transcript is revised.
-        let results = tracker.displayResults
-        var changes: [WordID: WordMark?] = [:]
-        // With the recitation check on, it marks the words; speech recognition
-        // only turns words green as they're recited.
-        let checker = RecitationChecker.shared
-        let checkMarks = checker.marksWords
-        let currentIDs = Set(results.keys.map { tracker.tokens[$0].id })
-        for id in transientShown.subtracting(currentIDs) { changes[id] = .some(nil) }
-        for (index, result) in results {
-            let id = tracker.tokens[index].id
-            let mark: WordMark = switch result {
-            case .correct: .correct
-            case .uncertain: .uncertain
-            case .mistake: .mistake
-            case .skipped: .skipped
-            }
-            if shownMarks[id] != mark { changes[id] = .some(mark) }
-        }
-        transientShown = Set(tracker.provisional.keys.map { tracker.tokens[$0].id })
-        if checkMarks {
-            changes = changes.filter { id, mark in
-                !checker.checked.contains(id) && (mark == nil || mark == .correct)
-            }
-        }
-        if changes.values.contains(where: { $0 == .mistake }) { mistakeNotice += 1 }
-        for (id, mark) in changes { shownMarks[id] = mark }
-        WordHighlights.shared.updateMarks(changes)
-        // Memorisation: words recited so far show through the hidden text.
+        // Niyat finds and follows the reciter; it doesn't judge words, so no
+        // marks are set. Memorisation: words recited so far show through.
         var passed: [WordID] = tracker.committed.keys.map { tracker.tokens[$0].id }
         passed += tracker.provisional.compactMap { $0.value == .matched ? tracker.tokens[$0.key].id : nil }
         WordHighlights.shared.reveal(passed)
     }
 
+    // MARK: The built-in model
+
+    /// The longest stretch transcribed at once; longer recitation is cut here.
+    private static let longestUtterance = 20.0
+
+    /// Follows with the model: every moment, transcribes the audio since the
+    /// last pause and lines it up with the text, as speech recognition's words are.
+    private func startModelListening() {
+        modelLoop?.cancel()
+        generation += 1
+        let current = generation
+        modelAudio.reset()
+        modelLoop = Task { [weak self] in
+            var decoded = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard let self, self.generation == current, self.isListening else { return }
+                if self.modelMeter.secondsSinceVoice >= Self.autoPauseSilence {
+                    self.stop(pausing: true)
+                    return
+                }
+                let snapshot = self.modelAudio.snapshot()
+                guard snapshot.hasVoice else {
+                    // Silence before any recitation isn't kept.
+                    if snapshot.seconds > 5 { self.modelAudio.reset() }
+                    continue
+                }
+                let isFinal = snapshot.pause || snapshot.seconds >= Self.longestUtterance
+                // Nothing new since the last look (and not the end of a stretch yet).
+                if !isFinal, snapshot.samples.count - decoded < RecitationFeatures.sampleRate / 4 { continue }
+                decoded = snapshot.samples.count
+                let audio = RecitationAudio.trimmed(snapshot.samples)
+                guard let heard = try? await RecitationModel.shared.transcribe(audio) else { continue }
+                guard self.generation == current, self.isListening else { return }
+                if isFinal {
+                    self.modelAudio.consume(snapshot.samples.count)
+                    decoded = 0
+                }
+                self.modelHeard(heard.words, isFinal: isFinal)
+            }
+        }
+    }
+
+    private func modelHeard(_ words: [String], isFinal: Bool) {
+        guard isListening, var tracker else { return }
+        guard !words.isEmpty else {
+            if isFinal {
+                tracker.finishUtterance()
+                self.tracker = tracker
+                publish()
+            }
+            return
+        }
+        let result = tracker.update(heard: words, confidences: isFinal ? Array(repeating: 0, count: words.count) : nil,
+                                    isFinal: isFinal)
+        self.tracker = tracker
+        switch result {
+        case .searching: status = .searching
+        case .lost: status = .lost
+        case .following: status = .following
+        }
+        if result != .following { lookElsewhere(for: words, tracker: tracker) }
+        publish()
+        // Each stretch may look elsewhere in the Qur'an again.
+        if isFinal {
+            lastJumpGeneration = -1
+            jumpCandidate = nil
+        }
+    }
+
     // MARK: Off the main thread
 
-    private nonisolated static func installTap(on input: AVAudioInputNode, sending requests: RequestBox,
-                                               recording clip: RecitationClipRecorder) {
+    private nonisolated static func installTap(on input: AVAudioInputNode, sending requests: RequestBox) {
         input.removeTap(onBus: 0)
         let format = input.outputFormat(forBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
-            let isVoice = requests.append(buffer)
-            clip.append(buffer, isVoice: isVoice)
+            requests.append(buffer)
+        }
+    }
+
+    private nonisolated static func installTap(on input: AVAudioInputNode, collecting audio: RecitationAudio,
+                                               meter: VoiceMeter) {
+        input.removeTap(onBus: 0)
+        let format = input.outputFormat(forBus: 0)
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+            _ = meter.measure(buffer)
+            audio.append(buffer)
         }
     }
 
@@ -589,13 +550,6 @@ protocol RecitationAudioRequest: AnyObject {
 }
 
 extension SFSpeechAudioBufferRecognitionRequest: RecitationAudioRequest {}
-
-/// Stands in for a recognition request when only the recitation check is
-/// listening: the audio still goes through, for the pause detection.
-final class SilentRequest: RecitationAudioRequest {
-    func append(_ audioPCMBuffer: AVAudioPCMBuffer) {}
-    func endAudio() {}
-}
 
 /// Hands microphone audio to whichever recognition request is current.
 final class RequestBox: @unchecked Sendable {

@@ -10,6 +10,7 @@ require them to stay exactly as published.
 | `Niyat/Resources/Quran/chapters.json` | Surah names and verse counts | Tanzil `quran-data.xml`, via risan/quran-json (`data/tanzil/chapters.json`) | CC BY 3.0 |
 | `Niyat/Resources/Quran/translation-en-clearquran.json` | English translation | *Translation by Talal Itani, ClearQuran.com* ("Allah" edition), via risan/quran-json (`data/extra/english_itani_allah.json`, sha256 `2e5d4d9f…250ed`) | [CC BY-ND 4.0](https://blog.clearquran.com/download): free to use and share, including commercially, unmodified, with credit |
 | `Niyat/Resources/Fonts/AmiriQuran-Regular.ttf` | Amiri Quran font | [aliftype/amiri](https://github.com/aliftype/amiri), via google/fonts | SIL Open Font License 1.1 (`AmiriQuran-OFL.txt`) |
+| `Niyat/Resources/Fonts/DigitalKhattOldMadina.otf` | Mushaf pages font (Madinah mushaf calligraphy) | [DigitalKhatt/oldmadinafont](https://github.com/DigitalKhatt/oldmadinafont) at `6e19182f25`, `fonts/oldmadina.otf`, unmodified (SHA-256 `e83c1bdb…bf16f`) | SIL Open Font License 1.1 (`DigitalKhattOldMadina-OFL.txt`) |
 | `Niyat/Resources/Fonts/ArefRuqaa-Bold.ttf` | Aref Ruqaa calligraphy font (headings, art) | [alif-type/aref-ruqaa](https://github.com/alif-type/aref-ruqaa), via google/fonts | SIL Open Font License 1.1 (`ArefRuqaa-OFL.txt`) |
 | `Shared/DailyVerses.swift` | Verses for the Verse of the Day widget | Generated verbatim from the two files above by `scripts/generate_daily_verses.py` | As above |
 | Swift package `Adhan` | Prayer time calculation | [batoulapps/adhan-swift](https://github.com/batoulapps/adhan-swift) | MIT |
@@ -25,10 +26,9 @@ Arabic dhikr phrases in `Shared/Tasbih.swift` are standard phrases, not copied f
 
 - **Quran Tajweed** by Collin Fair, [github.com/cpfair/quran-tajweed](https://github.com/cpfair/quran-tajweed), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Built from ReciteQuran.com and the Dar al-Maarifah tajweed masahif. Niyat re-runs its classifier on the bundled Tanzil text (see docs/SOURCES.md); no rule data was changed by hand.
 
-## Recitation check
+## Recitation model
 
-- **Quran Muaalem** by obadx (copyright holder) and contributors, [github.com/obadx/quran-muaalem](https://github.com/obadx/quran-muaalem), with the model [obadx/muaalem-model-v3_2](https://huggingface.co/obadx/muaalem-model-v3_2), under the [Quran Muaalem License 1.0](https://github.com/obadx/quran-muaalem/blob/main/LICENSE) (Apache 2.0 with conditions: the AI notice, following Islamic law, no advertising, a free path if ever paid). Runs on Niyat's server (`server/`), unmodified; Niyat adds the matching and the notes around it.
-- **quran-transcript** by the same author: the phonetic script the check compares against.
+- **QuranKarim speech-to-text** by TheGreatQuran, [huggingface.co/TheGreatQuran/QuranKarim-SpeechToText-onnxModel](https://huggingface.co/TheGreatQuran/QuranKarim-SpeechToText-onnxModel), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Bundled unmodified and run on the iPhone with [ONNX Runtime](https://github.com/microsoft/onnxruntime) (MIT).
 
 ## Mushaf line layout
 

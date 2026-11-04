@@ -54,9 +54,12 @@ struct VerseWords {
     /// Exactly as in the bundled text.
     let text: String
     let words: [Word]
+    /// Reading signs are separate from the unchanged source text and recognition words.
+    let readingSigns: [Int: String]
 
-    init(surah: Int, verse: Int, text: String) {
+    init(surah: Int, verse: Int, text: String, readingSigns: [Int: String] = [:]) {
         key = VerseKey(surah: surah, verse: verse)
+        self.readingSigns = readingSigns
         self.text = text
         let units = Array(text.utf16)
 
@@ -107,7 +110,8 @@ final class QuranWords {
     func words(for verse: Verse, edition: QuranEdition) -> VerseWords {
         let key = "\(edition.rawValue):\(verse.surah):\(verse.number)"
         if let cached = cache[key] { return cached }
-        let words = VerseWords(surah: verse.surah, verse: verse.number, text: verse.arabic)
+        let words = VerseWords(surah: verse.surah, verse: verse.number, text: verse.arabic,
+                               readingSigns: QuranReadingSigns.signs(surah: verse.surah, verse: verse.number, edition: edition))
         cache[key] = words
         return words
     }

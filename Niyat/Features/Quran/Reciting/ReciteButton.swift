@@ -3,17 +3,17 @@ import SwiftUI
 /// The one Recite button, on its own beside the reader's controls: big
 /// enough to find without looking, with a ring that moves with your voice
 /// and a clear look for each state (starting, listening, following, lost,
-/// paused, checking).
+/// paused).
 struct ReciteButton: View {
+    /// 64 on its own; smaller inside a bar.
+    var size: CGFloat = 64
     let action: () -> Void
     @State private var live = LiveRecitation.shared
-    @State private var checker = RecitationChecker.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let size: CGFloat = 64
     /// Room around the button for the voice ring, so it never spills onto
     /// what's next to it and the button stays centred in its space.
-    private let ringRoom: CGFloat = 8
+    private var ringRoom: CGFloat { size / 8 }
 
     var body: some View {
         Button(action: action) {
@@ -24,11 +24,10 @@ struct ReciteButton: View {
                     .overlay { Circle().strokeBorder(Palette.highlight.opacity(0.5), lineWidth: 1) }
                     .shadow(color: Palette.control.opacity(live.isListening ? 0.5 : 0.25), radius: 12, y: 3)
                 icon
-                    .font(.system(size: 26, weight: .semibold))
+                    .font(.system(size: size * 0.4, weight: .semibold))
                     .foregroundStyle(.black)
             }
             .frame(width: size, height: size)
-            .overlay(alignment: .topTrailing) { checkingBadge }
             .frame(width: size + 2 * ringRoom, height: size + 2 * ringRoom)
             .contentShape(.circle)
         }
@@ -77,19 +76,6 @@ struct ReciteButton: View {
         }
     }
 
-    @ViewBuilder
-    private var checkingBadge: some View {
-        if checker.pending > 0 {
-            ProgressView()
-                .controlSize(.mini)
-                .tint(.white)
-                .padding(5)
-                .background(.black.opacity(0.6), in: .circle)
-                .offset(x: 4, y: -4)
-                .accessibilityHidden(true)
-        }
-    }
-
     private var stateDescription: String {
         var parts: [String] = []
         switch live.status {
@@ -100,7 +86,6 @@ struct ReciteButton: View {
         case .paused: parts.append("Paused after a long silence")
         case .idle, .unavailable: break
         }
-        if checker.pending > 0 { parts.append("checking your recitation") }
         return parts.joined(separator: ", ")
     }
 }

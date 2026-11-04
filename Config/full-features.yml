@@ -104,6 +104,8 @@ targets:
       - path: Shared
       - path: Niyat/Resources/Fonts/AmiriQuran-Regular.ttf
         buildPhase: resources
+      - path: Niyat/Resources/Fonts/DigitalKhattOldMadina.otf
+        buildPhase: resources
       - path: Niyat/Resources/Fonts/ArefRuqaa-Bold.ttf
         buildPhase: resources
     dependencies:
@@ -115,7 +117,7 @@ targets:
         CFBundleDisplayName: Niyat
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        UIAppFonts: [AmiriQuran-Regular.ttf, ArefRuqaa-Bold.ttf]
+        UIAppFonts: [AmiriQuran-Regular.ttf, ArefRuqaa-Bold.ttf, DigitalKhattOldMadina.otf]
         WKApplication: true
         WKCompanionAppBundleIdentifier: $(BUNDLE_ID_PREFIX).Niyat
         NiyatAppGroup: $(APP_GROUP_ID)
@@ -139,6 +141,8 @@ targets:
       - path: Shared
       - path: Niyat/Resources/Fonts/AmiriQuran-Regular.ttf
         buildPhase: resources
+      - path: Niyat/Resources/Fonts/DigitalKhattOldMadina.otf
+        buildPhase: resources
       - path: Niyat/Resources/Fonts/ArefRuqaa-Bold.ttf
         buildPhase: resources
     dependencies:
@@ -151,7 +155,7 @@ targets:
         CFBundleDisplayName: Niyat Complications
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        UIAppFonts: [AmiriQuran-Regular.ttf, ArefRuqaa-Bold.ttf]
+        UIAppFonts: [AmiriQuran-Regular.ttf, ArefRuqaa-Bold.ttf, DigitalKhattOldMadina.otf]
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
         NiyatAppGroup: $(APP_GROUP_ID)

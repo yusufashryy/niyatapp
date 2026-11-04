@@ -36,14 +36,6 @@ struct SurahListView: View {
                 }
             }
             .niyatBackground()
-            // Recite anywhere in the Qur'an and go straight there.
-            .overlay(alignment: .bottomTrailing) {
-                if store.isLoaded {
-                    FindByRecitingButton { showFinder = true }
-                        .padding(.trailing, 16)
-                        .padding(.bottom, 12)
-                }
-            }
             .sheet(isPresented: $showFinder) {
                 FindByRecitingSheet { place in
                     RecitationHandoff.pending = place
@@ -96,9 +88,14 @@ struct SurahListView: View {
                         .id(destination)
                 }
             } else {
-                ContentUnavailableView("Choose a surah", systemImage: "book.pages",
-                                       description: Text("It opens here, beside the list."))
-                    .niyatBackground()
+                VStack(spacing: 24) {
+                    ContentUnavailableView("Choose a surah", systemImage: "book.pages",
+                                           description: Text("It opens here, beside the list. Or recite, and Niyat finds it."))
+                        .frame(maxHeight: 260)
+                    FindByRecitingButton { showFinder = true }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .niyatBackground()
             }
         }
         // Shares the width between the list and the reader rather than sliding over it.
@@ -153,6 +150,13 @@ struct SurahListView: View {
                     }
                     .buttonStyle(.pressable)
                     .appearAnimation(0)
+                }
+
+                // Recite anywhere in the Qur'an and go straight there.
+                if searchText.isEmpty {
+                    Button { showFinder = true } label: { FindByRecitingCard() }
+                        .buttonStyle(.pressable)
+                        .appearAnimation(1)
                 }
 
                 if searchText.isEmpty {
@@ -245,7 +249,7 @@ private struct ContinueReadingCard: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            RibbonMark(color: Palette.highlight, starColor: Palette.base)
+            RibbonMark(color: Color(QuranTextStyle.ribbonRed), starColor: .white)
                 .frame(width: 20, height: 38)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Continue reading")
@@ -395,5 +399,31 @@ private struct QuranToolTile: View {
         .padding(14)
         .frame(maxWidth: .infinity)
         .surface(cornerRadius: 18)
+    }
+}
+
+/// "Recite to find a surah": the way into finding by reciting, at the top of the list.
+private struct FindByRecitingCard: View {
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "mic.fill")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.black)
+                .frame(width: 44, height: 44)
+                .background(Palette.control.gradient, in: .circle)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Recite to find a surah").font(.headline).lineLimit(1).minimumScaleFactor(0.8)
+                Text("Niyat opens it where you are").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right").font(.footnote.weight(.bold)).foregroundStyle(.tertiary)
+        }
+        .foregroundStyle(.white)
+        .padding(12)
+        .frame(maxWidth: .infinity)
+        .surface(cornerRadius: 18)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Find by reciting")
+        .accessibilityHint("Recite a few words and Niyat opens that surah and ayah.")
     }
 }

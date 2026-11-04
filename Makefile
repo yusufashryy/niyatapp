@@ -12,11 +12,15 @@ update:
 	$(MAKE) project
 
 # Free Apple ID: everything except Prayer Lock.
-project:
+# The built-in recitation model (166 MB, not in git).
+model:
+	./scripts/fetch_recitation_model.sh
+
+project: model
 	NIYAT_FULL=false xcodegen generate
 
 # Paid Apple Developer account: adds Prayer Lock (Screen Time) and Time Sensitive alerts.
-full:
+full: model
 	NIYAT_FULL=true xcodegen generate
 
 open:

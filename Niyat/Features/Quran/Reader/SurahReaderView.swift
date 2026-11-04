@@ -32,7 +32,6 @@ struct SurahReaderView: View {
     @State private var didScroll = false
     @State private var showSettings = false
     @State private var showGoal = false
-    @State private var showReview = false
     @State private var showIntro = false
     /// Verses currently on screen, for counting what's actually read.
     @State private var visibleVerses: Set<Int> = []
@@ -83,7 +82,7 @@ struct SurahReaderView: View {
                                   isReciting: player.current == .verse(surah: surahID, verse: verse.number),
                                   showsPlay: audioAvailable,
                                   onPlay: { play(from: verse.number) },
-                                  onPlaceRibbon: { withAnimation(.smooth) { store.moveRibbon(to: verse) } }) {
+                                  onPlaceRibbon: { withAnimation(.smooth) { store.toggleRibbon(verse) } }) {
                             store.toggleBookmark(verse)
                         }
                         // No fade-in: under the Recite row a fading card stayed
@@ -135,7 +134,7 @@ struct SurahReaderView: View {
         .niyatBackground()
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
-                RecitationDock(onRecite: toggleListening) { showReview = true }
+                RecitationDock(onRecite: toggleListening)
                 RecitationMiniPlayer()
             }
             .readableWidth(600)
@@ -203,11 +202,6 @@ struct SurahReaderView: View {
         .haptic(.selection, trigger: highlights.isHidden)
         .sheet(isPresented: $showSettings) { QuranSettingsView() }
         .sheet(isPresented: $showGoal) { QuranGoalSheet() }
-        .sheet(isPresented: $showReview) {
-            RecitationReviewSheet(onListen: listenAction) { key in
-                withAnimation(.smooth) { position.scrollTo(id: key.surah * 1000 + key.verse, anchor: .center) }
-            }
-        }
         .sheet(isPresented: $showIntro) {
             ReciteIntroSheet(edition: store.edition) { startListening() }
         }
@@ -229,6 +223,7 @@ struct SurahReaderView: View {
         }
         .onDisappear {
             // Leaving the surah ends listening, memorisation and the review.
+            store.resumeRibbon()
             live.stop()
             live.clearReview()
             highlights.setHidden(false)
@@ -255,7 +250,7 @@ struct SurahReaderView: View {
             guard !Task.isCancelled, let top = onScreen.filter({ $0 != Self.bismillahID }).min(),
                   let verse = store.verses(for: surahID).first(where: { $0.id == top }) else { return }
             scrolledByReader = false
-            withAnimation(.smooth) { store.moveRibbon(to: verse) }
+            withAnimation(.smooth) { store.followRibbon(to: verse) }
         }
     }
 
@@ -271,6 +266,7 @@ struct SurahReaderView: View {
     /// How Qur'an text is drawn in the reader.
     private func textStyle(size: Double, ink: UIColor) -> QuranTextStyle {
         var style = QuranTextStyle()
+        style.typeface = .for(store.edition)
         style.fontSize = CGFloat(size)
         style.lineHeight = CGFloat(lineHeight)
         style.ink = ink
@@ -456,6 +452,17 @@ private struct VerseCard: View {
                     .buttonStyle(.pressable)
                     .accessibilityLabel("Play verse \(verse.number)")
                 }
+                // One tap puts your ribbon here (it stays until you read on past it).
+                Button(action: onPlaceRibbon) {
+                    Image(systemName: hasRibbon ? "bookmark.fill" : "bookmark")
+                        .font(.subheadline)
+                        .foregroundStyle(hasRibbon ? Color(QuranTextStyle.ribbonRed) : Color.secondary)
+                        .contentTransition(.symbolEffect(.replace))
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.pressable)
+                .haptic(.impact(weight: .light), trigger: hasRibbon)
+                .accessibilityLabel(hasRibbon ? "Remove the ribbon" : "Move the ribbon here")
                 Button(action: onToggleSaved) {
                     Image(systemName: isSaved ? "star.fill" : "star")
                         .font(.subheadline)
@@ -480,16 +487,21 @@ private struct VerseCard: View {
         }
         .padding(18)
         .surface(cornerRadius: 22)
+        // The ribbon's verse stays outlined, so your place is easy to find again.
         .overlay {
             RoundedRectangle(cornerRadius: 22)
-                .strokeBorder(Palette.accent.opacity(isReciting ? 0.8 : 0), lineWidth: 1.5)
+                .strokeBorder(isReciting ? Palette.accent.opacity(0.8) : Color(QuranTextStyle.ribbonRed).opacity(hasRibbon ? 0.7 : 0),
+                              lineWidth: 1.5)
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 22).fill(Color(QuranTextStyle.ribbonRed).opacity(hasRibbon ? 0.12 : 0))
         }
         .shadow(color: Palette.accent.opacity(isReciting ? 0.35 : 0), radius: 12)
         // The ribbon hangs from the top of the verse it marks, between the
         // verse number and the buttons.
         .overlay(alignment: .top) {
             if hasRibbon {
-                RibbonMark(color: Palette.highlight, starColor: Palette.base)
+                RibbonMark(color: Color(QuranTextStyle.ribbonRed), starColor: .white)
                     .frame(width: 16, height: 30)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .accessibilityElement()
@@ -497,13 +509,13 @@ private struct VerseCard: View {
             }
         }
         .animation(.smooth(duration: 0.4), value: isReciting)
+        .animation(.smooth(duration: 0.3), value: hasRibbon)
         .contextMenu {
             if showsPlay {
                 Button("Play from here", systemImage: "play.fill") { onPlay() }
             }
-            if !hasRibbon {
-                Button("Move the ribbon here", systemImage: "bookmark") { onPlaceRibbon() }
-            }
+            Button(hasRibbon ? "Remove the ribbon" : "Move the ribbon here",
+                   systemImage: hasRibbon ? "bookmark.slash" : "bookmark") { onPlaceRibbon() }
             Button(isSaved ? "Remove from saved verses" : "Save verse",
                    systemImage: isSaved ? "star.slash" : "star") { onToggleSaved() }
             Button("Copy", systemImage: "doc.on.doc") {

@@ -26,8 +26,9 @@ enum Palette {
 }
 
 extension Font {
-    /// Amiri Quran (SIL Open Font License), bundled with the app and widgets.
-    static func quran(size: CGFloat) -> Font { .custom("AmiriQuran-Regular", size: size) }
+    /// DigitalKhatt Old Madina, the Madinah mushaf's calligraphy (SIL Open
+    /// Font License), bundled with the app, widgets and watch.
+    static func quran(size: CGFloat) -> Font { .custom("DigitalKhattOldMadinaRegular", size: size) }
 
     /// Aref Ruqaa (SIL Open Font License): calligraphic Arabic for headings and art.
     static func calligraphy(size: CGFloat) -> Font { .custom("ArefRuqaa-Bold", size: size) }

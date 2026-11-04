@@ -1,7 +1,0 @@
-{$NIYAT_DOMAIN} {
-	request_body {
-		max_size 2MB
-	}
-	# No access logs: addresses and timings of recitations aren't kept.
-	reverse_proxy check:8080
-}

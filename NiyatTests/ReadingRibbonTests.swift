@@ -65,4 +65,28 @@ final class ReadingRibbonTests: XCTestCase {
     func testLongPagesWaitAtMostTwentySeconds() {
         XCTAssertEqual(ReadingRibbon.pageDwell(verseCount: 40), 20)
     }
+
+    // MARK: A ribbon placed by hand
+
+    private let here = VerseReference(surah: 2, verse: 50)
+
+    func testFollowsAnywhereWhenNotPlacedByHand() {
+        XCTAssertTrue(ReadingRibbon.follows(to: VerseReference(surah: 2, verse: 10), from: here, pinned: false))
+        XCTAssertTrue(ReadingRibbon.follows(to: VerseReference(surah: 2, verse: 90), from: here, pinned: false))
+    }
+
+    func testPlacedByHandStaysWhileLookingBack() {
+        XCTAssertFalse(ReadingRibbon.follows(to: VerseReference(surah: 2, verse: 10), from: here, pinned: true))
+        XCTAssertFalse(ReadingRibbon.follows(to: VerseReference(surah: 1, verse: 7), from: here, pinned: true))
+    }
+
+    func testPlacedByHandFollowsOnceYouReadPastIt() {
+        XCTAssertTrue(ReadingRibbon.follows(to: VerseReference(surah: 2, verse: 51), from: here, pinned: true))
+        XCTAssertTrue(ReadingRibbon.follows(to: VerseReference(surah: 3, verse: 1), from: here, pinned: true))
+    }
+
+    func testNoRibbonYetFollows() {
+        XCTAssertTrue(ReadingRibbon.follows(to: here, from: nil, pinned: false))
+        XCTAssertFalse(ReadingRibbon.follows(to: here, from: here, pinned: false))
+    }
 }

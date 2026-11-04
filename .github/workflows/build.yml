@@ -65,6 +65,16 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      # The built-in recitation model (166 MB) isn't in git: fetch it once and cache it.
+      - name: Cache the recitation model
+        uses: actions/cache@v4
+        with:
+          path: Niyat/Resources/RecitationModel
+          key: recitation-model-${{ hashFiles('scripts/fetch_recitation_model.sh') }}
+
+      - name: Fetch the recitation model
+        run: ./scripts/fetch_recitation_model.sh
+
       # The full app: Prayer Lock, Groups, Time Sensitive alerts and Apple Watch.
       - name: Generate Xcode project
         run: make full

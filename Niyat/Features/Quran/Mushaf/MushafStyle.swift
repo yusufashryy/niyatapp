@@ -144,6 +144,7 @@ struct MushafColors {
                    squeeze: CGFloat = MushafMetrics.stretch.lowerBound) -> QuranTextStyle {
         var style = QuranTextStyle()
         style.fontSize = size
+        style.typeface = MushafMetrics.typeface
         style.ink = ink
         style.marker = marker
         style.tajweed = tajweed
@@ -153,8 +154,6 @@ struct MushafColors {
         style.currentWord = isLight ? UIColor(white: 0, alpha: 0.10) : UIColor(white: 1, alpha: 0.16)
         style.placeholder = isLight ? ink.withAlphaComponent(0.10) : ink.withAlphaComponent(0.14)
         style.uncertain = isLight ? UIColor(white: 0.45, alpha: 0.9) : UIColor(white: 0.65, alpha: 0.9)
-        // Deeper on paper, so it reads against cream and white.
-        style.check = isLight ? UIColor(red: 0.85, green: 0.47, blue: 0.0, alpha: 1) : UIColor(red: 1.0, green: 0.68, blue: 0.16, alpha: 1)
         style.correct = isLight ? UIColor(red: 0.10, green: 0.62, blue: 0.28, alpha: 0.24)
                                 : UIColor(red: 0.25, green: 0.85, blue: 0.45, alpha: 0.28)
         style.mistake = isLight ? UIColor(red: 0.86, green: 0.07, blue: 0.07, alpha: 1)

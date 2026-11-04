@@ -1,5 +1,7 @@
 # Evaluating Quran Muaalem (server-side recitation check)
 
+> **Not used in the app.** In November 2026 Niyat dropped judging recitation and kept finding and following it, on the iPhone, with the bundled QuranKarim model. Muaalem's server (`server/`) and the app's recitation check are in git history at commit `ed04876` if they're ever wanted again.
+
 Date: 3 November 2026, on a Mac (M3 Pro, CPU only). The recordings are the same 726 used for the QuranKarim report (`asr-eval-qurankarim.md` on the `research/asr-eval` branch):
 - **Professional:** 564 single-ayah clips by 6 professional reciters on EveryAyah.
 - **Other reciters:** 12 whole-surah files by 3 reciters the model probably hasn't heard.

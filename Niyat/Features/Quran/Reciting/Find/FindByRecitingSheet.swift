@@ -26,18 +26,11 @@ struct FindByRecitingSheet: View {
     @State private var store = QuranStore.shared
     @State private var step = Step.start
 
-    private enum Step { case start, checkChoice, listening }
+    private enum Step { case start, listening }
 
     var body: some View {
         NavigationStack {
-            Group {
-                switch step {
-                case .checkChoice:
-                    RecitationCheckChoice { _ in begin() }
-                case .start, .listening:
-                    content
-                }
-            }
+            content
             .niyatBackground()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -77,7 +70,6 @@ struct FindByRecitingSheet: View {
             }
             .padding(.horizontal, 24)
             .accessibilityElement(children: .combine)
-            choices
             Spacer()
             footer
         }
@@ -120,7 +112,6 @@ struct FindByRecitingSheet: View {
         case .idle: step == .start ? "Recite to find a surah" : "Starting…"
         case .listening: "Listening…"
         case .found(let place): name(place)
-        case .choose: "Which one are you reciting?"
         case .failed: "Couldn't find it"
         }
     }
@@ -132,30 +123,7 @@ struct FindByRecitingSheet: View {
         case .idle, .listening:
             "Recite a few words. Niyat opens the surah as soon as it knows where you are."
         case .found: "Opening…"
-        case .choose: "These words appear in more than one place."
         case .failed(let message): message
-        }
-    }
-
-    @ViewBuilder
-    private var choices: some View {
-        if case .choose(let places) = finder.state {
-            VStack(spacing: 10) {
-                ForEach(places) { place in
-                    Button {
-                        dismiss()
-                        onFound(place)
-                    } label: {
-                        Text(name(place))
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .surface()
-                    }
-                    .buttonStyle(.pressable)
-                }
-            }
-            .padding(.horizontal, 24)
         }
     }
 
@@ -165,14 +133,14 @@ struct FindByRecitingSheet: View {
         case .idle where step == .start:
             // A neutral Continue before iOS asks for the microphone.
             wideButton("Continue") { begin() }
-        case .failed, .choose:
+        case .failed:
             wideButton("Try again") { Task { await finder.start() } }
         default:
-            if finder.usesServer {
-                Text("Uses Quran Muaalem, an AI model that can make mistakes.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            Text("Works on your iPhone. Nothing you recite is saved or sent anywhere.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
         }
     }
 
@@ -190,13 +158,9 @@ struct FindByRecitingSheet: View {
         "\(store.surah(place.surah)?.transliteration ?? "Surah \(place.surah)") · \(place.surah):\(place.verse)"
     }
 
-    /// The AI notice comes first when the server can be used and it hasn't
-    /// been seen; the Continue page only when iOS hasn't asked yet.
+    /// The Continue page only when iOS hasn't asked for the microphone yet.
     private func firstStep() {
-        if RecitationCheckSettings.isAvailable, RecitationCheckSettings.supports(store.edition),
-           !RecitationCheckSettings.noticeSeen {
-            step = .checkChoice
-        } else if needsAsking {
+        if needsAsking {
             step = .start
         } else {
             begin()
@@ -205,14 +169,10 @@ struct FindByRecitingSheet: View {
 
     private var needsAsking: Bool {
         if AVAudioApplication.shared.recordPermission == .undetermined { return true }
-        return !finder.usesServer && SFSpeechRecognizer.authorizationStatus() == .notDetermined
+        return !LiveRecitation.modelAvailable(for: store.edition) && SFSpeechRecognizer.authorizationStatus() == .notDetermined
     }
 
     private func begin() {
-        if step == .checkChoice, needsAsking {
-            step = .start
-            return
-        }
         step = .listening
         Task { await finder.start() }
     }

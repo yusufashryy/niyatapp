@@ -31,7 +31,6 @@ struct MushafPageView: View {
     @State private var actionsAtTop = false
     @State private var showJump = false
     @State private var showOptions = false
-    @State private var showReview = false
     @State private var showIntro = false
     /// First page of the text live recitation is following.
     @State private var listeningFrom = 1
@@ -91,7 +90,7 @@ struct MushafPageView: View {
                                    hasRibbon: store.hasRibbon(selected),
                                    onPlayFromHere: { play(from: selected) },
                                    onPlayVerse: { play(from: selected, only: true) },
-                                   onRibbon: { withAnimation(.smooth) { store.moveRibbon(to: selected) } },
+                                   onRibbon: { withAnimation(.smooth) { store.toggleRibbon(selected) } },
                                    onSave: { store.toggleBookmark(selected) },
                                    onClose: { select(nil) })
                     .padding(.horizontal, 12)
@@ -124,10 +123,6 @@ struct MushafPageView: View {
         // Sheets keep the app's dark look, whatever the paper.
         .sheet(isPresented: $showJump) { MushafJumpSheet(page: jumpBinding).preferredColorScheme(.dark) }
         .sheet(isPresented: $showOptions) { MushafOptionsSheet(options: $options).preferredColorScheme(.dark) }
-        .sheet(isPresented: $showReview) {
-            RecitationReviewSheet(onListen: listenAction, onGoTo: { key in go(to: key) })
-                .preferredColorScheme(.dark)
-        }
         .sheet(isPresented: $showIntro) {
             ReciteIntroSheet(edition: store.edition) { startListening() }
                 .preferredColorScheme(.dark)
@@ -160,6 +155,7 @@ struct MushafPageView: View {
             ribbonTask?.cancel()
             UIApplication.shared.isIdleTimerDisabled = false
             // Leaving the pages ends listening, memorisation and the review.
+            store.resumeRibbon()
             live.stop()
             live.clearReview()
             highlights.setHidden(false)
@@ -278,7 +274,8 @@ struct MushafPageView: View {
     /// Under the page: the review pill, the scrubber when open, and the control bar.
     private func bottomBar(_ colors: MushafColors) -> some View {
         VStack(spacing: 8) {
-            RecitationDock(light: colors.isLight, onRecite: toggleListening) { showReview = true }
+            // Status and review only while there's something to say; Recite is in the bar.
+            RecitationDock(light: colors.isLight, showsButton: false, onRecite: toggleListening)
             if showScrubber {
                 MushafScrubber(page: page, colors: colors) { jump(to: $0) }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -306,14 +303,17 @@ struct MushafPageView: View {
                           tint: player.repeatVerse ? active : tint) { player.repeatVerse.toggle() }
             } else {
                 barButton("Go to page, juz or surah", "list.bullet", tint: tint) { showJump = true }
-                barButton(isRibbonHere ? "Your ribbon is on this page" : "Move the ribbon to this page",
+                barButton(isRibbonHere ? "Remove the ribbon" : "Move the ribbon to this page",
                           isRibbonHere ? "bookmark.fill" : "bookmark",
-                          tint: isRibbonHere ? active : tint) { moveRibbon(toPage: page) }
+                          tint: isRibbonHere ? active : tint) {
+                    if isRibbonHere { withAnimation(.smooth) { store.removeRibbon() } } else { moveRibbon(toPage: page) }
+                }
             }
             Spacer(minLength: 0)
             barButton(highlights.isHidden ? "Show the text" : "Hide the text to recite from memory",
                       highlights.isHidden ? "eye.slash.fill" : "eye.slash",
                       tint: highlights.isHidden ? active : tint) { highlights.setHidden(!highlights.isHidden) }
+            ReciteButton(size: 44, action: toggleListening)
             if store.edition.riwayah.hasVerseAudio {
                 Button(action: togglePlay) {
                     Group {
@@ -377,10 +377,13 @@ struct MushafPageView: View {
         return isShowing(ribbonPage, spread: isSpread)
     }
 
-    /// Puts the ribbon at the first verse that starts on a page.
-    private func moveRibbon(toPage number: Int) {
+    /// Puts the ribbon at the first verse that starts on a page (by hand,
+    /// or following the reader).
+    private func moveRibbon(toPage number: Int, following: Bool = false) {
         guard let first = store.verses(onPage: number).first else { return }
-        withAnimation(.smooth) { store.moveRibbon(to: first) }
+        withAnimation(.smooth) {
+            if following { store.followRibbon(to: first) } else { store.moveRibbon(to: first) }
+        }
     }
 
     /// The ribbon follows you onto a page you turned to yourself, once it has
@@ -392,7 +395,7 @@ struct MushafPageView: View {
         ribbonTask = Task {
             try? await Task.sleep(for: .seconds(ReadingRibbon.pageDwell(verseCount: verses.count)))
             guard !Task.isCancelled else { return }
-            moveRibbon(toPage: number)
+            moveRibbon(toPage: number, following: true)
         }
     }
 

@@ -41,8 +41,7 @@ struct MushafVerseActions: View {
                     action("Play from here", "play.fill", onPlayFromHere)
                     action("This verse", "repeat.1", onPlayVerse)
                 }
-                action(hasRibbon ? "Ribbon here" : "Ribbon", hasRibbon ? "bookmark.fill" : "bookmark", onRibbon)
-                    .disabled(hasRibbon)
+                action(hasRibbon ? "Remove ribbon" : "Ribbon", hasRibbon ? "bookmark.slash.fill" : "bookmark", onRibbon)
                 action(isSaved ? "Saved" : "Save", isSaved ? "star.fill" : "star", onSave)
                 action(copied ? "Copied" : "Copy", copied ? "checkmark" : "doc.on.doc") {
                     UIPasteboard.general.string = "\(verse.arabic)\n\n\(verse.translation)\n— Qur'an \(verse.surah):\(verse.number)"

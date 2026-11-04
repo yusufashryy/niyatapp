@@ -14,7 +14,3 @@ BUNDLE_ID_PREFIX = com.yourname
 // Optional: send More › Send feedback to a Discord channel. Server Settings ›
 // Integrations › Webhooks › New Webhook › Copy URL, then paste it here WITHOUT "https://".
 // DISCORD_WEBHOOK = discord.com/api/webhooks/123456/abcdef
-
-// Optional: the recitation check (server/README.md). Leave out "https://".
-// RECITATION_SERVER = 203-0-113-7.sslip.io
-// RECITATION_KEY = paste-the-server-key-here

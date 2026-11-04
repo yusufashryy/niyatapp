@@ -71,6 +71,11 @@ final class QuranStore {
 
     /// Where you are: the reading ribbon (see `ReadingRibbon`).
     private(set) var ribbon: VerseReference?
+    /// The reader placed the ribbon themselves (see `ReadingRibbon.follows`).
+    private(set) var ribbonPinned = UserDefaults.standard.bool(forKey: ReadingRibbon.pinnedKey)
+    /// The reader just took the ribbon out: reading on doesn't put it back
+    /// until they close this surah or mushaf (see `resumeRibbon`).
+    @ObservationIgnored private var ribbonPaused = false
     /// Saved verses: a list you keep, apart from the ribbon.
     private(set) var bookmarks: [VerseReference]
 
@@ -125,11 +130,47 @@ final class QuranStore {
         saveBookmarks()
     }
 
+    /// The reader puts the ribbon on a verse: it stays there until they read on past it.
     func moveRibbon(to verse: Verse) {
+        setRibbon(verse.hafsReference, pinned: true)
+    }
+
+    /// The reader settled on a verse while reading: the ribbon follows,
+    /// unless they placed it further on themselves.
+    func followRibbon(to verse: Verse) {
         let reference = verse.hafsReference
-        guard reference != ribbon else { return }
-        ribbon = reference
-        UserDefaults.standard.setEncoded(reference, forKey: ReadingRibbon.storageKey)
+        guard !ribbonPaused, ReadingRibbon.follows(to: reference, from: ribbon, pinned: ribbonPinned) else { return }
+        setRibbon(reference, pinned: false)
+    }
+
+    /// Takes the ribbon out. If it follows you, it comes back next time you read.
+    func removeRibbon() {
+        ribbonPaused = true
+        ribbon = nil
+        ribbonPinned = false
+        UserDefaults.standard.removeObject(forKey: ReadingRibbon.storageKey)
+        UserDefaults.standard.removeObject(forKey: ReadingRibbon.legacyKey)
+        UserDefaults.standard.set(false, forKey: ReadingRibbon.pinnedKey)
+    }
+
+    /// Puts the ribbon on a verse, or takes it out if it's already there.
+    func toggleRibbon(_ verse: Verse) {
+        if hasRibbon(verse) { removeRibbon() } else { moveRibbon(to: verse) }
+    }
+
+    /// The surah or mushaf closed: the ribbon may follow again.
+    func resumeRibbon() {
+        ribbonPaused = false
+    }
+
+    private func setRibbon(_ reference: VerseReference, pinned: Bool) {
+        if pinned { ribbonPaused = false }
+        if reference != ribbon {
+            ribbon = reference
+            UserDefaults.standard.setEncoded(reference, forKey: ReadingRibbon.storageKey)
+        }
+        ribbonPinned = pinned
+        UserDefaults.standard.set(pinned, forKey: ReadingRibbon.pinnedKey)
     }
 
     func hasRibbon(_ verse: Verse) -> Bool {
@@ -146,6 +187,7 @@ final class QuranStore {
     /// Re-reads saved verses and the ribbon (after "Erase all data").
     func reloadUserData() {
         ribbon = Self.savedRibbon()
+        ribbonPinned = UserDefaults.standard.bool(forKey: ReadingRibbon.pinnedKey)
         bookmarks = UserDefaults.standard.decoded([VerseReference].self, forKey: "quran.bookmarks") ?? []
     }
 
@@ -259,6 +301,7 @@ final class QuranStore {
     /// If a file is changed or corrupted in any way, the hash won't match.
     nonisolated static let expectedChecksums: [String: String] = {
         var sums = [
+            "reading-signs": "d916800d4a978c0b19bc8db49276d5e82c0dd7b6fc018640d8d34c31ec1665dd",
             "translation-en-clearquran": "2e5d4d9fc7ee9cad5ed3fc0691d8e398c6f943a9ab7fe49ac515961abf5250ed",
             "chapters": "5b18adae945fcb6f9fbb865dd7dc596f89a63607a4e6617ca9e37f7f10d3386b",
         ]
