@@ -20,7 +20,9 @@ enum MushafBook {
     }
 
     /// The shortest a page may be in a spread; any smaller and one page reads better.
-    static let minimumSpreadHeight: CGFloat = 480
+    /// A phone held sideways (about 330 pt) stays on one page; the open
+    /// iPhone Duo (about 470 pt once the controls are taken off) gets two.
+    static let minimumSpreadHeight: CGFloat = 400
 
     /// Whether two pages fit side by side at a readable size (iPad in
     /// landscape, iPhone Duo open). Each page keeps its printed shape, so it

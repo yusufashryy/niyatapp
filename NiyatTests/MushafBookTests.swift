@@ -24,10 +24,12 @@ final class MushafBookTests: XCTestCase {
 
     // iPhone Duo windows (Duology's measurements): open held wide 951 × 669 pt,
     // open held tall 669 × 951, closed 466 × 678. The pages get the window less
-    // the status bar and the control bar, about 80 pt.
+    // the status bar, the control bar and the mic button: measured on the
+    // simulator, about 470 pt tall when open and held wide.
 
     func testDuoOpenHeldWideShowsTwoPages() {
         XCTAssertTrue(MushafBook.spreadFits(width: 951, height: 589))
+        XCTAssertTrue(MushafBook.spreadFits(width: 891, height: 468))
     }
 
     func testDuoOpenHeldTallShowsOnePage() {
