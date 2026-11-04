@@ -9,6 +9,8 @@ struct WatchPrayerEntry: TimelineEntry {
     let schedule: DaySchedule?
     let next: PrayerTime?
     let previous: Date?
+    /// Raised in the Smart Stack shortly before a prayer.
+    var relevance: TimelineEntryRelevance?
 
     static func make(at date: Date) -> WatchPrayerEntry {
         guard let location = SettingsStore.location else {
@@ -53,8 +55,21 @@ struct WatchPrayerProvider: TimelineProvider {
         }
         let upcoming = PrayerCalculator.upcoming(after: now, count: 12, includeSunrise: true,
                                                  location: location, settings: SettingsStore.prayerSettings)
-        let dates = ([now] + upcoming.map(\.date)).sorted()
-        completion(Timeline(entries: dates.map(WatchPrayerEntry.make(at:)), policy: .atEnd))
+        // An entry at each prayer, so the complication flips at the adhan, and one
+        // 20 minutes before, when the Smart Stack moves Niyat to the top.
+        let lead: TimeInterval = 20 * 60
+        var entries = [WatchPrayerEntry.make(at: now)]
+        for time in upcoming {
+            if time.name.isObligatory, time.date.addingTimeInterval(-lead) > now {
+                var soon = WatchPrayerEntry.make(at: time.date.addingTimeInterval(-lead))
+                soon.relevance = TimelineEntryRelevance(score: 1, duration: lead + 10 * 60)
+                entries.append(soon)
+            }
+            var at = WatchPrayerEntry.make(at: time.date)
+            at.relevance = TimelineEntryRelevance(score: 0.1)
+            entries.append(at)
+        }
+        completion(Timeline(entries: entries.sorted { $0.date < $1.date }, policy: .atEnd))
     }
 }
 
@@ -63,6 +78,8 @@ struct NiyatWatchWidgets: WidgetBundle {
     var body: some Widget {
         WatchNextPrayerWidget()
         WatchPrayerTimesWidget()
+        WatchHijriDateWidget()
+        WatchQuranGoalWidget()
     }
 }
 
@@ -186,5 +203,122 @@ struct WatchPrayerTimesView: View {
                 .widgetAccentable(isNext)
             }
         }
+    }
+}
+
+// MARK: - Hijri date
+
+struct WatchDayEntry: TimelineEntry {
+    let date: Date
+    let quranDay: QuranDay
+    let quranGoal: Int?
+}
+
+/// One entry now and one at each midnight for two days, re-reading the
+/// Qur'an goal the iPhone last sent.
+struct WatchDayProvider: TimelineProvider {
+    func placeholder(in context: Context) -> WatchDayEntry {
+        WatchDayEntry(date: .now, quranDay: QuranDay(verses: ["1:1", "1:2", "1:3", "1:4"], goal: 10), quranGoal: 10)
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (WatchDayEntry) -> Void) {
+        completion(context.isPreview ? placeholder(in: context) : entry(at: .now))
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<WatchDayEntry>) -> Void) {
+        let calendar = Calendar.current
+        let midnights = (1...2).compactMap { calendar.date(byAdding: .day, value: $0, to: calendar.startOfDay(for: .now)) }
+        completion(Timeline(entries: [entry(at: .now)] + midnights.map(entry(at:)), policy: .atEnd))
+    }
+
+    private func entry(at date: Date) -> WatchDayEntry {
+        WatchDayEntry(date: date, quranDay: QuranProgress.day(date), quranGoal: QuranProgress.dailyGoal)
+    }
+}
+
+struct WatchHijriDateWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "WatchHijriDate", provider: WatchDayProvider()) { entry in
+            WatchHijriDateView(date: entry.date)
+        }
+        .configurationDisplayName("Hijri Date")
+        .description("Today's date in the Islamic calendar.")
+        .supportedFamilies([.accessoryInline, .accessoryRectangular, .accessoryCircular])
+    }
+}
+
+struct WatchHijriDateView: View {
+    @Environment(\.widgetFamily) private var family
+    let date: Date
+
+    var body: some View {
+        let hijri = HijriDate.string(for: date)
+        Group {
+            switch family {
+            case .accessoryInline:
+                Text(hijri)
+            case .accessoryCircular:
+                let day = HijriDate.day(for: date)
+                ZStack {
+                    AccessoryWidgetBackground()
+                    VStack(spacing: 0) {
+                        EightPointStar().frame(width: 10, height: 10).widgetAccentable()
+                        Text("\(day)").font(.system(size: 20, weight: .bold, design: .rounded))
+                    }
+                }
+            default:
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Hijri").font(.caption2.weight(.semibold)).widgetAccentable()
+                    Text(hijri).font(.headline).minimumScaleFactor(0.7).lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .containerBackground(for: .widget) { Color.clear }
+    }
+}
+
+// MARK: - Qur'an goal
+
+struct WatchQuranGoalWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "WatchQuranGoal", provider: WatchDayProvider()) { entry in
+            WatchQuranGoalView(entry: entry)
+        }
+        .configurationDisplayName("Qur'an Goal")
+        .description("Today's ayat towards your daily goal.")
+        .supportedFamilies([.accessoryCircular, .accessoryCorner, .accessoryInline])
+    }
+}
+
+struct WatchQuranGoalView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: WatchDayEntry
+
+    var body: some View {
+        let goal = max(entry.quranGoal ?? 0, 1)
+        let count = entry.quranDay.count
+        Group {
+            switch family {
+            case .accessoryInline:
+                Text(entry.quranGoal == nil ? "Qur'an goal" : "Qur'an \(count)/\(goal)")
+            case .accessoryCorner:
+                Image(systemName: "book.closed.fill")
+                    .font(.title3)
+                    .widgetAccentable()
+                    .widgetLabel {
+                        Gauge(value: Double(min(count, goal)), in: 0...Double(goal)) { Text("Qur'an") }
+                    }
+            default:
+                Gauge(value: Double(min(count, goal)), in: 0...Double(goal)) {
+                    Image(systemName: "book.closed.fill")
+                } currentValueLabel: {
+                    Text("\(count)").font(.system(size: 14, weight: .bold, design: .rounded))
+                }
+                .gaugeStyle(.accessoryCircularCapacity)
+                .widgetAccentable()
+            }
+        }
+        .containerBackground(for: .widget) { Color.clear }
     }
 }

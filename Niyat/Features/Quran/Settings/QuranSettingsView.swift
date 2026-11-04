@@ -16,6 +16,8 @@ struct QuranSettingsView: View {
     @AppStorage(QuranLineSpacing.key) private var lineHeight = QuranLineSpacing.standard
     @AppStorage(QuranTextWeight.key) private var textWeight = QuranTextWeight.regular.rawValue
     @AppStorage(ReciterWordSync.settingKey) private var wordSync = true
+    @AppStorage(ReadingRibbon.followsKey) private var ribbonFollows = true
+    @AppStorage("quran.mushafPage") private var mushafPage = 1
     @State private var speechStatus = SFSpeechRecognizer.authorizationStatus()
     @State private var speechOnDevice = SFSpeechRecognizer(locale: Locale(identifier: "ar-SA"))?.supportsOnDeviceRecognition ?? false
     @State private var showMushaf = false
@@ -30,6 +32,7 @@ struct QuranSettingsView: View {
                         Text("Verse by verse").tag("verses")
                     }
                     Button {
+                        if let ribbonPage = store.ribbonPage { mushafPage = ribbonPage }
                         showMushaf = true
                     } label: {
                         Label("Read by mushaf page", systemImage: "book.pages")
@@ -41,6 +44,16 @@ struct QuranSettingsView: View {
                     }
                 } footer: {
                     Text("Mushaf pages follow the 604 pages of the Madinah mushaf (Hafs), line for line: every page has the same 15 lines as the printed copy, drawn from Niyat's verified text.")
+                }
+
+                Section {
+                    Toggle("Move the ribbon as I read", isOn: $ribbonFollows)
+                } header: {
+                    Text("Ribbon")
+                } footer: {
+                    Text(ribbonFollows
+                         ? "The ribbon marks your place, like the one in a printed mushaf. It moves once you stay on a page or stop scrolling for a moment. Jumping somewhere (search, the page list, duas, following a recitation) leaves it where it is."
+                         : "The ribbon stays put until you move it: tap a verse, or the ribbon button on a mushaf page. Closing the mushaf asks whether to move it to the page you're on.")
                 }
 
                 Section {
@@ -99,7 +112,7 @@ struct QuranSettingsView: View {
                 } header: {
                     Text("Reading")
                 } footer: {
-                    Text("\(store.edition.riwayah.detail) Text source: \(store.edition.source) Bookmarks and your reading position carry over when you switch.")
+                    Text("\(store.edition.riwayah.detail) Text source: \(store.edition.source) Saved verses and your ribbon carry over when you switch.")
                 }
 
                 Section {

@@ -7,7 +7,7 @@ import DeviceActivity
 
 /// "Erase all data": puts Niyat back to how it was when first installed.
 ///
-/// Clears every setting, prayer log, Qur'an progress, bookmark, tasbih count
+/// Clears every setting, prayer log, Qur'an progress, ribbon, saved verse, tasbih count
 /// and theme stored on this device (both the app's own storage and the App
 /// Group shared with the widgets), removes pending notifications and stops
 /// Prayer Lock. The bundled Qur'an text is never touched.

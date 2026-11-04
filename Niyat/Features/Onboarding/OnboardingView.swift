@@ -73,8 +73,8 @@ struct OnboardingView: View {
             Text("Prayer times depend on where you are. Your location never leaves your device.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white.opacity(0.75))
-            LocationPickerView(locateTitle: "Continue") { location in
-                model.setLocation(location)
+            LocationPickerView(locateTitle: "Continue") { location, mode in
+                model.setLocation(location, mode: mode)
                 step = 2
             }
         }

@@ -34,8 +34,9 @@ struct LogPrayerIntent: AppIntent {
 
 struct PrayerDialWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "PrayerDialWidget", provider: PrayerProvider()) { entry in
-            PrayerDialWidgetView(entry: entry)
+        AppIntentConfiguration(kind: "PrayerDialWidget", intent: WidgetStyleIntent.self,
+                                       provider: StyledProvider(base: PrayerProvider())) { entry in
+            PrayerDialWidgetView(entry: entry.base).widgetStyle(entry.style)
         }
         .configurationDisplayName("Prayer Dial")
         .description("Today's prayers around a 24-hour dial, with the next one in the middle.")
@@ -44,6 +45,7 @@ struct PrayerDialWidget: Widget {
 }
 
 struct PrayerDialWidgetView: View {
+    @Environment(\.widgetLook) private var look
     @Environment(\.widgetFamily) private var family
     let entry: PrayerEntry
 
@@ -55,41 +57,42 @@ struct PrayerDialWidgetView: View {
                     let radius = side / 2 - (family == .systemLarge ? 22 : 12)
                     let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
                     ZStack {
-                        Circle().stroke(.white.opacity(0.1), lineWidth: family == .systemLarge ? 12 : 7)
+                        Circle().stroke(Color.primary.opacity(0.1), lineWidth: family == .systemLarge ? 12 : 7)
                             .frame(width: radius * 2, height: radius * 2)
                         if let sunrise = schedule.time(for: .sunrise), let maghrib = schedule.time(for: .maghrib) {
                             Circle()
                                 .trim(from: fraction(sunrise.date, schedule), to: fraction(maghrib.date, schedule))
                                 .rotation(.degrees(90))
-                                .stroke(Palette.highlight.opacity(0.45),
+                                .stroke(look.accent.opacity(0.45),
                                         style: StrokeStyle(lineWidth: family == .systemLarge ? 12 : 7, lineCap: .round))
                                 .frame(width: radius * 2, height: radius * 2)
                         }
                         ForEach(schedule.times) { time in
                             let record = entry.record(for: time.name)
                             Circle()
-                                .fill(record?.status.color ?? (time.id == entry.next?.id ? Palette.highlight : Palette.base))
-                                .overlay(Circle().stroke(.white.opacity(0.6), lineWidth: 1))
+                                .fill(record?.status.color ?? (time.id == entry.next?.id ? look.accent : look.surface))
+                                .overlay(Circle().stroke(Color.primary.opacity(0.6), lineWidth: 1))
                                 .frame(width: dotSize(time), height: dotSize(time))
                                 .position(point(fraction(time.date, schedule), radius: radius, center: center))
                         }
                         Image(systemName: "sun.max.fill")
                             .font(.system(size: family == .systemLarge ? 16 : 10, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.primary)
                             .position(point(fraction(entry.date, schedule), radius: radius, center: center))
                             .opacity(0.9)
                         if let next = entry.next {
                             VStack(spacing: 0) {
                                 Text(next.name.arabicName)
                                     .font(.calligraphy(size: family == .systemLarge ? 34 : 18))
-                                    .foregroundStyle(Palette.highlight)
+                                    .foregroundStyle(look.accent)
+                                    .widgetAccentable()
                                 Text(next.date.shortTime)
                                     .font(.system(size: family == .systemLarge ? 34 : 17, weight: .heavy, design: .rounded))
                                     .minimumScaleFactor(0.6)
                                     .lineLimit(1)
                                 Text(next.date, style: .relative)
                                     .font(.system(size: family == .systemLarge ? 14 : 9, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.7))
+                                    .foregroundStyle(.secondary)
                                     .multilineTextAlignment(.center)
                             }
                             .frame(width: radius * 1.4)
@@ -97,13 +100,13 @@ struct PrayerDialWidgetView: View {
                         }
                     }
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
             } else {
-                NoLocationView().foregroundStyle(.white)
+                NoLocationView().foregroundStyle(.primary)
             }
         }
         .fontDesign(.rounded)
-        .containerBackground(for: .widget) { WidgetBackground() }
+        .widgetBackground { WidgetBackground() }
     }
 
     private func dotSize(_ time: PrayerTime) -> CGFloat {
@@ -158,7 +161,7 @@ struct CountdownRingView: View {
             }
         }
         .fontDesign(.rounded)
-        .containerBackground(for: .widget) { Color.clear }
+        .widgetBackground { Color.clear }
     }
 }
 
@@ -166,8 +169,9 @@ struct CountdownRingView: View {
 
 struct PrayerLogWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "PrayerLogWidget", provider: PrayerProvider()) { entry in
-            PrayerLogWidgetView(entry: entry)
+        AppIntentConfiguration(kind: "PrayerLogWidget", intent: WidgetStyleIntent.self,
+                                       provider: StyledProvider(base: PrayerProvider())) { entry in
+            PrayerLogWidgetView(entry: entry.base).widgetStyle(entry.style)
         }
         .configurationDisplayName("Prayer Log")
         .description("Tap a prayer to log it, right from your Home Screen.")
@@ -176,6 +180,7 @@ struct PrayerLogWidget: Widget {
 }
 
 struct PrayerLogWidgetView: View {
+    @Environment(\.widgetLook) private var look
     let entry: PrayerEntry
 
     var body: some View {
@@ -186,7 +191,7 @@ struct PrayerLogWidgetView: View {
                         Text("Today's prayers").font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(.secondary)
                         Spacer()
                         let count = PrayerName.obligatory.filter { entry.record(for: $0)?.status.countsAsPrayed ?? false }.count
-                        Text("\(count)/5").font(.caption.weight(.heavy)).foregroundStyle(Palette.highlight)
+                        Text("\(count)/5").font(.caption.weight(.heavy)).foregroundStyle(look.accent).widgetAccentable()
                     }
                     HStack(spacing: 6) {
                         ForEach(PrayerName.obligatory) { prayer in
@@ -196,13 +201,13 @@ struct PrayerLogWidgetView: View {
                         }
                     }
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
             } else {
-                NoLocationView().foregroundStyle(.white)
+                NoLocationView().foregroundStyle(.primary)
             }
         }
         .fontDesign(.rounded)
-        .containerBackground(for: .widget) { WidgetBackground() }
+        .widgetBackground { WidgetBackground() }
     }
 
     @ViewBuilder
@@ -212,20 +217,20 @@ struct PrayerLogWidgetView: View {
         let content = VStack(spacing: 4) {
             Image(systemName: record?.status.symbolName ?? (started ? "circle" : time.name.symbolName))
                 .font(.title3)
-                .foregroundStyle(record?.status.color ?? (started ? .white : .white.opacity(0.4)))
+                .foregroundStyle(record?.status.color ?? (started ? Color.primary : Color.primary.opacity(0.4)))
             Text(time.name.displayName(on: time.date))
                 .font(.caption2.weight(.bold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(time.date.shortTime)
                 .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
-        .background(.white.opacity(started && record == nil ? 0.12 : 0.05), in: .rect(cornerRadius: 12))
+        .background(Color.primary.opacity(started && record == nil ? 0.12 : 0.05), in: .rect(cornerRadius: 12))
 
         if started, record == nil {
             Button(intent: LogPrayerIntent(prayer: time.name, dayKey: PrayerLog.dayKey(for: day))) { content }
@@ -240,8 +245,9 @@ struct PrayerLogWidgetView: View {
 
 struct StreakWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "StreakWidget", provider: PrayerProvider()) { entry in
-            StreakWidgetView(entry: entry)
+        AppIntentConfiguration(kind: "StreakWidget", intent: WidgetStyleIntent.self,
+                                       provider: StyledProvider(base: PrayerProvider())) { entry in
+            StreakWidgetView(entry: entry.base).widgetStyle(entry.style)
         }
         .configurationDisplayName("Streaks")
         .description("Your prayer and Qur'an streaks.")
@@ -250,6 +256,7 @@ struct StreakWidget: Widget {
 }
 
 struct StreakWidgetView: View {
+    @Environment(\.widgetLook) private var look
     @Environment(\.widgetFamily) private var family
     let entry: PrayerEntry
 
@@ -273,9 +280,9 @@ struct StreakWidgetView: View {
                 streaks.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(.primary)
         .fontDesign(.rounded)
-        .containerBackground(for: .widget) {
+        .widgetBackground {
             if family == .accessoryRectangular { Color.clear } else { WidgetBackground() }
         }
     }
@@ -291,8 +298,8 @@ struct StreakWidgetView: View {
     private func streakRow(value: Int, label: String, symbol: String) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Image(systemName: "flame.fill").foregroundStyle(Palette.highlight).font(.caption)
-                Text("\(value)").font(.system(size: 30, weight: .heavy, design: .rounded))
+                Image(systemName: "flame.fill").foregroundStyle(look.accent).font(.caption)
+                Text("\(value)").font(.system(size: 30, weight: .heavy, design: .rounded)).widgetAccentable()
                 Text(value == 1 ? "day" : "days").font(.caption).foregroundStyle(.secondary)
             }
             Label(label, systemImage: symbol).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
@@ -308,9 +315,9 @@ struct StreakWidgetView: View {
                 let count = PrayerName.obligatory.filter { entry.records[PrayerLog.key($0, on: day)]?.status.countsAsPrayed ?? false }.count
                 VStack(spacing: 4) {
                     ZStack {
-                        EightPointStar().fill(count == 5 ? Palette.highlight : Color.white.opacity(0.08))
+                        EightPointStar().fill(count == 5 ? look.accent : Color.primary.opacity(0.08))
                         EightPointStar().trim(from: 0, to: CGFloat(count) / 5)
-                            .stroke(Palette.accent, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                            .stroke(look.secondaryAccent, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
                     }
                     .frame(width: 18, height: 18)
                     Text(day.formatted(.dateTime.weekday(.narrow))).font(.system(size: 9)).foregroundStyle(.secondary)
@@ -324,8 +331,9 @@ struct StreakWidgetView: View {
 
 struct QuranGoalWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "QuranGoalWidget", provider: PrayerProvider()) { entry in
-            QuranGoalWidgetView(entry: entry)
+        AppIntentConfiguration(kind: "QuranGoalWidget", intent: WidgetStyleIntent.self,
+                                       provider: StyledProvider(base: PrayerProvider())) { entry in
+            QuranGoalWidgetView(entry: entry.base).widgetStyle(entry.style)
         }
         .configurationDisplayName("Qur'an Goal")
         .description("Today's ayat towards your daily Qur'an goal. Tap to keep reading.")
@@ -334,6 +342,7 @@ struct QuranGoalWidget: Widget {
 }
 
 struct QuranGoalWidgetView: View {
+    @Environment(\.widgetLook) private var look
     @Environment(\.widgetFamily) private var family
     let entry: PrayerEntry
 
@@ -364,28 +373,28 @@ struct QuranGoalWidgetView: View {
             default:
                 VStack(spacing: 8) {
                     ZStack {
-                        Circle().stroke(.white.opacity(0.1), lineWidth: 8)
+                        Circle().stroke(Color.primary.opacity(0.1), lineWidth: 8)
                         Circle()
                             .trim(from: 0, to: progress)
-                            .stroke(entry.quranToday.isComplete ? Palette.highlight : Palette.accent,
+                            .stroke(entry.quranToday.isComplete ? look.accent : look.secondaryAccent,
                                     style: StrokeStyle(lineWidth: 8, lineCap: .round))
                             .rotationEffect(.degrees(-90))
                         VStack(spacing: 0) {
-                            Text("\(entry.quranToday.count)").font(.system(size: 26, weight: .heavy, design: .rounded))
+                            Text("\(entry.quranToday.count)").font(.system(size: 26, weight: .heavy, design: .rounded)).widgetAccentable()
                             Text(entry.quranGoal.map { "of \($0)" } ?? "ayat").font(.caption2).foregroundStyle(.secondary)
                         }
                     }
                     .frame(width: 86, height: 86)
                     Text(entry.quranToday.isComplete ? "Goal complete ✓" : "Qur'an today")
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(entry.quranToday.isComplete ? Palette.highlight : .white)
+                        .foregroundStyle(entry.quranToday.isComplete ? look.accent : Color.primary)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
             }
         }
         .widgetURL(URL(string: "niyat://quran"))
         .fontDesign(.rounded)
-        .containerBackground(for: .widget) {
+        .widgetBackground {
             if family == .systemSmall { WidgetBackground() } else { Color.clear }
         }
     }
@@ -395,8 +404,9 @@ struct QuranGoalWidgetView: View {
 
 struct HijriDateWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "HijriDateWidget", provider: VerseProvider()) { entry in
-            HijriDateWidgetView(date: entry.date)
+        AppIntentConfiguration(kind: "HijriDateWidget", intent: WidgetStyleIntent.self,
+                                       provider: StyledProvider(base: VerseProvider())) { entry in
+            HijriDateWidgetView(date: entry.date).widgetStyle(entry.style)
         }
         .configurationDisplayName("Hijri Date")
         .description("Today's Islamic date.")
@@ -405,6 +415,7 @@ struct HijriDateWidget: Widget {
 }
 
 struct HijriDateWidgetView: View {
+    @Environment(\.widgetLook) private var look
     @Environment(\.widgetFamily) private var family
     let date: Date
 
@@ -423,10 +434,11 @@ struct HijriDateWidgetView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             default:
                 VStack(spacing: 6) {
-                    EightPointStar().fill(Palette.highlight).frame(width: 18, height: 18)
+                    EightPointStar().fill(look.accent).frame(width: 18, height: 18)
                     Text(HijriDate.string(for: date, locale: Locale(identifier: "ar")))
                         .font(.calligraphy(size: 22))
-                        .foregroundStyle(Palette.highlight)
+                        .foregroundStyle(look.accent)
+                        .widgetAccentable()
                         .multilineTextAlignment(.center)
                         .minimumScaleFactor(0.6)
                     Text(HijriDate.string(for: date))
@@ -436,11 +448,11 @@ struct HijriDateWidgetView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
             }
         }
         .fontDesign(.rounded)
-        .containerBackground(for: .widget) {
+        .widgetBackground {
             if family == .systemSmall { WidgetBackground() } else { Color.clear }
         }
     }

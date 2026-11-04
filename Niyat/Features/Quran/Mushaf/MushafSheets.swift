@@ -6,10 +6,12 @@ struct MushafVerseActions: View {
     let verse: Verse
     let showTranslation: Bool
     let canPlay: Bool
-    let isBookmarked: Bool
+    let isSaved: Bool
+    let hasRibbon: Bool
     let onPlayFromHere: () -> Void
     let onPlayVerse: () -> Void
-    let onBookmark: () -> Void
+    let onRibbon: () -> Void
+    let onSave: () -> Void
     let onClose: () -> Void
     @State private var copied = false
 
@@ -39,13 +41,16 @@ struct MushafVerseActions: View {
                     action("Play from here", "play.fill", onPlayFromHere)
                     action("This verse", "repeat.1", onPlayVerse)
                 }
-                action(isBookmarked ? "Saved" : "Bookmark", isBookmarked ? "bookmark.fill" : "bookmark", onBookmark)
+                action(hasRibbon ? "Ribbon here" : "Ribbon", hasRibbon ? "bookmark.fill" : "bookmark", onRibbon)
+                    .disabled(hasRibbon)
+                action(isSaved ? "Saved" : "Save", isSaved ? "star.fill" : "star", onSave)
                 action(copied ? "Copied" : "Copy", copied ? "checkmark" : "doc.on.doc") {
                     UIPasteboard.general.string = "\(verse.arabic)\n\n\(verse.translation)\n— Qur'an \(verse.surah):\(verse.number)"
                     copied = true
                 }
             }
-            .haptic(.impact(weight: .light), trigger: isBookmarked)
+            .haptic(.impact(weight: .light), trigger: isSaved)
+            .haptic(.impact(weight: .medium), trigger: hasRibbon)
             .haptic(.success, trigger: copied)
         }
         .foregroundStyle(.white)
@@ -89,6 +94,18 @@ struct MushafOptionsSheet: View {
                         }
                     }
                     .padding(.vertical, 4)
+                }
+
+                Section {
+                    Picker("Turning pages", selection: $options.pageTurn) {
+                        ForEach(MushafOptions.PageTurn.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    Toggle("Two pages side by side", isOn: $options.twoPages)
+                } header: {
+                    Text("Pages")
+                } footer: {
+                    Text("Pages turn right to left, like a printed mushaf. With Reduce Motion on (Settings › Accessibility), they slide instead. Two facing pages show when the screen is wide enough, such as an iPad turned sideways.")
                 }
 
                 Section {

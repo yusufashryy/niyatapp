@@ -5,8 +5,9 @@ import WidgetKit
 /// two-column version for the Lock Screen.
 struct PrayerTimesWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "PrayerTimesWidget", provider: PrayerProvider()) { entry in
-            PrayerTimesView(entry: entry)
+        AppIntentConfiguration(kind: "PrayerTimesWidget", intent: WidgetStyleIntent.self,
+                                       provider: StyledProvider(base: PrayerProvider())) { entry in
+            PrayerTimesView(entry: entry.base).widgetStyle(entry.style)
         }
         .configurationDisplayName("Prayer Times")
         .description("All of today's prayer times.")
@@ -15,6 +16,7 @@ struct PrayerTimesWidget: Widget {
 }
 
 struct PrayerTimesView: View {
+    @Environment(\.widgetLook) private var look
     @Environment(\.widgetFamily) private var family
     let entry: PrayerEntry
 
@@ -27,11 +29,11 @@ struct PrayerTimesView: View {
                 default: medium(schedule)
                 }
             } else {
-                NoLocationView().foregroundStyle(.white)
+                NoLocationView().foregroundStyle(.primary)
             }
         }
         .fontDesign(.rounded)
-        .containerBackground(for: .widget) {
+        .widgetBackground {
             if family == .accessoryRectangular { Color.clear } else { WidgetBackground() }
         }
     }
@@ -71,17 +73,18 @@ struct PrayerTimesView: View {
                 if let next = entry.next {
                     Text("Next")
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(.secondary)
                     Text(next.name.displayName(on: next.date))
                         .font(.title3.bold())
-                        .foregroundStyle(Palette.highlight)
+                        .foregroundStyle(look.accent)
+                        .widgetAccentable()
                     Text(next.date, style: .relative)
                         .font(.caption)
                 }
                 Spacer(minLength: 0)
                 Text(HijriDate.string(for: entry.date))
                     .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -93,7 +96,7 @@ struct PrayerTimesView: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(.primary)
     }
 
     private func large(_ schedule: DaySchedule) -> some View {
@@ -104,26 +107,27 @@ struct PrayerTimesView: View {
                         .font(.headline)
                     Text(HijriDate.string(for: entry.date))
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
                 if let next = entry.next {
                     VStack(alignment: .trailing) {
                         Text(next.name.displayName(on: next.date))
                             .font(.headline)
-                            .foregroundStyle(Palette.highlight)
+                            .foregroundStyle(look.accent)
+                            .widgetAccentable()
                         Text(next.date, style: .relative).font(.caption)
                     }
                 }
             }
-            Divider().overlay(.white.opacity(0.3))
+            Divider()
             ForEach(schedule.times) { time in
                 row(time, showIcon: true)
                     .font(.body)
             }
             Spacer(minLength: 0)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(.primary)
     }
 
     private func row(_ time: PrayerTime, showIcon: Bool = false) -> some View {
@@ -132,7 +136,8 @@ struct PrayerTimesView: View {
             if showIcon {
                 Image(systemName: time.name.symbolName)
                     .frame(width: 24)
-                    .foregroundStyle(Palette.highlight)
+                    .foregroundStyle(look.accent)
+                    .widgetAccentable()
             }
             Text(time.name.displayName(on: time.date))
             Spacer()
@@ -141,12 +146,12 @@ struct PrayerTimesView: View {
         .font(.caption.weight(isNext ? .bold : .regular))
         .padding(.horizontal, 8)
         .padding(.vertical, showIcon ? 6 : 2)
-        .background(isNext ? Palette.accent.opacity(0.25) : .clear, in: .rect(cornerRadius: 6))
+        .background(isNext ? look.secondaryAccent.opacity(0.25) : .clear, in: .rect(cornerRadius: 6))
     }
 }
 
 #Preview(as: .systemMedium) {
     PrayerTimesWidget()
 } timeline: {
-    PrayerEntry.preview
+    StyledEntry(base: PrayerEntry.preview, style: .theme)
 }

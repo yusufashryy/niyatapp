@@ -3,7 +3,13 @@ import SwiftUI
 struct SurahListView: View {
     @State private var store = QuranStore.shared
     @State private var searchText = ""
-    @State private var path: [ReaderDestination] = []
+    /// The surah open in the reader, kept per window through folding, unfolding
+    /// and the app closing in the background ("" when none).
+    @SceneStorage("quran.openSurah") private var openSurah = ""
+    /// On a narrow screen (iPhone, iPhone Duo closed) the list and the reader
+    /// share one stack; this says which shows.
+    @State private var compactColumn = NavigationSplitViewColumn.sidebar
+    @State private var restored = false
     @State private var goal = QuranGoalModel.shared
     @State private var deepLink = DeepLink.shared
     @State private var showSettings = false
@@ -15,7 +21,9 @@ struct SurahListView: View {
     @AppStorage("quran.mushafPage") private var mushafPage = 1
 
     var body: some View {
-        NavigationStack(path: $path) {
+        // The list beside the reader when there's room (iPhone Duo open, iPad);
+        // one stack, as before, when there isn't.
+        NavigationSplitView(preferredCompactColumn: $compactColumn) {
             Group {
                 if let error = store.loadError {
                     ContentUnavailableView("Quran unavailable", systemImage: "exclamationmark.triangle", description: Text(error))
@@ -28,13 +36,12 @@ struct SurahListView: View {
             }
             .niyatBackground()
             .navigationTitle("Quran")
-            .navigationDestination(for: ReaderDestination.self) { destination in
-                SurahReaderView(surahID: destination.surah, startVerse: destination.verse)
-            }
+            // Wide enough for the Duas and Mushaf tiles side by side.
+            .navigationSplitViewColumnWidth(min: 340, ideal: 380, max: 440)
             .searchable(text: $searchText, prompt: "Surah name or number")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showMushaf = true } label: { Image(systemName: "book.pages") }
+                    Button { openMushafAtRibbon() } label: { Image(systemName: "book.pages") }
                         .accessibilityLabel("Mushaf pages")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -54,19 +61,44 @@ struct SurahListView: View {
             .fullScreenCover(isPresented: $showMushaf) { MushafPageView() }
             .task { await store.load() }
             .onAppear { goal.refresh() }
-            // A Qur'an reminder was tapped: go straight to where you left off.
+            // A Qur'an reminder was tapped: go straight to the ribbon.
             .onChange(of: deepLink.pending, initial: true) { _, destination in
                 let target: VerseReference
                 switch destination {
-                case .quranContinueReading: target = store.lastRead ?? VerseReference(surah: 1, verse: 1)
+                case .quranContinueReading: target = store.ribbon ?? VerseReference(surah: 1, verse: 1)
                 case .quranVerse(let surah, let verse): target = VerseReference(surah: surah, verse: verse)
                 case nil: return
                 }
                 deepLink.pending = nil
-                path = []
                 open(ReaderDestination(surah: target.surah, verse: target.verse))
             }
+        } detail: {
+            if let destination = ReaderDestination(storageKey: openSurah) {
+                NavigationStack {
+                    SurahReaderView(surahID: destination.surah, startVerse: destination.verse)
+                        .id(destination)
+                }
+            } else {
+                ContentUnavailableView("Choose a surah", systemImage: "book.pages",
+                                       description: Text("It opens here, beside the list."))
+                    .niyatBackground()
+            }
         }
+        // Shares the width between the list and the reader rather than sliding over it.
+        .navigationSplitViewStyle(.balanced)
+        // The window reopened with a surah open (e.g. after the app was closed
+        // in the background): bring the reader back in front, once.
+        .onAppear {
+            guard !restored else { return }
+            restored = true
+            if ReaderDestination(storageKey: openSurah) != nil { compactColumn = .detail }
+        }
+    }
+
+    /// Opens the mushaf at the ribbon's page (or wherever it was last left).
+    private func openMushafAtRibbon() {
+        if let ribbonPage = store.ribbonPage { mushafPage = ribbonPage }
+        showMushaf = true
     }
 
     /// Opens a surah or verse in the chosen reading layout.
@@ -75,7 +107,8 @@ struct SurahListView: View {
             mushafPage = store.page(containing: VerseReference(surah: destination.surah, verse: destination.verse ?? 1))
             showMushaf = true
         } else {
-            path.append(destination)
+            openSurah = destination.storageKey
+            compactColumn = .detail
         }
     }
 
@@ -97,9 +130,9 @@ struct SurahListView: View {
                     QuranGoalCard { showGoal = true }
                         .appearAnimation(0)
                 }
-                if searchText.isEmpty, let lastRead = store.lastRead, let surah = store.surah(lastRead.surah) {
-                    Button { open(ReaderDestination(surah: surah.id, verse: lastRead.verse)) } label: {
-                        ContinueReadingCard(surah: surah, verse: lastRead.verse)
+                if searchText.isEmpty, let ribbon = store.ribbon, let surah = store.surah(ribbon.surah) {
+                    Button { open(ReaderDestination(surah: surah.id, verse: ribbon.verse)) } label: {
+                        ContinueReadingCard(surah: surah, verse: ribbon.verse)
                     }
                     .buttonStyle(.pressable)
                     .appearAnimation(0)
@@ -115,7 +148,7 @@ struct SurahListView: View {
                             QuranToolTile(title: "Duas", subtitle: "From the Qur'an", icon: "hands.and.sparkles.fill")
                         }
                         .buttonStyle(.pressable)
-                        Button { showMushaf = true } label: {
+                        Button { openMushafAtRibbon() } label: {
                             QuranToolTile(title: "Mushaf", subtitle: "15-line pages", icon: "book.pages.fill")
                         }
                         .buttonStyle(.pressable)
@@ -124,14 +157,14 @@ struct SurahListView: View {
                 }
 
                 if searchText.isEmpty, !store.bookmarks.isEmpty {
-                    Text("Bookmarks").sectionLabelStyle().padding(.top, 8)
+                    Text("Saved verses").sectionLabelStyle().padding(.top, 8)
                     ScrollView(.horizontal, showsIndicators: false) {
                         GlassEffectContainer(spacing: 8) {
                             HStack(spacing: 8) {
                                 ForEach(store.bookmarks) { bookmark in
                                     if let surah = store.surah(bookmark.surah) {
                                         Button { open(ReaderDestination(surah: surah.id, verse: bookmark.verse)) } label: {
-                                            Label("\(surah.transliteration) \(bookmark.surah):\(bookmark.verse)", systemImage: "bookmark.fill")
+                                            Label("\(surah.transliteration) \(bookmark.surah):\(bookmark.verse)", systemImage: "star.fill")
                                                 .font(.subheadline.weight(.semibold))
                                                 .padding(.horizontal, 14)
                                                 .padding(.vertical, 10)
@@ -139,7 +172,7 @@ struct SurahListView: View {
                                         }
                                         .buttonStyle(.pressable)
                                         .contextMenu {
-                                            Button("Remove bookmark", systemImage: "bookmark.slash", role: .destructive) {
+                                            Button("Remove from saved verses", systemImage: "star.slash", role: .destructive) {
                                                 if let index = store.bookmarks.firstIndex(of: bookmark) {
                                                     store.removeBookmarks(atOffsets: IndexSet(integer: index))
                                                 }
@@ -177,15 +210,26 @@ struct ReaderDestination: Hashable {
     let verse: Int?
 }
 
+extension ReaderDestination {
+    /// "18:16", or "2" for a surah from its start: how the open surah is kept
+    /// in scene storage, so it survives folding an iPhone Duo.
+    var storageKey: String { verse.map { "\(surah):\($0)" } ?? "\(surah)" }
+
+    init?(storageKey: String) {
+        let parts = storageKey.split(separator: ":").map { Int($0) }
+        guard let surah = parts.first ?? nil, (1...114).contains(surah) else { return nil }
+        self.init(surah: surah, verse: parts.count > 1 ? parts[1] : nil)
+    }
+}
+
 private struct ContinueReadingCard: View {
     let surah: Surah
     let verse: Int
 
     var body: some View {
         HStack(spacing: 16) {
-            Image(systemName: "book.pages.fill")
-                .font(.title2)
-                .foregroundStyle(Palette.highlight)
+            RibbonMark(color: Palette.highlight, starColor: Palette.base)
+                .frame(width: 20, height: 38)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Continue reading")
                     .sectionLabelStyle()
@@ -325,7 +369,7 @@ private struct QuranToolTile: View {
                 .foregroundStyle(Palette.highlight)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline)
+                Text(title).font(.headline).lineLimit(1).minimumScaleFactor(0.8)
                 Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 0)

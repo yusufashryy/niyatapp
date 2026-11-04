@@ -4,7 +4,7 @@ import UIKit
 struct SurahReaderView: View {
     /// The surah shown. Live recitation can move it to another surah.
     @State private var surahID: Int
-    /// Hafs verse number to open at (from bookmarks or "continue reading").
+    /// Hafs verse number to open at (from saved verses or "continue reading").
     let startVerse: Int?
 
     init(surahID: Int, startVerse: Int?) {
@@ -24,6 +24,7 @@ struct SurahReaderView: View {
     @AppStorage("quran.tajweed") private var tajweedOn = true
     @AppStorage(QuranLineSpacing.key) private var lineHeight = QuranLineSpacing.standard
     @AppStorage(QuranTextWeight.key) private var textWeight = QuranTextWeight.regular.rawValue
+    @AppStorage(ReadingRibbon.followsKey) private var ribbonFollows = true
     @State private var tajweedStore = TajweedStore.shared
     @State private var didScroll = false
     @State private var showSettings = false
@@ -32,6 +33,11 @@ struct SurahReaderView: View {
     @State private var showIntro = false
     /// Verses currently on screen, for counting what's actually read.
     @State private var visibleVerses: Set<Int> = []
+    /// Verses at least half on screen, by Verse.id, for placing the ribbon.
+    @State private var onScreen: [Int] = []
+    /// You scrolled by hand since the ribbon last moved.
+    @State private var scrolledByReader = false
+    @State private var ribbonTask: Task<Void, Never>?
     /// Where the list is scrolled to, by Verse.id (0 = the Bismillah).
     @State private var position = ScrollPosition(idType: Int.self)
     private static let bismillahID = 0
@@ -69,16 +75,17 @@ struct SurahReaderView: View {
                         VerseCard(verse: verse, words: QuranWords.shared.words(for: verse, edition: store.edition),
                                   style: textStyle(size: arabicSize, ink: .white),
                                   showTranslation: showTranslation,
-                                  isBookmarked: store.isBookmarked(verse),
+                                  isSaved: store.isBookmarked(verse),
+                                  hasRibbon: store.hasRibbon(verse),
                                   isReciting: player.current == .verse(surah: surahID, verse: verse.number),
                                   showsPlay: audioAvailable,
-                                  onPlay: { play(from: verse.number) }) {
+                                  onPlay: { play(from: verse.number) },
+                                  onPlaceRibbon: { withAnimation(.smooth) { store.moveRibbon(to: verse) } }) {
                             store.toggleBookmark(verse)
                         }
                         .id(verse.id)
                         .scrollFade()
                         .onAppear {
-                            store.markRead(verse)
                             visibleVerses.insert(verse.id)
                             countWhenRead(verse)
                         }
@@ -92,6 +99,8 @@ struct SurahReaderView: View {
                 .readableWidth(820)
             }
             .scrollPosition($position, anchor: .center)
+            .onScrollTargetVisibilityChange(idType: Int.self, threshold: 0.5) { onScreen = $0 }
+            .onScrollPhaseChange { _, phase in scrollPhaseChanged(to: phase) }
             .onAppear {
                 guard !didScroll else { return }
                 didScroll = true
@@ -220,9 +229,30 @@ struct SurahReaderView: View {
             live.stop()
             live.clearReview()
             highlights.setHidden(false)
+            ribbonTask?.cancel()
             UIApplication.shared.isIdleTimerDisabled = false
             // Update the afternoon reminder with today's remaining ayat.
             model.refresh()
+        }
+    }
+
+    /// The ribbon follows you once you've scrolled somewhere yourself and
+    /// stayed there. Scrolling done for you (opening at a verse, following a
+    /// recitation) doesn't count.
+    private func scrollPhaseChanged(to phase: ScrollPhase) {
+        ribbonTask?.cancel()
+        switch phase {
+        case .interacting: scrolledByReader = true
+        case .animating: scrolledByReader = false
+        default: break
+        }
+        guard phase == .idle, ReadingRibbon.shouldMove(follows: ribbonFollows, movedByReader: scrolledByReader) else { return }
+        ribbonTask = Task {
+            try? await Task.sleep(for: ReadingRibbon.readerDwell)
+            guard !Task.isCancelled, let top = onScreen.filter({ $0 != Self.bismillahID }).min(),
+                  let verse = store.verses(for: surahID).first(where: { $0.id == top }) else { return }
+            scrolledByReader = false
+            withAnimation(.smooth) { store.moveRibbon(to: verse) }
         }
     }
 
@@ -315,7 +345,7 @@ struct SurahReaderView: View {
     private func startListening() {
         let verses = store.verses(for: surahID)
         let words = verses.map { QuranWords.shared.words(for: $0, edition: store.edition) }
-        let top = visibleVerses.min() ?? store.lastRead.flatMap { $0.surah == surahID ? surahID * 1000 + $0.verse : nil }
+        let top = visibleVerses.min() ?? store.ribbon.flatMap { $0.surah == surahID ? surahID * 1000 + $0.verse : nil }
         var start = 0
         if let top {
             for (verse, verseWords) in zip(verses, words) {
@@ -417,11 +447,13 @@ private struct VerseCard: View {
     let words: VerseWords
     let style: QuranTextStyle
     let showTranslation: Bool
-    let isBookmarked: Bool
+    let isSaved: Bool
+    let hasRibbon: Bool
     let isReciting: Bool
     let showsPlay: Bool
     let onPlay: () -> Void
-    let onToggleBookmark: () -> Void
+    let onPlaceRibbon: () -> Void
+    let onToggleSaved: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -450,17 +482,17 @@ private struct VerseCard: View {
                     .buttonStyle(.pressable)
                     .accessibilityLabel("Play verse \(verse.number)")
                 }
-                Button(action: onToggleBookmark) {
-                    Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
+                Button(action: onToggleSaved) {
+                    Image(systemName: isSaved ? "star.fill" : "star")
                         .font(.subheadline)
-                        .foregroundStyle(isBookmarked ? Palette.highlight : Color.secondary)
+                        .foregroundStyle(isSaved ? Palette.highlight : Color.secondary)
                         .contentTransition(.symbolEffect(.replace))
-                        .symbolEffect(.bounce, value: isBookmarked)
+                        .symbolEffect(.bounce, value: isSaved)
                         .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.pressable)
-                .haptic(.impact(weight: .medium), trigger: isBookmarked)
-                .accessibilityLabel(isBookmarked ? "Remove bookmark" : "Bookmark")
+                .haptic(.impact(weight: .medium), trigger: isSaved)
+                .accessibilityLabel(isSaved ? "Remove from saved verses" : "Save verse")
             }
 
             QuranTextView(pieces: [QuranTextPiece(verse: words)], style: style)
@@ -479,13 +511,27 @@ private struct VerseCard: View {
                 .strokeBorder(Palette.accent.opacity(isReciting ? 0.8 : 0), lineWidth: 1.5)
         }
         .shadow(color: Palette.accent.opacity(isReciting ? 0.35 : 0), radius: 12)
+        // The ribbon hangs from the top of the verse it marks, between the
+        // verse number and the buttons.
+        .overlay(alignment: .top) {
+            if hasRibbon {
+                RibbonMark(color: Palette.highlight, starColor: Palette.base)
+                    .frame(width: 16, height: 30)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .accessibilityElement()
+                    .accessibilityLabel("Your ribbon is here")
+            }
+        }
         .animation(.smooth(duration: 0.4), value: isReciting)
         .contextMenu {
             if showsPlay {
                 Button("Play from here", systemImage: "play.fill") { onPlay() }
             }
-            Button(isBookmarked ? "Remove bookmark" : "Bookmark",
-                   systemImage: isBookmarked ? "bookmark.slash" : "bookmark") { onToggleBookmark() }
+            if !hasRibbon {
+                Button("Move the ribbon here", systemImage: "bookmark") { onPlaceRibbon() }
+            }
+            Button(isSaved ? "Remove from saved verses" : "Save verse",
+                   systemImage: isSaved ? "star.slash" : "star") { onToggleSaved() }
             Button("Copy", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = "\(verse.arabic)\n\n\(verse.translation)\n— Qur'an \(verse.surah):\(verse.number)"
             }

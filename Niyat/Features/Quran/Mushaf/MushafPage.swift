@@ -12,6 +12,13 @@ struct MushafPage: View {
     let highContrast: Bool
     var textSize = MushafOptions.TextSize.standard
     var weight: CGFloat = 0
+    /// The reading ribbon lies in this page.
+    var hasRibbon = false
+    var placement = MushafBook.Placement.single
+    /// The page was zoomed in (true) or back to fit (false).
+    var onZoomChange: (Bool) -> Void = { _ in }
+    /// The page number was tapped (opens the scrubber).
+    var onPageNumber: () -> Void = {}
     /// A word was tapped (nil: outside the text), and on which line.
     let onTap: (WordID?, Int) -> Void
 
@@ -47,14 +54,14 @@ struct MushafPage: View {
         .onChange(of: isCurrent) { _, current in
             if !current { resetZoom() }
         }
+        .onChange(of: zoom > 1) { _, zoomed in onZoomChange(zoomed) }
         .onChange(of: isCurrent, initial: true) { _, current in
             readTask?.cancel()
             let verses = store.verses(onPage: number)
             guard current, !verses.isEmpty else { return }
-            store.markRead(verses[0])
             // Count the page towards today's goal once it has stayed open long
-            // enough to actually be read (about 1.5 s per verse, 4–20 s).
-            let dwell = min(max(Double(verses.count) * 1.5, 4), 20)
+            // enough to actually be read.
+            let dwell = ReadingRibbon.pageDwell(verseCount: verses.count)
             readTask = Task {
                 try? await Task.sleep(for: .seconds(dwell))
                 guard !Task.isCancelled else { return }
@@ -139,18 +146,63 @@ struct MushafPage: View {
             }
             Spacer(minLength: 0)
 
-            Text("\(number)")
-                .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                .foregroundStyle(label)
-                .frame(maxWidth: .infinity)
-                .frame(height: MushafMetrics.footerHeight)
-                .contentShape(.rect)
-                .onTapGesture { onTap(nil, 0) }
-                .accessibilityLabel("Page \(number)")
+            footer(label: label)
         }
         .padding(.horizontal, margin)
+        // The ribbon hangs from the top edge, over the gap between the surah
+        // name and the part number, just reaching the first line.
+        .overlay(alignment: .top) {
+            if hasRibbon {
+                RibbonMark(color: Color(colors.marker), starColor: Color(colors.paper))
+                    .frame(width: 18, height: MushafMetrics.headerHeight + 16)
+                    .offset(y: -6)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
         .frame(width: size.width, height: size.height)
-        .frame(width: available.width, height: available.height)
+        .overlay { PageBinding(placement: placement, page: number, colors: colors) }
+        // Facing pages meet at the spine; a single page sits in the middle.
+        .frame(width: available.width, height: available.height, alignment: pageAlignment)
+    }
+
+    private var pageAlignment: Alignment {
+        switch placement {
+        case .single: .center
+        case .right: .leading
+        case .left: .trailing
+        }
+    }
+
+    /// The page number in the middle; a hizb mark, where one starts on this
+    /// page, in the outer corner. Tapping the number opens the scrubber.
+    private func footer(label: Color) -> some View {
+        ZStack {
+            if let hizb = hizbMark {
+                Text(hizb)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(label.opacity(0.8))
+                    .frame(maxWidth: .infinity, alignment: placement == .right ? .trailing : .leading)
+            }
+            Button(action: onPageNumber) {
+                Text("\(number)")
+                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(label)
+                    .padding(.horizontal, 16)
+                    .frame(height: MushafMetrics.footerHeight)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Page \(number)")
+            .accessibilityHint("Shows a scrubber to move through the mushaf")
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: MushafMetrics.footerHeight)
+    }
+
+    /// The hizb quarter that starts on this page, if any.
+    private var hizbMark: String? {
+        guard let quarter = store.hizbStarts.firstIndex(where: { store.page(containing: $0) == number }) else { return nil }
+        return MushafBook.hizbLabel(quarter: quarter + 1)
     }
 
     @ViewBuilder
@@ -263,5 +315,56 @@ struct SurahFrame: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Surah \(surah?.transliteration ?? "")")
+    }
+}
+
+/// What makes a page look bound into a book: a soft shadow by the spine and,
+/// on the outer edge, the edges of the pages on that side, more of them the
+/// further you are from that cover.
+private struct PageBinding: View {
+    let placement: MushafBook.Placement
+    let page: Int
+    let colors: MushafColors
+
+    var body: some View {
+        let edges = MushafBook.edges(page: page)
+        HStack(spacing: 0) {
+            switch placement {
+            case .single, .left:
+                PageEdges(share: edges.unread, color: Color(colors.frame))
+                Spacer(minLength: 0)
+                spine(fadingTo: .leading)
+            case .right:
+                spine(fadingTo: .trailing)
+                Spacer(minLength: 0)
+                PageEdges(share: edges.read, color: Color(colors.frame))
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func spine(fadingTo edge: UnitPoint) -> some View {
+        LinearGradient(colors: [.black.opacity(placement == .single ? 0.08 : 0.16), .clear],
+                       startPoint: edge == .leading ? .trailing : .leading, endPoint: edge)
+            .frame(width: placement == .single ? 10 : 22)
+    }
+}
+
+/// Fine lines for the edges of the pages beyond this one.
+private struct PageEdges: View {
+    let share: CGFloat
+    let color: Color
+
+    var body: some View {
+        let count = Int((share * 4).rounded(.up))
+        HStack(spacing: 1.4) {
+            ForEach(0..<count, id: \.self) { index in
+                Rectangle()
+                    .fill(color.opacity(0.45 - Double(index) * 0.08))
+                    .frame(width: 0.6)
+            }
+        }
+        .padding(.vertical, 6)
     }
 }

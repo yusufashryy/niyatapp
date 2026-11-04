@@ -1,6 +1,6 @@
 # Generates Niyat.xcodeproj from project.yml. Needs XcodeGen: `brew install xcodegen`.
 
-.PHONY: setup project full open update verses clean
+.PHONY: setup project full open update verses athan clean
 
 # First time: finds your team ID, writes Config/Local.xcconfig, opens Xcode.
 setup:
@@ -24,6 +24,10 @@ open:
 
 verses:
 	python3 scripts/generate_daily_verses.py
+
+# Rebuild the athan alert sounds from Aladhan's recordings (needs ffmpeg).
+athan:
+	./scripts/make_athan_sounds.sh
 
 clean:
 	rm -rf Niyat.xcodeproj build DerivedData

@@ -13,6 +13,7 @@ import UIKit
 struct MushafPageView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var store = QuranStore.shared
     @State private var layout = MushafLayout.shared
     @State private var tajweedStore = TajweedStore.shared
@@ -23,6 +24,7 @@ struct MushafPageView: View {
     @AppStorage("quran.mushafPage") private var page = 1
     @AppStorage("quran.tajweed") private var tajweedOn = true
     @AppStorage(QuranTextWeight.key) private var textWeight = QuranTextWeight.regular.rawValue
+    @AppStorage(ReadingRibbon.followsKey) private var ribbonFollows = true
     @State private var options = MushafOptions.load()
     @State private var selected: Verse?
     /// Show the verse options at the top when the tapped verse is low on the page.
@@ -35,6 +37,16 @@ struct MushafPageView: View {
     @State private var listeningFrom = 1
     /// The page was turned to follow the recitation, not by the reader.
     @State private var followedTurn = false
+    /// The page was set by a jump (the page list, the review, a recitation), not turned.
+    @State private var jumpedTurn = false
+    @State private var ribbonTask: Task<Void, Never>?
+    /// Closing with "move the ribbon as I read" off: the page to offer it.
+    @State private var ribbonOffer: Int?
+    /// A page is zoomed in: turning is off until it's back to fit.
+    @State private var isZoomed = false
+    /// Two facing pages are showing.
+    @State private var isSpread = false
+    @State private var showScrubber = false
 
     /// Mushaf pages are laid out for the Uthmani script (Hafs); the "fewer
     /// marks" edition has exactly the same words.
@@ -44,6 +56,20 @@ struct MushafPageView: View {
     private var showsTajweed: Bool { tajweedOn && store.edition == .uthmani && tajweedStore.isLoaded }
 
     var body: some View {
+        screen
+            // With "move the ribbon as I read" off, closing offers to move it here.
+            .confirmationDialog("Move your ribbon to page \(ribbonOffer ?? page)?", isPresented: ribbonOfferBinding,
+                                titleVisibility: .visible) {
+                Button("Move the ribbon") {
+                    moveRibbon(toPage: ribbonOffer ?? page)
+                    dismiss()
+                }
+                Button(store.ribbonPage.map { "Leave it on page \($0)" } ?? "Not now") { dismiss() }
+                Button("Keep reading", role: .cancel) {}
+            }
+    }
+
+    @ViewBuilder private var screen: some View {
         let colors = options.style.colors
         ZStack {
             Color(colors.paper).ignoresSafeArea()
@@ -61,26 +87,19 @@ struct MushafPageView: View {
             if let selected {
                 MushafVerseActions(verse: selected, showTranslation: options.showTranslation,
                                    canPlay: store.edition.riwayah.hasVerseAudio,
-                                   isBookmarked: store.isBookmarked(selected),
+                                   isSaved: store.isBookmarked(selected),
+                                   hasRibbon: store.hasRibbon(selected),
                                    onPlayFromHere: { play(from: selected) },
                                    onPlayVerse: { play(from: selected, only: true) },
-                                   onBookmark: { store.toggleBookmark(selected) },
+                                   onRibbon: { withAnimation(.smooth) { store.moveRibbon(to: selected) } },
+                                   onSave: { store.toggleBookmark(selected) },
                                    onClose: { select(nil) })
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .transition(.move(edge: actionsAtTop ? .top : .bottom).combined(with: .opacity))
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 8) {
-                if highlights.flaggedCount > 0 {
-                    RecitationReviewPill(count: highlights.flaggedCount) { showReview = true }
-                }
-                controls(colors)
-            }
-            .readableWidth(600)
-            .animation(.smooth, value: highlights.flaggedCount > 0)
-        }
+        .safeAreaInset(edge: .bottom) { bottomBar(colors) }
         .overlay(alignment: .top) {
             if let error = player.errorMessage {
                 Text(error)
@@ -103,7 +122,7 @@ struct MushafPageView: View {
         .animation(.bouncy, value: goal.celebration)
         .preferredColorScheme(colors.isLight ? .light : .dark)
         // Sheets keep the app's dark look, whatever the paper.
-        .sheet(isPresented: $showJump) { MushafJumpSheet(page: $page).preferredColorScheme(.dark) }
+        .sheet(isPresented: $showJump) { MushafJumpSheet(page: jumpBinding).preferredColorScheme(.dark) }
         .sheet(isPresented: $showOptions) { MushafOptionsSheet(options: $options).preferredColorScheme(.dark) }
         .sheet(isPresented: $showReview) {
             RecitationReviewSheet(onListen: listenAction, onGoTo: { key in go(to: key) })
@@ -128,16 +147,17 @@ struct MushafPageView: View {
         }
         .onChange(of: live.isListening) { _, _ in updateIdleTimer() }
         // Recited from somewhere else in the Qur'an: go to that page and listen there.
-        .onChange(of: live.jump) { _, jump in
-            guard let jump else { return }
-            let target = layout.page(containing: jump.word)
-            if target != page { withAnimation(.smooth) { page = target } }
+        .onChange(of: live.jump) { _, recited in
+            guard let recited else { return }
+            let target = layout.page(containing: recited.word)
+            if target != page { withAnimation(.smooth) { jump(to: target) } }
         }
         .onAppear {
             page = min(max(page, 1), MushafLayout.pageCount)
             updateIdleTimer()
         }
         .onDisappear {
+            ribbonTask?.cancel()
             UIApplication.shared.isIdleTimerDisabled = false
             // Leaving the pages ends listening, memorisation and the review.
             live.stop()
@@ -152,21 +172,48 @@ struct MushafPageView: View {
             // Opened while listening to the reciter: go to that verse.
             if case .verse(let surah, let verse)? = player.current,
                let displayed = store.verse(VerseReference(surah: surah, verse: verse)) {
-                page = layout.page(containing: WordID(surah: displayed.surah, verse: displayed.number, index: 0))
+                jump(to: layout.page(containing: WordID(surah: displayed.surah, verse: displayed.number, index: 0)))
             }
         }
     }
 
     // MARK: Pages
 
+    /// Pages turn right to left, like a printed mushaf: curled like paper
+    /// (or slid, with Reduce Motion), and two facing pages on a wide screen.
     private func pages(_ colors: MushafColors) -> some View {
-        // Pages turn right to left, like a printed mushaf.
-        TabView(selection: $page) {
-            ForEach(1...MushafLayout.pageCount, id: \.self) { number in
-                MushafPage(number: number, isCurrent: number == page, colors: colors, tajweed: showsTajweed,
-                           highContrast: contrast == .increased, textSize: options.textSize,
-                           weight: (QuranTextWeight(rawValue: textWeight) ?? .regular).stroke) { word, row in
-                    tapped(word, row: row)
+        GeometryReader { geo in
+            let spread = options.twoPages && MushafBook.spreadFits(width: geo.size.width, height: geo.size.height)
+            Group {
+                if MushafBook.turn(chosen: options.pageTurn, reduceMotion: reduceMotion) == .curl {
+                    MushafCurlPager(page: $page, spread: spread, isEnabled: !isZoomed, paper: colors.paper) { number in
+                        pageView(number, colors: colors, placement: placement(of: number, spread: spread), spread: spread)
+                    }
+                    .id(spread)
+                } else {
+                    slidePages(colors, spread: spread)
+                }
+            }
+            .onChange(of: spread, initial: true) { _, wide in isSpread = wide }
+        }
+        .haptic(.selection, trigger: page)
+        .animation(.smooth, value: store.ribbon)
+        .overlay(alignment: .top) {
+            LiveRecitationStatus(light: colors.isLight)
+                .frame(height: MushafMetrics.headerHeight)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private func slidePages(_ colors: MushafColors, spread: Bool) -> some View {
+        let numbers = spread ? Array(stride(from: 1, through: MushafBook.pageCount, by: 2)) : Array(1...MushafBook.pageCount)
+        return TabView(selection: spread ? spreadSelection : $page) {
+            ForEach(numbers, id: \.self) { number in
+                HStack(spacing: 0) {
+                    if spread, let left = MushafBook.spread(containing: number).left {
+                        pageView(left, colors: colors, placement: .left, spread: true)
+                    }
+                    pageView(number, colors: colors, placement: spread ? .right : .single, spread: spread)
                 }
                 .environment(\.layoutDirection, .leftToRight)
                 .tag(number)
@@ -174,12 +221,33 @@ struct MushafPageView: View {
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .environment(\.layoutDirection, .rightToLeft)
-        .haptic(.selection, trigger: page)
-        .overlay(alignment: .top) {
-            LiveRecitationStatus(light: colors.isLight)
-                .frame(height: MushafMetrics.headerHeight)
-                .allowsHitTesting(false)
-        }
+    }
+
+    /// With two pages showing, the pager moves by spreads (named by their right page).
+    private var spreadSelection: Binding<Int> {
+        Binding(get: { MushafBook.spread(containing: page).right }, set: { page = $0 })
+    }
+
+    private func placement(of number: Int, spread: Bool) -> MushafBook.Placement {
+        guard spread else { return .single }
+        return number.isMultiple(of: 2) ? .left : .right
+    }
+
+    /// The pages in view: the current one, or both pages of its spread.
+    private func isShowing(_ number: Int, spread: Bool) -> Bool {
+        guard spread else { return number == page }
+        let shown = MushafBook.spread(containing: page)
+        return number == shown.right || number == shown.left
+    }
+
+    private func pageView(_ number: Int, colors: MushafColors, placement: MushafBook.Placement, spread: Bool) -> some View {
+        MushafPage(number: number, isCurrent: isShowing(number, spread: spread), colors: colors, tajweed: showsTajweed,
+                   highContrast: contrast == .increased, textSize: options.textSize,
+                   weight: (QuranTextWeight(rawValue: textWeight) ?? .regular).stroke,
+                   hasRibbon: number == store.ribbonPage, placement: placement,
+                   onZoomChange: { isZoomed = $0 },
+                   onPageNumber: { showScrubber.toggle() },
+                   onTap: { word, row in tapped(word, row: row) })
     }
 
     private var unsupported: some View {
@@ -205,6 +273,23 @@ struct MushafPageView: View {
 
     // MARK: Controls
 
+    /// Under the page: the review pill, the scrubber when open, and the control bar.
+    private func bottomBar(_ colors: MushafColors) -> some View {
+        VStack(spacing: 8) {
+            if highlights.flaggedCount > 0 {
+                RecitationReviewPill(count: highlights.flaggedCount) { showReview = true }
+            }
+            if showScrubber {
+                MushafScrubber(page: page, colors: colors) { jump(to: $0) }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            controls(colors)
+        }
+        .readableWidth(600)
+        .animation(.smooth, value: highlights.flaggedCount > 0)
+        .animation(.smooth, value: showScrubber)
+    }
+
     /// The bar under the page. The microphone and the eye (memorisation) sit
     /// next to play; while the reciter plays, previous and next join them.
     private func controls(_ colors: MushafColors) -> some View {
@@ -212,7 +297,7 @@ struct MushafPageView: View {
         let tint = Color(colors.label)
         let active = Color(colors.marker)
         return HStack(spacing: 2) {
-            barButton("Close", "xmark", tint: tint) { dismiss() }
+            barButton("Close", "xmark", tint: tint) { close() }
             if playing {
                 barButton("Previous verse", "backward.fill", tint: tint) { player.previous() }
                 barButton("Next verse", "forward.fill", tint: tint) { player.next() }
@@ -220,9 +305,9 @@ struct MushafPageView: View {
                           tint: player.repeatVerse ? active : tint) { player.repeatVerse.toggle() }
             } else {
                 barButton("Go to page, juz or surah", "list.bullet", tint: tint) { showJump = true }
-                barButton(isPageBookmarked ? "Remove bookmark" : "Bookmark this page",
-                          isPageBookmarked ? "bookmark.fill" : "bookmark",
-                          tint: isPageBookmarked ? active : tint) { bookmarkPage() }
+                barButton(isRibbonHere ? "Your ribbon is on this page" : "Move the ribbon to this page",
+                          isRibbonHere ? "bookmark.fill" : "bookmark",
+                          tint: isRibbonHere ? active : tint) { moveRibbon(toPage: page) }
             }
             Spacer(minLength: 0)
             barButton(highlights.isHidden ? "Show the text" : "Hide the text to recite from memory",
@@ -298,12 +383,53 @@ struct MushafPageView: View {
 
     // MARK: Actions
 
-    private var isPageBookmarked: Bool {
-        store.verses(onPage: page).first.map(store.isBookmarked) ?? false
+    private var isRibbonHere: Bool {
+        guard let ribbonPage = store.ribbonPage else { return false }
+        return isShowing(ribbonPage, spread: isSpread)
     }
 
-    private func bookmarkPage() {
-        if let first = store.verses(onPage: page).first { store.toggleBookmark(first) }
+    /// Puts the ribbon at the first verse that starts on a page.
+    private func moveRibbon(toPage number: Int) {
+        guard let first = store.verses(onPage: number).first else { return }
+        withAnimation(.smooth) { store.moveRibbon(to: first) }
+    }
+
+    /// The ribbon follows you onto a page you turned to yourself, once it has
+    /// stayed open long enough to be read.
+    private func scheduleRibbon(onPage number: Int, turnedByHand: Bool) {
+        ribbonTask?.cancel()
+        let verses = store.verses(onPage: number)
+        guard !verses.isEmpty, ReadingRibbon.shouldMove(follows: ribbonFollows, movedByReader: turnedByHand) else { return }
+        ribbonTask = Task {
+            try? await Task.sleep(for: .seconds(ReadingRibbon.pageDwell(verseCount: verses.count)))
+            guard !Task.isCancelled else { return }
+            moveRibbon(toPage: number)
+        }
+    }
+
+    /// Close, first offering to move the ribbon here when it doesn't follow you.
+    private func close() {
+        if let offer = ReadingRibbon.pageToOffer(follows: ribbonFollows, ribbonPage: store.ribbonPage, currentPage: page) {
+            ribbonOffer = offer
+        } else {
+            dismiss()
+        }
+    }
+
+    private var ribbonOfferBinding: Binding<Bool> {
+        Binding(get: { ribbonOffer != nil }, set: { shown in if !shown { ribbonOffer = nil } })
+    }
+
+    /// Goes to a page without it counting as turned there by hand.
+    private func jump(to target: Int) {
+        guard target != page else { return }
+        jumpedTurn = true
+        page = target
+    }
+
+    /// The page list's choice is a jump.
+    private var jumpBinding: Binding<Int> {
+        Binding(get: { page }, set: { jump(to: $0) })
     }
 
     private func tapped(_ word: WordID?, row: Int) {
@@ -366,7 +492,7 @@ struct MushafPageView: View {
     }
 
     private func go(to key: VerseKey) {
-        page = layout.page(containing: WordID(surah: key.surah, verse: key.verse, index: 0))
+        jump(to: layout.page(containing: WordID(surah: key.surah, verse: key.verse, index: 0)))
         if let verse = displayedVerse(key) {
             actionsAtTop = false
             select(verse)
@@ -385,7 +511,10 @@ struct MushafPageView: View {
     private func pageChanged(to newPage: Int) {
         if selected != nil { select(nil) }
         let followed = followedTurn
+        let jumped = jumpedTurn
         followedTurn = false
+        jumpedTurn = false
+        scheduleRibbon(onPage: newPage, turnedByHand: !followed && !jumped)
         guard live.isListening else { return }
         // Turned by hand: listen on this page. Followed: only once the
         // recitation nears the end of the pages being followed.

@@ -51,8 +51,9 @@ struct TasbihProvider: TimelineProvider {
 
 struct TasbihWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "TasbihWidget", provider: TasbihProvider()) { entry in
-            TasbihWidgetView(entry: entry)
+        AppIntentConfiguration(kind: "TasbihWidget", intent: WidgetStyleIntent.self,
+                                       provider: StyledProvider(base: TasbihProvider())) { entry in
+            TasbihWidgetView(entry: entry.base).widgetStyle(entry.style)
         }
         .configurationDisplayName("Tasbih")
         .description("Count your dhikr right from the Home Screen.")
@@ -77,29 +78,30 @@ struct TasbihWidgetView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .foregroundStyle(.white.opacity(0.85))
+            .foregroundStyle(.secondary)
 
             Button(intent: IncrementTasbihIntent()) {
                 ZStack {
-                    Circle().fill(Color.white.opacity(0.12))
+                    Circle().fill(Color.primary.opacity(0.12))
                     VStack(spacing: 0) {
                         Text("\(entry.count)")
                             .font(.system(size: 34, weight: .bold, design: .rounded))
+                            .widgetAccentable()
                             .contentTransition(.numericText())
                             .minimumScaleFactor(0.5)
                         if entry.target > 0 {
                             Text("of \(entry.target)")
                                 .font(.caption2)
-                                .foregroundStyle(.white.opacity(0.7))
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                 }
             }
             .buttonStyle(.plain)
         }
         .fontDesign(.rounded)
-        .containerBackground(for: .widget) {
+        .widgetBackground {
             WidgetBackground()
         }
     }

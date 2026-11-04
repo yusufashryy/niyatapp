@@ -52,6 +52,9 @@ struct RootView: View {
                 .transition(.opacity)
             }
         }
+        // The athan playing in full, with Stop, over whatever screen is open.
+        .overlay(alignment: .top) { AthanNowPlaying() }
+        .animation(.smooth, value: AthanPlayer.shared.playing)
         // Reading Palette here means the whole app re-tints when the theme changes.
         .tint(Palette.accent)
         .toggleStyle(NiyatToggleStyle())
@@ -61,9 +64,18 @@ struct RootView: View {
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
-            case .active: model.refresh()
+            case .active:
+                model.refresh()
+                if hasOnboarded { Task { await model.followCurrentLocation() } }
             case .background: BackgroundRefresh.schedule()
             default: break
+            }
+        }
+        // Landing after a flight while Niyat is open: re-time alerts and check the location.
+        .task {
+            for await _ in NotificationCenter.default.notifications(named: .NSSystemTimeZoneDidChange) {
+                model.refresh()
+                if hasOnboarded { await model.followCurrentLocation() }
             }
         }
     }

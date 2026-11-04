@@ -37,7 +37,7 @@ struct Verse: Identifiable, Hashable {
     let hafsNumbers: [Int]
 
     var id: Int { surah * 1000 + number }
-    /// Hafs reference used for bookmarks, reading position and progress, so they
+    /// Hafs reference used for saved verses, the ribbon and progress, so they
     /// survive switching script or reading.
     var hafsReference: VerseReference { VerseReference(surah: surah, verse: hafsNumbers.first ?? number) }
     /// Letters in the displayed Arabic, for the recitation-reward estimate.
@@ -61,7 +61,7 @@ final class QuranStore {
     private(set) var surahs: [Surah] = []
     private(set) var isLoaded = false
     private(set) var loadError: String?
-    /// The text being shown. Changing it never touches bookmarks or progress.
+    /// The text being shown. Changing it never touches saved verses, the ribbon or progress.
     private(set) var edition: QuranEdition
     /// The Bismillah exactly as written in the selected Hafs text (Al-Fatiha 1:1).
     private(set) var bismillah = ""
@@ -69,13 +69,20 @@ final class QuranStore {
     private(set) var isVerified: Bool?
     private var versesBySurah: [Int: [Verse]] = [:]
 
-    private(set) var lastRead: VerseReference?
+    /// Where you are: the reading ribbon (see `ReadingRibbon`).
+    private(set) var ribbon: VerseReference?
+    /// Saved verses: a list you keep, apart from the ribbon.
     private(set) var bookmarks: [VerseReference]
 
     private init() {
         edition = UserDefaults.standard.string(forKey: "quran.edition").flatMap(QuranEdition.init(rawValue:)) ?? .default
-        lastRead = UserDefaults.standard.decoded(VerseReference.self, forKey: "quran.lastRead")
+        ribbon = Self.savedRibbon()
         bookmarks = UserDefaults.standard.decoded([VerseReference].self, forKey: "quran.bookmarks") ?? []
+    }
+
+    private static func savedRibbon() -> VerseReference? {
+        ReadingRibbon.initial(saved: UserDefaults.standard.decoded(VerseReference.self, forKey: ReadingRibbon.storageKey),
+                              legacy: UserDefaults.standard.decoded(VerseReference.self, forKey: ReadingRibbon.legacyKey))
     }
 
     func verses(for surah: Int) -> [Verse] { versesBySurah[surah] ?? [] }
@@ -118,16 +125,27 @@ final class QuranStore {
         saveBookmarks()
     }
 
-    func markRead(_ verse: Verse) {
+    func moveRibbon(to verse: Verse) {
         let reference = verse.hafsReference
-        guard reference != lastRead else { return }
-        lastRead = reference
-        UserDefaults.standard.setEncoded(reference, forKey: "quran.lastRead")
+        guard reference != ribbon else { return }
+        ribbon = reference
+        UserDefaults.standard.setEncoded(reference, forKey: ReadingRibbon.storageKey)
     }
 
-    /// Re-reads bookmarks and reading position (after "Erase all data").
+    func hasRibbon(_ verse: Verse) -> Bool {
+        guard let ribbon, ribbon.surah == verse.surah else { return false }
+        return verse.hafsNumbers.contains(ribbon.verse)
+    }
+
+    /// The mushaf page the ribbon lies in, once the page index is loaded.
+    var ribbonPage: Int? {
+        guard let ribbon, !pageStarts.isEmpty else { return nil }
+        return page(containing: ribbon)
+    }
+
+    /// Re-reads saved verses and the ribbon (after "Erase all data").
     func reloadUserData() {
-        lastRead = UserDefaults.standard.decoded(VerseReference.self, forKey: "quran.lastRead")
+        ribbon = Self.savedRibbon()
         bookmarks = UserDefaults.standard.decoded([VerseReference].self, forKey: "quran.bookmarks") ?? []
     }
 
@@ -141,7 +159,7 @@ final class QuranStore {
         isVerified = await Task.detached(priority: .utility) { Self.verifyChecksums() }.value
     }
 
-    /// Switches to another verified text. Bookmarks, reading position and
+    /// Switches to another verified text. Saved verses, the ribbon and
     /// progress are stored by Hafs reference, so they carry over.
     func setEdition(_ newEdition: QuranEdition) async {
         guard newEdition != edition || !isLoaded else { return }

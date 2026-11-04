@@ -26,6 +26,50 @@ struct EightPointStar: Shape {
     }
 }
 
+/// A book's ribbon marker: a band hanging from the top edge with a
+/// swallowtail notch at the end.
+struct RibbonShape: Shape {
+    /// How deep the notch cuts into the band, as a share of its width.
+    var notch: CGFloat = 0.45
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY - rect.width * notch))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// The reading ribbon as drawn on a page: the band with a fine inner line
+/// and a small star near its end.
+struct RibbonMark: View {
+    let color: Color
+    var starColor: Color = .white.opacity(0.85)
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = geo.size.width
+            ZStack(alignment: .top) {
+                RibbonShape()
+                    .fill(color)
+                    .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                RibbonShape()
+                    .stroke(starColor.opacity(0.35), lineWidth: 0.6)
+                    .padding(.horizontal, width * 0.18)
+                EightPointStar()
+                    .fill(starColor)
+                    .frame(width: width * 0.5, height: width * 0.5)
+                    .offset(y: geo.size.height - width * 1.15)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
 /// A repeating star-and-cross lattice, the kind found on mosque tiles and screens.
 struct IslamicPattern: View {
     var tile: CGFloat = 64

@@ -21,12 +21,22 @@ struct MushafOptions: Codable, Equatable {
         var margin: CGFloat { self == .standard ? 0.04 : 0.02 }
     }
 
+    /// How pages turn: curled like paper, or slid sideways.
+    enum PageTurn: String, Codable, CaseIterable, Identifiable {
+        case curl, slide
+        var id: String { rawValue }
+        var title: String { self == .curl ? "Page curl" : "Slide" }
+    }
+
     var style = MushafStyle.cream
     var textSize = TextSize.standard
     var tapAction = TapAction.actions
     var showTranslation = true
     var followRecitation = true
     var keepScreenOn = false
+    var pageTurn = PageTurn.curl
+    /// Two facing pages when the screen is wide enough.
+    var twoPages = true
 
     // v3: rebuilt on the 15-line Madinah layout, cream paper by default.
     private static let key = "quran.mushafOptions.v3"
@@ -54,6 +64,8 @@ struct MushafOptions: Codable, Equatable {
         showTranslation = value(.showTranslation, d.showTranslation)
         followRecitation = value(.followRecitation, d.followRecitation)
         keepScreenOn = value(.keepScreenOn, d.keepScreenOn)
+        pageTurn = value(.pageTurn, d.pageTurn)
+        twoPages = value(.twoPages, d.twoPages)
     }
 }
 

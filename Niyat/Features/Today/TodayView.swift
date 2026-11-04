@@ -51,6 +51,14 @@ struct TodayView: View {
         let next = model.nextPrayer(after: now)
 
         VStack(alignment: .leading, spacing: 18) {
+            if let change = model.recentLocationChange {
+                LocationUpdatedBanner(change: change)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            } else if let location = model.location, model.shouldOfferTimeZoneUpdate(now: now) {
+                TimeZoneChangedCard(location: location)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
             if let schedule {
                 PrayerDial(schedule: schedule, now: now, next: next,
                            locationName: model.location?.name ?? "",
@@ -89,6 +97,7 @@ struct TodayView: View {
             }
         }
         .animation(.smooth(duration: 0.45), value: model.pendingCheckIn(at: now)?.id)
+        .animation(.smooth(duration: 0.45), value: model.recentLocationChange)
     }
 }
 

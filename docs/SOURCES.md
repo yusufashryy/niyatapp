@@ -55,6 +55,19 @@ Notes on the chosen source:
 - **Missing files:** Husary, Minshawi and Basfar's collections are missing one verse file each on the CDN. The player skips a missing verse rather than stopping.
 - **Caching:** audio currently streams. A future "download surah for offline" option could cache files locally; the licence allows it for non-commercial use.
 
+## Athan audio
+
+Six recordings from [Aladhan's Download Adhans page](https://aladhan.com/download-adhans) (Islamic Network, the same people as the recitation CDN): Mishary Rashid Alafasy (three recordings: `a9`, `a7`, and `a4` from Dubai One TV), Ahmad al-Nafees (`a1`), Hafiz Mustafa Özcan (`a2`) and Mansour Al-Zahrani (`a11`). Not used: the athan from Karl Jenkins' *The Armed Man: A Mass for Peace* (`a3`), which is part of his copyrighted work.
+
+**Permission.** Islamic Network's admin (gokboru, Admin and Staff on community.islamic.network) answered two developers of free prayer apps in July 2026: bundling the athans in the app is allowed, attribution isn't required, and there are no restrictions for a free app ([thread 255](https://community.islamic.network/d/255-permission-to-bundle-an-adhan-audio-file-in-our-android-app-nurafiq), [thread 256](https://community.islamic.network/d/256-audio-licensing-query-for-azan-pro-app)). The second reply also says copyright belongs to the muezzins. To do: ask Islamic Network for written confirmation naming Niyat (mention that `a4` comes from a TV broadcast). If a muezzin or rights holder objects, remove that case from `Muezzin`.
+
+**How they're used.**
+- *Alert sound:* iOS plays a notification sound for at most 30 seconds, so `scripts/make_athan_sounds.sh` (`make athan`) cuts each athan's opening, from where the muezzin begins (after any intro) to the breathing pause before 30 seconds, and writes it to `Niyat/Resources/Athan` (IMA4 .caf, 13–26 s, 2.5 MB in all). The start times were found from each recording's loudness and pauses.
+- *Full athan:* opening the alert (or having Niyat open when it comes) streams the whole recording from `cdn.aladhan.com`, starting where the muezzin begins. Without internet, the bundled opening plays.
+- Only the alert when a prayer begins plays the athan; the reminders before and after, and sunrise, keep the standard sound. Fajr can have its own muezzin.
+
+Wikimedia Commons' freely licensed recordings (CC0 and CC BY-SA) were considered and not used: the owner judged their quality too low. Recordings from the Haram in Makkah and the Prophet's Mosque that other sites label "public domain" were not used: those labels come from the uploaders, not the rights holders.
+
 ## Hadith
 
 - **Recitation reward estimate:** Jami' at-Tirmidhi 2910 (Abdullah ibn Mas'ud), shown as an English paraphrase and linked to [sunnah.com/tirmidhi:2910](https://sunnah.com/tirmidhi:2910) rather than quoting Arabic wording in the app.
