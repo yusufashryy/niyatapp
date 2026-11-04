@@ -115,6 +115,10 @@ struct MainTabView: View {
             if !tutorialSeen { showTutorial = true } else { prompter.appOpened() }
         }
         .fullScreenCover(isPresented: $showTutorial) { TutorialView() }
+        #if SCREEN_TIME
+        // Opening Niyat during a Prayer Lock asks "Have you prayed?" and can unlock.
+        .modifier(PrayerLockPromptModifier())
+        #endif
         // Apple's own rating prompt, a moment after a happy event (see ReviewPrompter).
         .onChange(of: prompter.askForReview) { _, ask in
             guard ask else { return }

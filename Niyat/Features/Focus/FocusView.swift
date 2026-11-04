@@ -106,7 +106,7 @@ struct FocusView: View {
         } header: {
             Text("At prayer time")
         } footer: {
-            Text("When the adhan time comes, the apps you choose are locked for \(settings.minutes) minutes. Apple requires at least 15. Tap “I've prayed” here to unlock early.")
+            Text("When the adhan time comes, the apps you choose are locked for \(settings.minutes) minutes. Apple requires at least 15. Open Niyat and tap “I've prayed” to unlock early.")
         }
     }
 
