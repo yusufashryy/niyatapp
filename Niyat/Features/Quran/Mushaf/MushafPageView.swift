@@ -169,6 +169,12 @@ struct MushafPageView: View {
             await store.load()
             await layout.load()
             await tajweedStore.load()
+            // Found by reciting from the Qur'an list: carry on following.
+            if RecitationHandoff.pending != nil {
+                RecitationHandoff.pending = nil
+                try? await Task.sleep(for: .milliseconds(600))
+                if !live.isListening { toggleListening() }
+            }
             // Opened while listening to the reciter: go to that verse.
             if case .verse(let surah, let verse)? = player.current,
                let displayed = store.verse(VerseReference(surah: surah, verse: verse)) {
@@ -198,11 +204,7 @@ struct MushafPageView: View {
         }
         .haptic(.selection, trigger: page)
         .animation(.smooth, value: store.ribbon)
-        .overlay(alignment: .top) {
-            LiveRecitationStatus(light: colors.isLight)
-                .frame(height: MushafMetrics.headerHeight)
-                .allowsHitTesting(false)
-        }
+
     }
 
     private func slidePages(_ colors: MushafColors, spread: Bool) -> some View {
@@ -276,9 +278,7 @@ struct MushafPageView: View {
     /// Under the page: the review pill, the scrubber when open, and the control bar.
     private func bottomBar(_ colors: MushafColors) -> some View {
         VStack(spacing: 8) {
-            if highlights.flaggedCount > 0 {
-                RecitationReviewPill(count: highlights.flaggedCount) { showReview = true }
-            }
+            RecitationDock(light: colors.isLight, onRecite: toggleListening) { showReview = true }
             if showScrubber {
                 MushafScrubber(page: page, colors: colors) { jump(to: $0) }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -290,8 +290,9 @@ struct MushafPageView: View {
         .animation(.smooth, value: showScrubber)
     }
 
-    /// The bar under the page. The microphone and the eye (memorisation) sit
-    /// next to play; while the reciter plays, previous and next join them.
+    /// The bar under the page. The eye (memorisation) sits next to play; while
+    /// the reciter plays, previous and next join them. Recite is its own button
+    /// above the bar.
     private func controls(_ colors: MushafColors) -> some View {
         let playing = player.current != nil
         let tint = Color(colors.label)
@@ -313,17 +314,6 @@ struct MushafPageView: View {
             barButton(highlights.isHidden ? "Show the text" : "Hide the text to recite from memory",
                       highlights.isHidden ? "eye.slash.fill" : "eye.slash",
                       tint: highlights.isHidden ? active : tint) { highlights.setHidden(!highlights.isHidden) }
-            Button(action: toggleListening) {
-                Image(systemName: live.isListening ? "mic.fill" : "mic")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(live.isListening ? active : tint)
-                    .symbolEffect(.pulse, options: .repeating, isActive: live.isListening)
-                    .frame(width: 40, height: 40)
-                    .background(active.opacity(live.isListening ? 0.18 : 0), in: .circle)
-                    .contentShape(.circle)
-            }
-            .buttonStyle(.pressable)
-            .accessibilityLabel(live.isListening ? "Stop listening" : "Recite: follow along as I recite")
             if store.edition.riwayah.hasVerseAudio {
                 Button(action: togglePlay) {
                     Group {
@@ -354,7 +344,6 @@ struct MushafPageView: View {
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
         .haptic(.selection, trigger: highlights.isHidden)
-        .haptic(.impact(weight: .light), trigger: live.isListening)
         .animation(.smooth, value: playing)
         .animation(.smooth, value: highlights.flaggedCount)
     }
@@ -529,7 +518,7 @@ struct MushafPageView: View {
     private func toggleListening() {
         if live.isListening {
             live.stop()
-        } else if UserDefaults.standard.bool(forKey: ReciteIntroSheet.seenKey) {
+        } else if !ReciteIntroSheet.isNeeded(for: store.edition) {
             startListening()
         } else {
             showIntro = true

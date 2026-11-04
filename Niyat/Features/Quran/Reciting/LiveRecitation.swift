@@ -56,6 +56,8 @@ final class LiveRecitation {
         case following
         /// Heard several words that don't match the text around the place.
         case lost
+        /// Stopped by itself after a long silence; the marks stay.
+        case paused
         case unavailable(String)
     }
 
@@ -63,6 +65,8 @@ final class LiveRecitation {
         let id: WordID
         let text: String
         let mark: WordMark
+        /// What the recitation check noticed (empty without it).
+        var notes: [String] = []
     }
 
     struct ReviewVerse: Identifiable, Hashable {
@@ -85,11 +89,16 @@ final class LiveRecitation {
     private(set) var isOnDevice = false
     /// Which reading the words are being compared with.
     private(set) var edition: QuranEdition = .uthmani
+    /// How loud the microphone is, 0...1, a few times a second (for the Recite button).
+    private(set) var level: Float = 0
+
+    /// Silence this long stops listening by itself (the marks stay).
+    static let autoPauseSilence: TimeInterval = 20
 
     var isListening: Bool {
         switch status {
         case .starting, .searching, .following, .lost: true
-        case .idle, .unavailable: false
+        case .idle, .paused, .unavailable: false
         }
     }
 
@@ -99,6 +108,11 @@ final class LiveRecitation {
     @ObservationIgnored private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "ar-SA"))
     @ObservationIgnored private var task: SFSpeechRecognitionTask?
     @ObservationIgnored private let requests = RequestBox()
+    /// The audio since the last pause, for the recitation check.
+    @ObservationIgnored private let clip = RecitationClipRecorder()
+    /// Where the reciter was when the current part began.
+    @ObservationIgnored private var clipPlace: WordID?
+    @ObservationIgnored private var levelTimer: Task<Void, Never>?
     @ObservationIgnored private var generation = 0
     /// What the current utterance has produced so far (for pauses).
     @ObservationIgnored private var lastHeard: [String] = []
@@ -150,6 +164,8 @@ final class LiveRecitation {
         self.edition = edition
         prepareLocator()
         prepare(verses: verses, at: start, searchingAhead: searchingAhead)
+        RecitationChecker.shared.begin(edition: edition)
+        clip.setOn(RecitationChecker.shared.isActive)
         isOnDevice = recognizer.supportsOnDeviceRecognition
         RecitationPlayer.shared.stop()
         do {
@@ -171,7 +187,7 @@ final class LiveRecitation {
                 status = .unavailable("The microphone isn't available right now. End any call or recording and try again.")
                 return
             }
-            Self.installTap(on: engine.inputNode, sending: requests)
+            Self.installTap(on: engine.inputNode, sending: requests, recording: clip)
             tapInstalled = true
             engine.prepare()
             try engine.start()
@@ -183,6 +199,8 @@ final class LiveRecitation {
             return
         }
         status = .searching
+        requests.heardVoice()
+        watchLevel()
         startRequest()
     }
 
@@ -203,8 +221,14 @@ final class LiveRecitation {
         }
     }
 
-    func stop() {
+    /// Stops listening. `pausing`: stopped by itself after a long silence.
+    func stop(pausing: Bool = false) {
         guard isListening else { return }
+        sendClip()
+        clip.setOn(false)
+        RecitationChecker.shared.end()
+        levelTimer?.cancel()
+        level = 0
         pauseTimer?.cancel()
         finalTimer?.cancel()
         generation += 1
@@ -217,16 +241,20 @@ final class LiveRecitation {
         tracker?.finishUtterance()
         publish()
         WordHighlights.shared.setCurrent(nil)
-        status = .idle
+        status = pausing ? .paused : .idle
     }
 
     /// The "unavailable" message was seen.
     func acknowledge() {
-        if case .unavailable = status { status = .idle }
+        switch status {
+        case .unavailable, .paused: status = .idle
+        default: break
+        }
     }
 
     /// Clears the marks from the last session.
     func clearReview() {
+        RecitationChecker.shared.clear()
         tracker = nil
         shownMarks = [:]
         transientShown = []
@@ -248,13 +276,92 @@ final class LiveRecitation {
 
     // MARK: Review
 
-    /// Words marked in this session, by verse.
+    /// Words marked in this session (by speech recognition or the recitation
+    /// check), by verse.
     func review() -> [ReviewVerse] {
-        let byVerse = Dictionary(grouping: shownMarks.filter { $0.value != .correct }, by: { $0.key.verseKey })
+        let notes = RecitationChecker.shared.notes
+        let marked = WordHighlights.shared.marks.filter { $0.value != .correct && wordText[$0.key] != nil }
+        let byVerse = Dictionary(grouping: marked, by: { $0.key.verseKey })
         return byVerse.keys.sorted().map { key in
             let words = byVerse[key, default: []].sorted { $0.key < $1.key }
-                .map { ReviewWord(id: $0.key, text: wordText[$0.key] ?? "", mark: $0.value) }
+                .map { ReviewWord(id: $0.key, text: wordText[$0.key] ?? "", mark: $0.value,
+                                  notes: notes[$0.key, default: []].map(\.text)) }
             return ReviewVerse(key: key, words: words)
+        }
+    }
+
+    /// The recitation check found the reciter somewhere else (another surah,
+    /// or far away): the reader goes there, as with speech recognition's jumps.
+    func jump(to word: WordID) {
+        guard isListening else { return }
+        lastJumpGeneration = generation
+        jump = Jump(word: word, serial: (jump?.serial ?? 0) + 1)
+    }
+
+    // MARK: Recitation check
+
+    /// The part just recited goes to the recitation check, if it's on.
+    private func sendClip() {
+        guard RecitationChecker.shared.isActive else { return }
+        if let samples = clip.cut(), let place = clipPlace {
+            RecitationChecker.shared.submit(samples, at: place)
+        }
+    }
+
+    /// Where the next part starts: the word after the reciter's place, or
+    /// after the last word the check heard when that's further on.
+    private func checkPlace() -> WordID? {
+        guard let tracker, !tracker.tokens.isEmpty else { return nil }
+        let count = tracker.tokens.count
+        var index = min(tracker.position.map { $0 + 1 } ?? tracker.focus, count - 1)
+        if let end = RecitationChecker.shared.lastEnd,
+           let checked = tracker.tokens.firstIndex(where: { $0.id == end }), checked + 1 < count {
+            index = max(index, checked + 1)
+        }
+        return tracker.tokens[index].id
+    }
+
+    /// Speech recognition stopped working, but the recitation check is on:
+    /// carry on with the check alone, sending each part at a pause. The place
+    /// moves on from what the check heard.
+    private func continueWithCheckOnly() {
+        task?.cancel()
+        task = nil
+        pauseTimer?.cancel()
+        finalTimer?.cancel()
+        generation += 1
+        let current = generation
+        status = .following
+        sendClip()
+        clipPlace = checkPlace()
+        requests.set(SilentRequest())
+        pauseTimer = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(200))
+                guard let self, !Task.isCancelled, self.generation == current, self.isListening else { return }
+                if self.requests.secondsSinceVoice >= Self.autoPauseSilence {
+                    self.stop(pausing: true)
+                    return
+                }
+                if self.requests.hasSpeechPause {
+                    self.sendClip()
+                    self.clipPlace = self.checkPlace()
+                    self.requests.set(SilentRequest())
+                }
+            }
+        }
+    }
+
+    /// The microphone level for the Recite button, about 12 times a second.
+    private func watchLevel() {
+        levelTimer?.cancel()
+        levelTimer = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(80))
+                guard let self, !Task.isCancelled else { return }
+                let next = self.requests.level
+                if abs(next - self.level) > 0.02 { self.level = next }
+            }
         }
     }
 
@@ -267,6 +374,9 @@ final class LiveRecitation {
         task?.cancel()
         generation += 1
         lastHeard = []
+        // A new part begins: the one just finished goes to the check.
+        sendClip()
+        clipPlace = checkPlace()
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
@@ -284,6 +394,10 @@ final class LiveRecitation {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(200))
                 guard !Task.isCancelled, let self, self.generation == currentGeneration else { return }
+                if self.requests.secondsSinceVoice >= Self.autoPauseSilence {
+                    self.stop(pausing: true)
+                    return
+                }
                 // Silence is measured from microphone samples, never from the
                 // interval between callbacks (which can lag behind speech).
                 if self.requests.hasSpeechPause || Date.now.timeIntervalSince(self.requestStarted) >= 45 {
@@ -302,8 +416,12 @@ final class LiveRecitation {
             if Date.now.timeIntervalSince(requestStarted) < 2 {
                 quickFailures += 1
                 if quickFailures >= 3 {
-                    stop()
-                    status = .unavailable("Speech recognition isn't working right now. Please try again later.")
+                    if RecitationChecker.shared.isActive {
+                        continueWithCheckOnly()
+                    } else {
+                        stop()
+                        status = .unavailable("Speech recognition isn't working right now. Please try again later.")
+                    }
                     return
                 }
             }
@@ -400,6 +518,10 @@ final class LiveRecitation {
         // are recomputed, including removal when a transcript is revised.
         let results = tracker.displayResults
         var changes: [WordID: WordMark?] = [:]
+        // With the recitation check on, it marks the words; speech recognition
+        // only turns words green as they're recited.
+        let checker = RecitationChecker.shared
+        let checkMarks = checker.marksWords
         let currentIDs = Set(results.keys.map { tracker.tokens[$0].id })
         for id in transientShown.subtracting(currentIDs) { changes[id] = .some(nil) }
         for (index, result) in results {
@@ -413,6 +535,11 @@ final class LiveRecitation {
             if shownMarks[id] != mark { changes[id] = .some(mark) }
         }
         transientShown = Set(tracker.provisional.keys.map { tracker.tokens[$0].id })
+        if checkMarks {
+            changes = changes.filter { id, mark in
+                !checker.checked.contains(id) && (mark == nil || mark == .correct)
+            }
+        }
         if changes.values.contains(where: { $0 == .mistake }) { mistakeNotice += 1 }
         for (id, mark) in changes { shownMarks[id] = mark }
         WordHighlights.shared.updateMarks(changes)
@@ -424,11 +551,13 @@ final class LiveRecitation {
 
     // MARK: Off the main thread
 
-    private nonisolated static func installTap(on input: AVAudioInputNode, sending requests: RequestBox) {
+    private nonisolated static func installTap(on input: AVAudioInputNode, sending requests: RequestBox,
+                                               recording clip: RecitationClipRecorder) {
         input.removeTap(onBus: 0)
         let format = input.outputFormat(forBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
-            requests.append(buffer)
+            let isVoice = requests.append(buffer)
+            clip.append(buffer, isVoice: isVoice)
         }
     }
 
@@ -461,6 +590,13 @@ protocol RecitationAudioRequest: AnyObject {
 
 extension SFSpeechAudioBufferRecognitionRequest: RecitationAudioRequest {}
 
+/// Stands in for a recognition request when only the recitation check is
+/// listening: the audio still goes through, for the pause detection.
+final class SilentRequest: RecitationAudioRequest {
+    func append(_ audioPCMBuffer: AVAudioPCMBuffer) {}
+    func endAudio() {}
+}
+
 /// Hands microphone audio to whichever recognition request is current.
 final class RequestBox: @unchecked Sendable {
     private let lock = NSLock()
@@ -470,6 +606,30 @@ final class RequestBox: @unchecked Sendable {
     private var pendingDuration: Double = 0
     private var lastVoice: TimeInterval?
     private var pendingLastVoice: TimeInterval?
+    /// Last voice heard in any request (for the auto-pause).
+    private var lastVoiceAny = ProcessInfo.processInfo.systemUptime
+    private var latestLevel: Float = 0
+
+    /// Seconds since anything louder than silence.
+    var secondsSinceVoice: TimeInterval {
+        lock.lock()
+        defer { lock.unlock() }
+        return ProcessInfo.processInfo.systemUptime - lastVoiceAny
+    }
+
+    /// The latest microphone level, 0...1.
+    var level: Float {
+        lock.lock()
+        defer { lock.unlock() }
+        return latestLevel
+    }
+
+    /// Starts the silence clock again (listening just began).
+    func heardVoice() {
+        lock.lock()
+        defer { lock.unlock() }
+        lastVoiceAny = ProcessInfo.processInfo.systemUptime
+    }
 
     var hasSpeechPause: Bool {
         lock.lock()
@@ -505,10 +665,13 @@ final class RequestBox: @unchecked Sendable {
         return true
     }
 
-    func append(_ buffer: AVAudioPCMBuffer) {
+    /// Hands the audio on. Returns whether it was louder than silence.
+    @discardableResult
+    func append(_ buffer: AVAudioPCMBuffer) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard request != nil else { return }
+        guard request != nil else { return false }
+        var isVoice = false
         if let samples = buffer.floatChannelData, buffer.frameLength > 0 {
             var energy: Float = 0
             let stride = buffer.stride
@@ -516,14 +679,19 @@ final class RequestBox: @unchecked Sendable {
                 let sample = samples[0][frame * stride]
                 energy += sample * sample
             }
-            if energy / Float(buffer.frameLength) > 0.00001 {
+            let mean = energy / Float(buffer.frameLength)
+            // About -60 dB to 0 dB, spread over 0...1.
+            latestLevel = max(0, min(1, (10 * log10(max(mean, 1e-9)) + 60) / 60))
+            if mean > 0.00001 {
+                isVoice = true
                 lastVoice = ProcessInfo.processInfo.systemUptime
+                lastVoiceAny = lastVoice ?? lastVoiceAny
                 if draining { pendingLastVoice = lastVoice }
             }
         }
         if draining {
             // Audio tap buffers are reused: own a copy until the next request.
-            guard let copy = Self.copy(buffer) else { return }
+            guard let copy = Self.copy(buffer) else { return isVoice }
             pending.append(copy)
             pendingDuration += Double(copy.frameLength) / copy.format.sampleRate
             // The final-result timeout is 1.5s. Bound memory even if the UI stalls.
@@ -534,6 +702,7 @@ final class RequestBox: @unchecked Sendable {
         } else {
             request?.append(buffer)
         }
+        return isVoice
     }
 
     static func copy(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {

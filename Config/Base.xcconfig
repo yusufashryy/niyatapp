@@ -26,4 +26,12 @@ FEEDBACK_EMAIL =
 // DISCORD_WEBHOOK = discord.com/api/webhooks/123456/abcdef
 DISCORD_WEBHOOK =
 
+// The recitation check's server and key (see server/README.md). Set them in
+// Local.xcconfig, never here. Without them the check is hidden. Leave out
+// "https://", e.g.
+// RECITATION_SERVER = 203-0-113-7.sslip.io
+// RECITATION_KEY = <the NIYAT_APP_KEYS value on the server>
+RECITATION_SERVER =
+RECITATION_KEY =
+
 #include? "Local.xcconfig"

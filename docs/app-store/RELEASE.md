@@ -87,7 +87,7 @@ in `project.yml` (1, 2, 3…), then `make full` again.
 ## 6. Fill in the listing (**You**, copying from `listing.md`)
 - Name, subtitle, promotional text, description, keywords, category, age rating (answer "None" to everything → 4+).
 - **Privacy Policy URL**: turn on GitHub Pages first (bottom of `listing.md`).
-- **App Privacy**: "No, we do not collect data".
+- **App Privacy**: "No, we do not collect data". The optional recitation check sends audio to Niyat's server, but it's processed only to answer that request and never kept, which Apple's definition of "collect" excludes (see `docs/privacy.md`). In App Review notes, say that the check is optional, off by default, shows an AI notice first, and sends audio to Niyat's own server for immediate processing only.
 - **Screenshots**: 6.9" from the `demo-media` branch (see `listing.md`).
 - **In-App Purchases**: the three tips (table in `listing.md`), and join the Small Business Program for a 15% fee.
 - **App Review notes**: paste the text from `listing.md`.

@@ -16,6 +16,7 @@ struct SurahListView: View {
     @State private var showGoal = false
     @State private var showMushaf = false
     @State private var showNotifications = false
+    @State private var showFinder = false
     /// "verses" (default) opens surahs verse by verse; "pages" in the mushaf view.
     @AppStorage("quran.readingLayout") private var readingLayout = "verses"
     @AppStorage("quran.mushafPage") private var mushafPage = 1
@@ -35,7 +36,23 @@ struct SurahListView: View {
                 }
             }
             .niyatBackground()
+            // Recite anywhere in the Qur'an and go straight there.
+            .overlay(alignment: .bottomTrailing) {
+                if store.isLoaded {
+                    FindByRecitingButton { showFinder = true }
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 12)
+                }
+            }
+            .sheet(isPresented: $showFinder) {
+                FindByRecitingSheet { place in
+                    RecitationHandoff.pending = place
+                    open(ReaderDestination(surah: place.surah, verse: place.verse))
+                }
+            }
             .navigationTitle("Quran")
+            // The reader hides the tab bar on iPhone; it comes back here.
+            .toolbar(.visible, for: .tabBar)
             // Wide enough for the Duas and Mushaf tiles side by side.
             .navigationSplitViewColumnWidth(min: 340, ideal: 380, max: 440)
             .searchable(text: $searchText, prompt: "Surah name or number")

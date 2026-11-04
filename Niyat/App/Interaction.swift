@@ -36,9 +36,11 @@ extension View {
     }
 
     /// Rows coming up from the bottom fade straight in, once, rather than
-    /// following the finger; rows leaving at the top don't fade.
+    /// following the finger; rows leaving at the top don't fade. A row shows
+    /// as soon as a little of it is on screen: waiting for all of it left
+    /// tall rows (long verses) blank while they scrolled in.
     func scrollFade() -> some View {
-        scrollTransition(.animated(.smooth(duration: 0.35)), axis: .vertical) { content, phase in
+        scrollTransition(.animated(.smooth(duration: 0.35)).threshold(.visible(0.15)), axis: .vertical) { content, phase in
             content.opacity(phase == .bottomTrailing ? 0 : 1)
         }
     }

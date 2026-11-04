@@ -100,6 +100,15 @@ The microphone button in the reader and on the mushaf pages listens while you re
 
 Tested with the tracker's scenarios (following along, starting mid-ayah, skipping, repeating, pausing, restarting an ayah, unrelated speech) and, while building it, by reciting the whole Qur'an's Imla'i text through it: no word marked as a mistake. See `docs/research/recitation-checker.md`.
 
+## Recitation check (optional, server)
+
+When the reader turns it on, each part they recite between pauses is checked by **Quran Muaalem** ([github.com/obadx/quran-muaalem](https://github.com/obadx/quran-muaalem), model `obadx/muaalem-model-v3_2`, Quran Muaalem License 1.0) on Niyat's server (`server/`). The model writes down the sounds it heard in a phonetic script of the Qur'an; the server compares them with the phonetic form of the Uthmani text (from `quran-transcript`, Hafs by way of ash-Shatibiyyah) and marks each word. Nothing from the Qur'an is generated: the text shown is always the bundled Tanzil text, and the server only returns word positions and short fixed notes.
+
+- **Allowed variations** (`server/niyat_check/tolerance.py`): stopping on any word, going back to repeat, the madd lengths Hafs allows, and sounds at the edges of a part.
+- **Marks:** red only for a letter different or missing and for skipped words; vowels and tajweed are amber ("check this"); doubtful hearing is grey.
+- **Measured** on 564 professional recordings, 12 other reciters and 150 learners: `docs/research/asr-eval-muaalem.md`.
+- **AI notice:** shown before first use and always in Qur'an settings, quoted exactly from the licence in Arabic and English (`AINotice`).
+
 ## Word-by-word highlighting of the reciter
 
 The recitation audio (Islamic Network, EveryAyah) comes with no word timings. The best published timings ([quran-align](https://github.com/cpfair/quran-align), CC BY 4.0) were made for other copies of these recordings, so they can't be trusted to match Niyat's files. Instead, each ayah's recording is aligned on the iPhone: Apple's on-device speech recognition transcribes the reciter with the time of each word, and the recognised words are matched to the verified text by the same aligner as live recitation. Only words clearly recognised are placed; words between them share the time in between by their number of letters. An ayah is followed word by word only when at least 60% of its words were placed and in order; otherwise the whole ayah is highlighted as before. Results (the start time of each word) are cached on the device; the audio isn't kept. Settings › Qur'an › Follow the reciter word by word turns it off.

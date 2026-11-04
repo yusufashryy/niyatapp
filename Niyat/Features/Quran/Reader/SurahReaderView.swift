@@ -14,6 +14,9 @@ struct SurahReaderView: View {
 
     @Environment(AppModel.self) private var model
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    /// The ayah found by reciting from the Qur'an list, where listening starts.
+    @State private var handoffVerse: Int?
     @State private var store = QuranStore.shared
     @State private var player = RecitationPlayer.shared
     @State private var live = LiveRecitation.shared
@@ -83,8 +86,9 @@ struct SurahReaderView: View {
                                   onPlaceRibbon: { withAnimation(.smooth) { store.moveRibbon(to: verse) } }) {
                             store.toggleBookmark(verse)
                         }
+                        // No fade-in: under the Recite row a fading card stayed
+                        // blank, and the text should never be hidden while you scroll.
                         .id(verse.id)
-                        .scrollFade()
                         .onAppear {
                             visibleVerses.insert(verse.id)
                             countWhenRead(verse)
@@ -131,12 +135,7 @@ struct SurahReaderView: View {
         .niyatBackground()
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
-                if highlights.flaggedCount > 0 {
-                    RecitationReviewPill(count: highlights.flaggedCount) { showReview = true }
-                }
-                if live.isListening || highlights.flaggedCount > 0 {
-                    recitationBar.transition(.move(edge: .bottom).combined(with: .opacity))
-                }
+                RecitationDock(onRecite: toggleListening) { showReview = true }
                 RecitationMiniPlayer()
             }
             .readableWidth(600)
@@ -164,11 +163,15 @@ struct SurahReaderView: View {
         .animation(.bouncy, value: goal.celebration)
         .navigationTitle(surah?.transliteration ?? "")
         .navigationBarTitleDisplayMode(.inline)
+        // Reading on iPhone: the tab bar steps aside, leaving the Recite row
+        // the bottom of the screen to itself. Beside the list (iPad, Duo
+        // open) it stays.
+        .toolbar(sizeClass == .compact ? .hidden : .automatic, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 QuranGoalPill { showGoal = true }
             }
-            // Memorisation (eye) sits immediately left of the microphone, next to play.
+            // Memorisation (eye) next to play; Recite is its own button at the bottom.
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button { highlights.setHidden(!highlights.isHidden) } label: {
                     Image(systemName: highlights.isHidden ? "eye.slash.fill" : "eye.slash")
@@ -176,12 +179,6 @@ struct SurahReaderView: View {
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .accessibilityLabel(highlights.isHidden ? "Show the text" : "Hide the text to recite from memory")
-                Button(action: toggleListening) {
-                    Image(systemName: live.isListening ? "mic.fill" : "mic")
-                        .foregroundStyle(live.isListening ? Palette.control : Color.primary)
-                        .symbolEffect(.pulse, options: .repeating, isActive: live.isListening)
-                }
-                .accessibilityLabel(live.isListening ? "Stop listening" : "Recite: follow along as I recite")
                 if audioAvailable {
                     Button {
                         if player.current?.surah == surahID {
@@ -204,7 +201,6 @@ struct SurahReaderView: View {
             }
         }
         .haptic(.selection, trigger: highlights.isHidden)
-        .haptic(.impact(weight: .light), trigger: live.isListening)
         .sheet(isPresented: $showSettings) { QuranSettingsView() }
         .sheet(isPresented: $showGoal) { QuranGoalSheet() }
         .sheet(isPresented: $showReview) {
@@ -221,6 +217,13 @@ struct SurahReaderView: View {
             if case .unavailable(let message) = live.status { Text(message) }
         }
         .task { await tajweedStore.load() }
+        // Found by reciting from the Qur'an list: carry on following from there.
+        .task {
+            guard let place = RecitationHandoff.take(for: surahID) else { return }
+            handoffVerse = place.verse
+            try? await Task.sleep(for: .milliseconds(600))
+            if !live.isListening { toggleListening() }
+        }
         .onChange(of: live.isListening) { _, listening in
             UIApplication.shared.isIdleTimerDisabled = listening
         }
@@ -256,38 +259,6 @@ struct SurahReaderView: View {
         }
     }
 
-    /// Live recitation's status, with the review and a stop button.
-    private var recitationBar: some View {
-        HStack(spacing: 10) {
-            if live.isListening {
-                LiveRecitationStatus()
-            } else {
-                Text("Recitation finished")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-            if live.isListening {
-                Button { live.stop() } label: {
-                    Label("Stop", systemImage: "stop.fill").font(.subheadline.weight(.semibold))
-                }
-                .buttonStyle(.pressable)
-                .foregroundStyle(.white)
-            } else {
-                Button { live.clearReview() } label: {
-                    Image(systemName: "xmark").font(.footnote.weight(.bold)).frame(width: 28, height: 28)
-                }
-                .buttonStyle(.pressable)
-                .foregroundStyle(.white)
-                .accessibilityLabel("Clear marks")
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .glassEffect(.regular.tint(Palette.glow.opacity(0.4)), in: .capsule)
-        .padding(.horizontal, 12)
-    }
-
     private var unavailableBinding: Binding<Bool> {
         Binding(get: {
             if case .unavailable = live.status { return true }
@@ -316,7 +287,7 @@ struct SurahReaderView: View {
     private func toggleListening() {
         if live.isListening {
             live.stop()
-        } else if UserDefaults.standard.bool(forKey: ReciteIntroSheet.seenKey) {
+        } else if !ReciteIntroSheet.isNeeded(for: store.edition) {
             startListening()
         } else {
             showIntro = true
@@ -345,7 +316,10 @@ struct SurahReaderView: View {
     private func startListening() {
         let verses = store.verses(for: surahID)
         let words = verses.map { QuranWords.shared.words(for: $0, edition: store.edition) }
-        let top = visibleVerses.min() ?? store.ribbon.flatMap { $0.surah == surahID ? surahID * 1000 + $0.verse : nil }
+        // Found by reciting: start at the ayah that was found; otherwise the top of the screen.
+        let found = handoffVerse.flatMap { store.verse(VerseReference(surah: surahID, verse: $0))?.id }
+        handoffVerse = nil
+        let top = found ?? visibleVerses.min() ?? store.ribbon.flatMap { $0.surah == surahID ? surahID * 1000 + $0.verse : nil }
         var start = 0
         if let top {
             for (verse, verseWords) in zip(verses, words) {

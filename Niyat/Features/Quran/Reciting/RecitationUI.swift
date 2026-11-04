@@ -2,13 +2,17 @@ import Speech
 import SwiftUI
 
 // Live recitation's pieces of UI, shared by the verse-by-verse reader and the
-// mushaf pages: the status pill, the first-time explanation and the review.
+// mushaf pages: the status, the first-time explanation and the review. The
+// row with the Recite button is RecitationDock.
 
 /// Where live recitation is at, in a few words.
 struct LiveRecitationStatus: View {
     /// On light paper.
     var light = false
+    /// Inside another bar: no capsule of its own.
+    var plain = false
     @State private var live = LiveRecitation.shared
+    @State private var checker = RecitationChecker.shared
     @State private var pulse = false
     /// "Sounded different", shown for a moment in bright red.
     @State private var showMistake = false
@@ -16,8 +20,8 @@ struct LiveRecitationStatus: View {
 
     var body: some View {
         content
-            .haptic(.warning, trigger: live.mistakeNotice)
-            .onChange(of: live.mistakeNotice) { _, _ in
+            .haptic(.warning, trigger: live.mistakeNotice + checker.mistakeNotice)
+            .onChange(of: live.mistakeNotice + checker.mistakeNotice) { _, _ in
                 withAnimation(.smooth) { showMistake = true }
                 hideTask?.cancel()
                 hideTask = Task {
@@ -30,7 +34,7 @@ struct LiveRecitationStatus: View {
 
     @ViewBuilder
     private var content: some View {
-        if showMistake, live.isListening {
+        if showMistake, live.isListening || checker.pending > 0 {
             Label("Sounded different", systemImage: "exclamationmark.circle.fill")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.white)
@@ -55,7 +59,7 @@ struct LiveRecitationStatus: View {
             .foregroundStyle(light ? Color.black.opacity(0.75) : .white)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background((light ? Color.black : Color.white).opacity(0.08), in: .capsule)
+            .background((light ? Color.black : Color.white).opacity(plain ? 0 : 0.08), in: .capsule)
             .animation(.smooth, value: text)
             .accessibilityElement(children: .combine)
         }
@@ -63,11 +67,14 @@ struct LiveRecitationStatus: View {
 
     private var text: String? {
         switch live.status {
-        case .starting: "Starting…"
-        case .searching: "Listening · start reciting"
-        case .following: "Following"
-        case .lost: "Can't find your place"
-        case .idle, .unavailable: nil
+        case .starting: return "Starting…"
+        case .searching: return "Listening · start reciting"
+        case .following:
+            if checker.isActive, checker.health == .offline { return "Following · check offline" }
+            return checker.pending > 0 ? "Following · checking" : "Following"
+        case .lost: return "Can't find your place"
+        case .paused: return "Paused · tap to carry on"
+        case .idle, .unavailable: return checker.pending > 0 ? "Checking…" : nil
         }
     }
 
@@ -75,40 +82,9 @@ struct LiveRecitationStatus: View {
         switch live.status {
         case .following: .green
         case .lost: .orange
+        case .paused, .idle: .gray
         default: .red
         }
-    }
-}
-
-/// Words to review after reciting: its own pill that pops up above the
-/// controls (verse by verse and mushaf alike), so it's hard to miss.
-struct RecitationReviewPill: View {
-    let count: Int
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: "text.badge.checkmark")
-                Text(count == 1 ? "1 word to review" : "\(count) words to review")
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .opacity(0.7)
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 18)
-            .frame(height: 42)
-            .glassEffect(.regular.tint(Palette.control.opacity(0.55)).interactive(), in: .capsule)
-            .contentShape(.capsule)
-        }
-        .buttonStyle(.pressable)
-        .haptic(.impact(weight: .light), trigger: count > 0) { !$0 && $1 }
-        .animation(.smooth, value: count)
-        .transition(.scale(scale: 0.8, anchor: .bottom).combined(with: .opacity))
-        .accessibilityLabel("Review \(count) marked words")
     }
 }
 
@@ -120,11 +96,39 @@ struct ReciteIntroSheet: View {
     let onStart: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var onDevice = SFSpeechRecognizer(locale: Locale(identifier: "ar-SA"))?.supportsOnDeviceRecognition ?? false
+    /// After the introduction: the recitation check's AI notice and choice.
+    @State private var showsCheck = false
 
     static let seenKey = "quran.reciteIntroSeen.v2"
 
+    /// Whether tapping Recite should show this sheet first.
+    static func isNeeded(for edition: QuranEdition) -> Bool {
+        !UserDefaults.standard.bool(forKey: seenKey) || needsCheckChoice(for: edition)
+    }
+
+    private static func needsCheckChoice(for edition: QuranEdition) -> Bool {
+        RecitationCheckSettings.isAvailable && RecitationCheckSettings.supports(edition) && !RecitationCheckSettings.noticeSeen
+    }
+
     var body: some View {
         NavigationStack {
+            Group {
+                if showsCheck || UserDefaults.standard.bool(forKey: Self.seenKey) {
+                    RecitationCheckChoice { _ in
+                        dismiss()
+                        onStart()
+                    }
+                } else {
+                    introduction
+                }
+            }
+            .niyatBackground()
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+        }
+        .presentationDetents([.large])
+    }
+
+    private var introduction: some View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     point("text.word.spacing", "Follows you word by word",
@@ -134,7 +138,11 @@ struct ReciteIntroSheet: View {
                     point("eye.slash", "Recite from memory",
                           "Hide the text with the eye button. Niyat keeps following and marking words; show the text to see them.")
                     point("lock.shield", "Private",
-                          onDevice
+                          RecitationCheckSettings.isAvailable
+                              ? (onDevice
+                                  ? "Apple's speech recognition follows you on this iPhone. If you turn on the recitation check (next), each part you recite is also sent to Niyat's server to be checked, then deleted. Nothing is saved."
+                                  : "Apple's speech recognition follows you (on Apple's servers on this iPhone, encrypted as with dictation). If you turn on the recitation check (next), each part you recite is also sent to Niyat's server to be checked, then deleted. Nothing is saved.")
+                              : onDevice
                               ? "Your voice is turned into text by Apple's speech recognition on this iPhone. Nothing is sent anywhere, and Niyat never records or saves your recitation."
                               : "Your voice is turned into text by Apple's speech recognition, which on this iPhone runs on Apple's servers (encrypted, as with dictation). Niyat never records or saves your recitation.")
                     point("book", "Your reading",
@@ -147,21 +155,23 @@ struct ReciteIntroSheet: View {
             .safeAreaInset(edge: .bottom) {
                 Button {
                     UserDefaults.standard.set(true, forKey: Self.seenKey)
-                    dismiss()
-                    onStart()
+                    if Self.needsCheckChoice(for: edition) {
+                        withAnimation(.smooth) { showsCheck = true }
+                    } else {
+                        dismiss()
+                        onStart()
+                    }
                 } label: {
                     Text("Continue").font(.headline).frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)
+                .tint(Palette.control)
                 .controlSize(.large)
                 .padding(20)
+                .background { BottomFade() }
             }
-            .niyatBackground()
             .navigationTitle("Recite with Niyat")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
-        }
-        .presentationDetents([.large])
     }
 
     private func point(_ icon: String, _ title: String, _ detail: String) -> some View {
@@ -187,6 +197,7 @@ struct RecitationReviewSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var store = QuranStore.shared
     @State private var verses: [LiveRecitation.ReviewVerse] = []
+    @State private var checkUsed = false
 
     var body: some View {
         NavigationStack {
@@ -194,9 +205,12 @@ struct RecitationReviewSheet: View {
                 Section {
                     legend(.mistake, "Sounded different", "Something clearly different was heard.")
                     legend(.skipped, "Possibly skipped", "The words around it were heard, but not this one.")
+                    if checkUsed { legend(.check, "Check this", "A vowel or tajweed point worth checking.") }
                     legend(.uncertain, "Couldn't tell", "Not clearly heard. Often the recogniser, not you.")
                 } footer: {
-                    Text("Niyat compares words, not pronunciation or tajweed, and speech recognition can mishear. Treat these as prompts to check with the text or a teacher.")
+                    Text(checkUsed
+                         ? "Marked by Quran Muaalem, an AI model that can make mistakes. It's for help only and isn't a replacement for a qualified teacher. Treat these as prompts to check with the text or a teacher."
+                         : "Niyat compares words, not pronunciation or tajweed, and speech recognition can mishear. Treat these as prompts to check with the text or a teacher.")
                 }
                 if verses.isEmpty {
                     ContentUnavailableView("Nothing to review", systemImage: "checkmark.seal",
@@ -206,15 +220,23 @@ struct RecitationReviewSheet: View {
                 ForEach(verses) { verse in
                     Section {
                         ForEach(verse.words) { word in
-                            HStack(spacing: 12) {
-                                MarkSwatch(mark: word.mark)
-                                Text(title(word.mark))
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                Text(word.text)
-                                    .font(.quran(size: 26))
-                                    .foregroundStyle(.white)
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 12) {
+                                    MarkSwatch(mark: word.mark)
+                                    Text(title(word.mark))
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    Text(word.text)
+                                        .font(.quran(size: 26))
+                                        .foregroundStyle(.white)
+                                }
+                                ForEach(word.notes, id: \.self) { note in
+                                    Text(note)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                        .padding(.leading, 42)
+                                }
                             }
                             .accessibilityElement(children: .combine)
                         }
@@ -252,7 +274,10 @@ struct RecitationReviewSheet: View {
                 }
             }
         }
-        .onAppear { verses = LiveRecitation.shared.review() }
+        .onAppear {
+            verses = LiveRecitation.shared.review()
+            checkUsed = !RecitationChecker.shared.checked.isEmpty
+        }
         .presentationDetents([.medium, .large])
     }
 
@@ -261,6 +286,7 @@ struct RecitationReviewSheet: View {
         case .correct: "Text matched"
         case .mistake: "Sounded different"
         case .skipped: "Possibly skipped"
+        case .check: "Check this"
         case .uncertain: "Couldn't tell"
         }
     }
@@ -294,6 +320,8 @@ struct MarkSwatch: View {
             case .uncertain:
                 context.stroke(path, with: .color(Color(style.uncertain)),
                                style: StrokeStyle(lineWidth: 2.5, lineCap: .round, dash: [0.1, 5]))
+            case .check:
+                context.stroke(path, with: .color(Color(style.check)), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
             case .mistake:
                 context.stroke(path, with: .color(Color(style.mistake)), style: StrokeStyle(lineWidth: 3, lineCap: .round))
             case .skipped:
@@ -303,5 +331,16 @@ struct MarkSwatch: View {
         }
         .frame(width: 30, height: 10)
         .accessibilityHidden(true)
+    }
+}
+
+/// Behind buttons pinned to the bottom of a scrolling sheet, so text scrolls
+/// under them without showing through.
+struct BottomFade: View {
+    var body: some View {
+        LinearGradient(colors: [.black.opacity(0), .black.opacity(0.85), .black], startPoint: .top, endPoint: .bottom)
+            .padding(.top, -24)
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
     }
 }

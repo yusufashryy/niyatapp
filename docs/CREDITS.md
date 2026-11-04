@@ -25,6 +25,11 @@ Arabic dhikr phrases in `Shared/Tasbih.swift` are standard phrases, not copied f
 
 - **Quran Tajweed** by Collin Fair, [github.com/cpfair/quran-tajweed](https://github.com/cpfair/quran-tajweed), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Built from ReciteQuran.com and the Dar al-Maarifah tajweed masahif. Niyat re-runs its classifier on the bundled Tanzil text (see docs/SOURCES.md); no rule data was changed by hand.
 
+## Recitation check
+
+- **Quran Muaalem** by obadx (copyright holder) and contributors, [github.com/obadx/quran-muaalem](https://github.com/obadx/quran-muaalem), with the model [obadx/muaalem-model-v3_2](https://huggingface.co/obadx/muaalem-model-v3_2), under the [Quran Muaalem License 1.0](https://github.com/obadx/quran-muaalem/blob/main/LICENSE) (Apache 2.0 with conditions: the AI notice, following Islamic law, no advertising, a free path if ever paid). Runs on Niyat's server (`server/`), unmodified; Niyat adds the matching and the notes around it.
+- **quran-transcript** by the same author: the phonetic script the check compares against.
+
 ## Mushaf line layout
 
 - `Niyat/Resources/Quran/mushaf-lines.json`: which word begins and ends each of the 15 lines of the 604 Madinah mushaf pages. Derived by `scripts/generate_mushaf_layout.py` from [zonetecde/mushaf-layout](https://github.com/zonetecde/mushaf-layout) (no licence file; its `package.json` declares ISC). Only word positions are taken; every word is matched to, and drawn from, the Tanzil text above. See docs/SOURCES.md for the checks.

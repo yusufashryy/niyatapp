@@ -69,7 +69,7 @@ targets:
         UIAppFonts: [AmiriQuran-Regular.ttf, ArefRuqaa-Bold.ttf]
         UIBackgroundModes: [fetch, audio]
         BGTaskSchedulerPermittedIdentifiers: [$(PRODUCT_BUNDLE_IDENTIFIER).refresh]
-        NSMicrophoneUsageDescription: Niyat listens while you recite so it can follow along and point out words to double-check. Nothing is recorded or saved.
+        NSMicrophoneUsageDescription: Niyat listens while you recite so it can follow along and point out words to double-check. If you turn on the recitation check, each part you recite is sent to Niyat's server to be checked, then deleted. Nothing is saved.
         NSSpeechRecognitionUsageDescription: Niyat uses Apple's speech recognition to follow your recitation word by word, and to line up reciters' recordings with the text. When your iPhone supports it, this happens entirely on the device.
         NSLocationWhenInUseUsageDescription: Niyat uses your location to calculate accurate prayer times and the Qibla direction. Your location never leaves your phone.
         ITSAppUsesNonExemptEncryption: false
@@ -81,6 +81,12 @@ targets:
         NiyatAppStoreID: $(APP_STORE_ID)
         NiyatFeedbackEmail: $(FEEDBACK_EMAIL)
         NiyatDiscordWebhook: $(DISCORD_WEBHOOK)
+        # The recitation check's server (server/README.md). Empty: the check is hidden.
+        NiyatRecitationServer: $(RECITATION_SERVER)
+        NiyatRecitationKey: $(RECITATION_KEY)
+        # Plain http only to this Mac or the local network, for trying the server out.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     entitlements:
       path: Niyat/Support/Niyat.entitlements
       properties:

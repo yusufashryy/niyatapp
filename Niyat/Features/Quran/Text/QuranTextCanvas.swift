@@ -13,6 +13,8 @@ enum WordMark: Hashable {
     case correct
     /// Couldn't tell (neutral dotted underline). Never shown as an error.
     case uncertain
+    /// A vowel or tajweed point worth checking (amber; recitation check only).
+    case check
     /// Something clearly different was heard.
     case mistake
     /// Passed over while the words around it were recited.
@@ -38,6 +40,8 @@ struct QuranTextStyle: Equatable {
     /// Soft highlight behind the word being recited.
     var currentWord: UIColor = UIColor(white: 0.55, alpha: 0.30)
     var uncertain: UIColor = UIColor(white: 0.62, alpha: 0.9)
+    /// Amber: a vowel or tajweed point to check, never a mistake.
+    var check: UIColor = UIColor(red: 1.0, green: 0.68, blue: 0.16, alpha: 1)
     /// Soft green behind words matched in the final transcript.
     var correct: UIColor = UIColor(red: 0.25, green: 0.85, blue: 0.45, alpha: 0.28)
     /// Bright red: something clearly different was heard.
@@ -565,6 +569,9 @@ final class QuranTextCanvas: UIView {
                     path.lineWidth = max(1.5, size * 0.06)
                     path.setLineDash([0.1, size * 0.18], count: 2, phase: 0)
                     style.uncertain.setStroke()
+                case .check:
+                    path.lineWidth = max(1.5, size * 0.06)
+                    style.check.setStroke()
                 case .mistake:
                     path.lineWidth = max(2, size * 0.08)
                     style.mistake.setStroke()
