@@ -30,6 +30,7 @@ struct MushafPageView: View {
     /// Show the verse options at the top when the tapped verse is low on the page.
     @State private var actionsAtTop = false
     @State private var showJump = false
+    @State private var tafsirTarget: TafsirTarget?
     @State private var showOptions = false
     @State private var showIntro = false
     /// First page of the text live recitation is following.
@@ -92,6 +93,8 @@ struct MushafPageView: View {
                                    onPlayVerse: { play(from: selected, only: true) },
                                    onRibbon: { withAnimation(.smooth) { store.toggleRibbon(selected) } },
                                    onSave: { store.toggleBookmark(selected) },
+                                   onTafsir: store.edition.riwayah == .hafs
+                                       ? { tafsirTarget = TafsirTarget(surah: selected.surah, ayah: selected.number) } : nil,
                                    onClose: { select(nil) })
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -122,6 +125,7 @@ struct MushafPageView: View {
         .preferredColorScheme(colors.isLight ? .light : .dark)
         // Sheets keep the app's dark look, whatever the paper.
         .sheet(isPresented: $showJump) { MushafJumpSheet(page: jumpBinding).preferredColorScheme(.dark) }
+        .sheet(item: $tafsirTarget) { TafsirSheet(surah: $0.surah, ayah: $0.ayah).preferredColorScheme(.dark) }
         .sheet(isPresented: $showOptions) { MushafOptionsSheet(options: $options).preferredColorScheme(.dark) }
         .sheet(isPresented: $showIntro) {
             ReciteIntroSheet(edition: store.edition) { startListening() }

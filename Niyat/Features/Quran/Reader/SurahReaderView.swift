@@ -31,6 +31,7 @@ struct SurahReaderView: View {
     @State private var tajweedStore = TajweedStore.shared
     @State private var didScroll = false
     @State private var showSettings = false
+    @State private var tafsirTarget: TafsirTarget?
     @State private var showGoal = false
     @State private var showIntro = false
     /// Verses currently on screen, for counting what's actually read.
@@ -82,7 +83,10 @@ struct SurahReaderView: View {
                                   isReciting: player.current == .verse(surah: surahID, verse: verse.number),
                                   showsPlay: audioAvailable,
                                   onPlay: { play(from: verse.number) },
-                                  onPlaceRibbon: { withAnimation(.smooth) { store.toggleRibbon(verse) } }) {
+                                  onPlaceRibbon: { withAnimation(.smooth) { store.toggleRibbon(verse) } },
+                                  // The tafsirs follow Hafs's numbering of the ayat.
+                                  onTafsir: store.edition.riwayah == .hafs
+                                      ? { tafsirTarget = TafsirTarget(surah: verse.surah, ayah: verse.number) } : nil) {
                             store.toggleBookmark(verse)
                         }
                         // No fade-in: under the Recite row a fading card stayed
@@ -201,6 +205,7 @@ struct SurahReaderView: View {
         }
         .haptic(.selection, trigger: highlights.isHidden)
         .sheet(isPresented: $showSettings) { QuranSettingsView() }
+        .sheet(item: $tafsirTarget) { TafsirSheet(surah: $0.surah, ayah: $0.ayah) }
         .sheet(isPresented: $showGoal) { QuranGoalSheet() }
         .sheet(isPresented: $showIntro) {
             ReciteIntroSheet(edition: store.edition) { startListening() }
@@ -423,6 +428,8 @@ private struct VerseCard: View {
     let showsPlay: Bool
     let onPlay: () -> Void
     let onPlaceRibbon: () -> Void
+    /// Nil where there's no tafsir to show (Warsh and Qalun number the ayat differently).
+    let onTafsir: (() -> Void)?
     let onToggleSaved: () -> Void
 
     var body: some View {
@@ -451,6 +458,16 @@ private struct VerseCard: View {
                     }
                     .buttonStyle(.pressable)
                     .accessibilityLabel("Play verse \(verse.number)")
+                }
+                if let onTafsir {
+                    Button(action: onTafsir) {
+                        Image(systemName: "text.book.closed")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.secondary)
+                            .frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(.pressable)
+                    .accessibilityLabel("Tafsir of verse \(verse.number)")
                 }
                 // One tap puts your ribbon here (it stays until you read on past it).
                 Button(action: onPlaceRibbon) {
@@ -518,6 +535,9 @@ private struct VerseCard: View {
                    systemImage: hasRibbon ? "bookmark.slash" : "bookmark") { onPlaceRibbon() }
             Button(isSaved ? "Remove from saved verses" : "Save verse",
                    systemImage: isSaved ? "star.slash" : "star") { onToggleSaved() }
+            if let onTafsir {
+                Button("Tafsir", systemImage: "text.book.closed") { onTafsir() }
+            }
             Button("Copy", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = "\(verse.arabic)\n\n\(verse.translation)\n— Qur'an \(verse.surah):\(verse.number)"
             }

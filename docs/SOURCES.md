@@ -30,6 +30,8 @@ Tanzil's Qur'an metadata (in `chapters.json`, same CC BY 3.0 source) gives where
 
 Four slips in the source layout are corrected by the script, each checked against the rules above: a missing title and Bismillah line on pages 586 and 590, a title placed at the top of page 207 instead of the bottom, and 19 title lines labelled with the wrong surah.
 
+**Surah headings.** Each surah's heading is Niyat's own vector drawing (`SurahFrameArt.swift`), laid out after the printed Madinah mushaf: an arabesque band, the title in a cartouche, and medallions giving the surah's number (ترتيبها) and count of ayat (آياتها) from `chapters.json`. No artwork is copied. The titles with their harakat («سُورَةُ البَقَرَةِ») are AlQuran Cloud's surah names (Islamic Network, [api.alquran.cloud/v1/surah](https://api.alquran.cloud/v1/surah), fetched 4 November 2026), kept exactly as published in `Niyat/Resources/Quran/surah-titles.json` (SHA-256 `841256fe…1600b`). Its [terms](https://alquran.cloud/terms-and-conditions) allow bundling with an acknowledgement, given in CREDITS.md. Their ayah counts were checked against `chapters.json` for all 114 surahs. The surah-name and heading fonts on the Quranic Universal Library were not used: their pages say "We don't have copyright information for this resource".
+
 Niyat does **not** bundle the printed page images: the King Fahd Complex scans are copyrighted. Each line is drawn by the app from the verified text in the Amiri Quran font, stretched to the full width like print (words may be widened or narrowed by up to 10%, then the spaces between them grow). Pages are for the Uthmani script (Hafs), and the "fewer marks" Uthmani text, which has exactly the same words (tested). With another script or riwayah selected, the pages say so and offer to switch rather than placing a different text on Hafs lines.
 
 ## Translation
@@ -67,6 +69,18 @@ Six recordings from [Aladhan's Download Adhans page](https://aladhan.com/downloa
 - Only the alert when a prayer begins plays the athan; the reminders before and after, and sunrise, keep the standard sound. Fajr can have its own muezzin.
 
 Wikimedia Commons' freely licensed recordings (CC0 and CC BY-SA) were considered and not used: the owner judged their quality too low. Recordings from the Haram in Makkah and the Prophet's Mosque that other sites label "public domain" were not used: those labels come from the uploaders, not the rights holders.
+
+## Tafsir
+
+Two classical tafsirs in Arabic, bundled and offline, shown from an ayah's Tafsir button in the reader and the mushaf (Hafs only: both follow its numbering of the ayat).
+- **Tafsir al-Jalalayn** (al-Mahalli and al-Suyuti), Dar al-Hadith, Cairo, 1422 AH / 2001: [Quranpedia](https://quranpedia.net) `tafsir-book-272.json.gz` (SHA-256 `20be5cc1…f3af5`).
+- **Tafsir al-Qur'an al-'Azim** (Ibn Kathir), ed. Sami Salama, Dar Taybah, 1420 AH: Quranpedia `tafsir-book-136.json.gz` (SHA-256 `26749df0…4f230`).
+
+**Licence.** Quranpedia's data licence (version 2026-08-10, in every file and at [quranpedia.net/dumps/LICENSE.md](https://quranpedia.net/dumps/LICENSE.md)): the classical tafsirs are the ummah's shared heritage; the digitisation is Quranpedia's work; use "inside apps, websites, and research tools" is free with no attribution required (Niyat credits it anyway, in the sheet and CREDITS.md). Republishing the data as a downloadable dataset needs credit and the version. Translations and contemporary works stay with their owners, so they aren't used.
+
+**How they're made.** `scripts/build_tafsir.py` (`make tafsir`) downloads both files, checks them against Quranpedia's manifest checksums, and writes `Niyat/Resources/Tafsir/jalalayn.tafsir` and `ibn-kathir.tafsir` (raw-DEFLATE-compressed JSON, 0.7 MB and 6.6 MB). The commentators' words are kept as published; only the HTML becomes plain paragraphs. Left out, because they're the modern editor's work, not Ibn Kathir's: the editor's footnotes and their «(١)» markers, the editor's study (the data's "volume 0"), and Ibn Kathir's own introduction, which the data files under An-Nas 6 rather than any ayah. Commentators often explain several ayat together: an entry covers its ayah up to the next entry's, and the sheet says so ("On ayat 5–6"). The tests check that Ibn Kathir covers all 6,236 ayat and Jalalayn all but 1:1 (it explains the Basmala of Al-Fatiha with the next ayah), that entries never overlap, and that no footnote markers or markup are left.
+
+**Keeping current.** Quranpedia corrects its texts over time and asks that copies be kept current (`/api/v1/changes?since=<version>`). Run `make tafsir` before a release; the sheet shows the version.
 
 ## Hadith
 

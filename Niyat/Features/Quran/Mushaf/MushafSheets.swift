@@ -12,6 +12,8 @@ struct MushafVerseActions: View {
     let onPlayVerse: () -> Void
     let onRibbon: () -> Void
     let onSave: () -> Void
+    /// Nil where there's no tafsir to show (Warsh and Qalun number the ayat differently).
+    let onTafsir: (() -> Void)?
     let onClose: () -> Void
     @State private var copied = false
 
@@ -43,6 +45,7 @@ struct MushafVerseActions: View {
                 }
                 action(hasRibbon ? "Remove ribbon" : "Ribbon", hasRibbon ? "bookmark.slash.fill" : "bookmark", onRibbon)
                 action(isSaved ? "Saved" : "Save", isSaved ? "star.fill" : "star", onSave)
+                if let onTafsir { action("Tafsir", "text.book.closed", onTafsir) }
                 action(copied ? "Copied" : "Copy", copied ? "checkmark" : "doc.on.doc") {
                     UIPasteboard.general.string = "\(verse.arabic)\n\n\(verse.translation)\n— Qur'an \(verse.surah):\(verse.number)"
                     copied = true
