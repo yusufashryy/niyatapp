@@ -91,6 +91,7 @@ struct TasbihWidgetView: View {
                             .minimumScaleFactor(0.5)
                         if entry.target > 0 {
                             Text("of \(entry.target)")
+                                .fitText()
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }

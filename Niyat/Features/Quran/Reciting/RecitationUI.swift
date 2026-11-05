@@ -25,7 +25,7 @@ struct LiveRecitationStatus: View {
                     .onAppear { pulse = true }
                 Text(text)
                     .font(.caption.weight(.semibold))
-                    .lineLimit(1)
+                    .lineLimit(1).minimumScaleFactor(0.75)
                     .contentTransition(.opacity)
             }
             .foregroundStyle(light ? Color.black.opacity(0.75) : .white)

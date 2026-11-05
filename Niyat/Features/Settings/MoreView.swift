@@ -166,6 +166,7 @@ private struct WidgetGuideView: View {
                 HStack(alignment: .top, spacing: 12) {
                     Text("\(index + 1)")
                         .font(.footnote.weight(.heavy))
+                        .fitText()
                         .foregroundStyle(.black)
                         .frame(width: 26, height: 26)
                         .background(Palette.accent, in: .circle)

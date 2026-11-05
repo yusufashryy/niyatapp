@@ -134,9 +134,9 @@ private struct PrayerDial: View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
                 Label(locationName, systemImage: "location.fill")
-                    .lineLimit(1)
+                    .fitText(0.5)
                 Spacer(minLength: 8)
-                Text(hijri).lineLimit(1)
+                Text(hijri).fitText(0.5)
             }
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
@@ -194,6 +194,9 @@ private struct PrayerDial: View {
         }
         .padding(18)
         .glassPanel(cornerRadius: 34, tint: Palette.glow.opacity(0.25))
+        // A fixed circle can't reflow: above the largest standard text size it
+        // stops growing (VoiceOver and the rows below still follow the setting).
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 
     @ViewBuilder
@@ -202,9 +205,11 @@ private struct PrayerDial: View {
             VStack(spacing: 0) {
                 Text(next.name.arabicName)
                     .font(.calligraphy(size: 40))
+                    .fitText()
                     .foregroundStyle(Palette.highlight)
                 Text("Next · \(next.name.displayName(on: next.date))")
                     .font(.subheadline.weight(.semibold))
+                    .fitText()
                     .foregroundStyle(.secondary)
                 Text(next.date.shortTime)
                     .font(.display(40, weight: .heavy))
@@ -214,6 +219,7 @@ private struct PrayerDial: View {
                     .contentTransition(.numericText())
                 Text("in \(Text(next.date, style: .timer))")
                     .font(.subheadline.weight(.bold).monospacedDigit())
+                    .fitText()
                     .foregroundStyle(Palette.accent)
             }
             .multilineTextAlignment(.center)
@@ -300,6 +306,7 @@ private struct CheckInPrompt: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Did you pray \(time.name.displayName(on: time.date))?")
                         .font(.headline)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text("Its time began at \(time.date.shortTime).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -307,34 +314,49 @@ private struct CheckInPrompt: View {
                 Spacer()
                 Text(time.name.arabicName)
                     .font(.calligraphy(size: 28))
+                    .fixedSize()
                     .foregroundStyle(Palette.highlight)
             }
-            HStack(spacing: 10) {
-                Button {
-                    withAnimation(.bouncy) { model.setRecord(PrayerRecord(status: .onTime), for: time.name, on: day) }
-                } label: {
-                    Label("On time", systemImage: "checkmark")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.black)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(Palette.accent)
-                .controlSize(.large)
-                .accessibilityLabel("Prayed \(time.name.englishName) on time")
-
-                Button(action: onMore) {
-                    Text("Late / missed")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glass)
-                .controlSize(.large)
+            // Side by side; stacked when large text won't fit them on one line.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) { onTimeButton(fit: true); moreButton(fit: true) }
+                VStack(spacing: 10) { onTimeButton(fit: false); moreButton(fit: false) }
             }
         }
         .padding(18)
         .surface(cornerRadius: 26)
         .haptic(.success, trigger: model.record(for: time.name, on: day))
+    }
+
+    /// `fit`: side by side, so each label must stay on one line (shrinking if
+    /// need be) for `ViewThatFits` to judge whether the row fits.
+    private func onTimeButton(fit: Bool) -> some View {
+        Button {
+            withAnimation(.bouncy) { model.setRecord(PrayerRecord(status: .onTime), for: time.name, on: day) }
+        } label: {
+            Label("On time", systemImage: "checkmark")
+                .font(.subheadline.weight(.bold))
+                .lineLimit(fit ? 1 : 2)
+                .minimumScaleFactor(fit ? 0.85 : 1)
+                .foregroundStyle(.black)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.glassProminent)
+        .tint(Palette.accent)
+        .controlSize(.large)
+        .accessibilityLabel("Prayed \(time.name.englishName) on time")
+    }
+
+    private func moreButton(fit: Bool) -> some View {
+        Button(action: onMore) {
+            Text("Late / missed")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(fit ? 1 : 2)
+                .minimumScaleFactor(fit ? 0.85 : 1)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.glass)
+        .controlSize(.large)
     }
 }
 
@@ -347,58 +369,35 @@ private struct PrayerTimeRow: View {
     let now: Date
     let isNext: Bool
     let onCheckIn: () -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 36
 
     var body: some View {
         let record = model.record(for: time.name, on: day)
         let hasStarted = time.date <= now
 
-        let row = HStack(spacing: 14) {
-            Image(systemName: time.name.symbolName)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(isNext ? Palette.highlight : Palette.accent)
-                .frame(width: 36, height: 36)
-                .background(.white.opacity(0.08), in: .circle)
-
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
-                    Text(time.name.displayName(on: time.date))
-                        .font(.body.weight(.semibold))
-                    if isNext {
-                        Text("NEXT")
-                            .font(.caption2.weight(.heavy))
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(Palette.highlight, in: .capsule)
+        // One line normally; at accessibility text sizes the name goes on top
+        // and the time and buttons below, so nothing is squeezed out.
+        let row = Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 12) { icon; names }
+                    HStack(spacing: 12) {
+                        timeLabel
+                        Spacer(minLength: 4)
+                        notificationButton
+                        checkInButton(record: record, hasStarted: hasStarted)
                     }
                 }
-                Text(record.map { recordSummary($0) } ?? time.name.arabicName)
-                    .font(.caption)
-                    .foregroundStyle(record?.status.color ?? .secondary)
-            }
-
-            Spacer(minLength: 4)
-
-            Text(time.date.shortTime)
-                .font(.body.monospacedDigit().weight(.semibold))
-                .lineLimit(1)
-                .fixedSize()
-
-            notificationButton
-
-            if time.name.isObligatory {
-                Button(action: onCheckIn) {
-                    Image(systemName: record?.status.symbolName ?? "circle")
-                        .font(.title2)
-                        .foregroundStyle(record?.status.color ?? .white.opacity(hasStarted ? 0.5 : 0.15))
-                        .frame(width: 34, height: 34)
-                        .contentTransition(.symbolEffect(.replace))
-                        .symbolEffect(.bounce, value: record?.status)
-                }
-                .buttonStyle(.pressable)
-                .disabled(!hasStarted)
-                .accessibilityLabel("Check in \(time.name.englishName)")
             } else {
-                Color.clear.frame(width: 34)
+                HStack(spacing: 14) {
+                    icon
+                    names
+                    Spacer(minLength: 4)
+                    timeLabel
+                    notificationButton
+                    checkInButton(record: record, hasStarted: hasStarted)
+                }
             }
         }
         .padding(.horizontal, 14)
@@ -408,6 +407,63 @@ private struct PrayerTimeRow: View {
             row.glassPanel(cornerRadius: 22, tint: Palette.accent.opacity(0.18))
         } else {
             row.surface()
+        }
+    }
+
+    private var icon: some View {
+        Image(systemName: time.name.symbolName)
+            .font(.body.weight(.semibold))
+            .foregroundStyle(isNext ? Palette.highlight : Palette.accent)
+            .frame(width: iconSize, height: iconSize)
+            .background(.white.opacity(0.08), in: .circle)
+    }
+
+    private var names: some View {
+        let record = model.record(for: time.name, on: day)
+        return VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 6) {
+                Text(time.name.displayName(on: time.date))
+                    .font(.body.weight(.semibold))
+                    .fitText(0.5)
+                if isNext {
+                    Text("NEXT")
+                        .font(.caption2.weight(.heavy))
+                        .foregroundStyle(.black)
+                        .badgeText()
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Palette.highlight, in: .capsule)
+                }
+            }
+            Text(record.map { recordSummary($0) } ?? time.name.arabicName)
+                .font(.caption)
+                .fitText()
+                .foregroundStyle(record?.status.color ?? .secondary)
+        }
+    }
+
+    private var timeLabel: some View {
+        Text(time.date.shortTime)
+            .font(.body.monospacedDigit().weight(.semibold))
+            .fitText(0.5)
+            .layoutPriority(1)
+    }
+
+    @ViewBuilder
+    private func checkInButton(record: PrayerRecord?, hasStarted: Bool) -> some View {
+        if time.name.isObligatory {
+            Button(action: onCheckIn) {
+                Image(systemName: record?.status.symbolName ?? "circle")
+                    .font(.title2)
+                    .foregroundStyle(record?.status.color ?? .white.opacity(hasStarted ? 0.5 : 0.15))
+                    .frame(minWidth: 34, minHeight: 34)
+                    .contentTransition(.symbolEffect(.replace))
+                    .symbolEffect(.bounce, value: record?.status)
+            }
+            .buttonStyle(.pressable)
+            .disabled(!hasStarted)
+            .accessibilityLabel("Check in \(time.name.englishName)")
+        } else {
+            Color.clear.frame(width: 34)
         }
     }
 
@@ -429,7 +485,7 @@ private struct PrayerTimeRow: View {
         } label: {
             Image(systemName: enabled ? "bell.fill" : "bell.slash")
                 .foregroundStyle(enabled ? Color.white.opacity(0.85) : Color.secondary)
-                .frame(width: 30, height: 34)
+                .frame(minWidth: 30, minHeight: 34)
                 .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.pressable)
@@ -454,10 +510,11 @@ private struct StreakStrip: View {
             HStack {
                 Label(streak == 1 ? "1 day streak" : "\(streak) day streak", systemImage: "flame.fill")
                     .font(.headline)
+                    .fitText(0.5)
                     .foregroundStyle(streak > 0 ? Palette.highlight : .secondary)
                     .contentTransition(.numericText(value: Double(streak)))
                 Spacer()
-                Text("Last 7 days").sectionLabelStyle()
+                Text("Last 7 days").sectionLabelStyle().fitText(0.5)
             }
             HStack {
                 ForEach(days, id: \.self) { day in
@@ -474,6 +531,7 @@ private struct StreakStrip: View {
                         .frame(width: 30, height: 30)
                         Text(day.formatted(.dateTime.weekday(.narrow)))
                             .font(.caption2.weight(isToday ? .heavy : .regular))
+                            .fitText()
                             .foregroundStyle(isToday ? .primary : .secondary)
                     }
                     .frame(maxWidth: .infinity)

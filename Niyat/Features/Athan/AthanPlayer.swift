@@ -105,7 +105,7 @@ struct AthanNowPlaying: View {
                     .symbolEffect(.variableColor.iterative, options: .repeating)
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Athan").font(.subheadline.weight(.bold))
-                    Text(muezzin.name).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Text(muezzin.name).font(.caption).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.75)
                 }
                 Spacer(minLength: 8)
                 Button {

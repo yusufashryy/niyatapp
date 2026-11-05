@@ -187,6 +187,7 @@ struct WatchTasbihDial: View {
                 Text("\(count)")
                     .font(.system(size: 40, weight: .bold, design: .rounded))
                     .monospacedDigit()
+                    .fitText(0.4)
             }
             .frame(width: 104, height: 104)
             .contentShape(.circle)
@@ -232,8 +233,10 @@ struct WatchQuranPage: View {
                         Text("\(day.count)")
                             .font(.system(size: 32, weight: .bold, design: .rounded))
                             .monospacedDigit()
+                            .fitText(0.4)
                         Text("of \(goal) ayat")
                             .font(.caption2)
+                            .fitText()
                             .foregroundStyle(.secondary)
                     }
                 }

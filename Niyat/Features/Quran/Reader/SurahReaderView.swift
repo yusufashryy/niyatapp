@@ -399,6 +399,7 @@ private struct SurahHeader: View {
             if edition.riwayah != .hafs {
                 Text(edition.riwayah.title)
                     .font(.caption.weight(.semibold))
+                    .badgeText()
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(Palette.accent.opacity(0.15), in: .capsule)
                     .foregroundStyle(Palette.accent)
@@ -438,6 +439,7 @@ private struct VerseCard: View {
             HStack(spacing: 4) {
                 Text("\(verse.surah):\(verse.number)")
                     .font(.caption.weight(.bold).monospacedDigit())
+                    .badgeText()
                     .foregroundStyle(Palette.accent)
                     .padding(.horizontal, 10).padding(.vertical, 4)
                     .background(Palette.accent.opacity(0.14), in: .capsule)

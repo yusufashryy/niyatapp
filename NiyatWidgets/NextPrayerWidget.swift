@@ -58,6 +58,7 @@ struct NextPrayerView: View {
                 .lineLimit(1)
                 .widgetAccentable()
             Text(next.date, style: .relative)
+                .fitText()
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -94,8 +95,10 @@ struct NextPrayerView: View {
                 .font(.headline)
                 .widgetAccentable()
             Text(next.date.shortTime)
+                .fitText()
                 .font(.body.weight(.semibold))
             Text(next.date, style: .relative)
+                .fitText()
                 .font(.caption)
                 .multilineTextAlignment(.center)
         }

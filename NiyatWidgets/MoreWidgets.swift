@@ -83,6 +83,7 @@ struct PrayerDialWidgetView: View {
                         if let next = entry.next {
                             VStack(spacing: 0) {
                                 Text(next.name.arabicName)
+                                    .fitText()
                                     .font(.calligraphy(size: family == .systemLarge ? 34 : 18))
                                     .foregroundStyle(look.accent)
                                     .widgetAccentable()
@@ -91,6 +92,7 @@ struct PrayerDialWidgetView: View {
                                     .minimumScaleFactor(0.6)
                                     .lineLimit(1)
                                 Text(next.date, style: .relative)
+                                    .fitText()
                                     .font(.system(size: family == .systemLarge ? 14 : 9, weight: .semibold))
                                     .foregroundStyle(.secondary)
                                     .multilineTextAlignment(.center)
@@ -146,6 +148,7 @@ struct CountdownRingView: View {
                 let start = entry.current?.date ?? entry.date.addingTimeInterval(-3600)
                 ProgressView(timerInterval: min(start, next.date)...next.date, countsDown: false) {
                     Text(next.name.englishName)
+                        .fitText()
                 } currentValueLabel: {
                     VStack(spacing: 0) {
                         Image(systemName: next.name.symbolName).font(.caption2)
@@ -189,9 +192,11 @@ struct PrayerLogWidgetView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Text("Today's prayers").font(.caption.weight(.bold)).textCase(.uppercase).foregroundStyle(.secondary)
+                            .fitText()
                         Spacer()
                         let count = PrayerName.obligatory.filter { entry.record(for: $0)?.status.countsAsPrayed ?? false }.count
                         Text("\(count)/5").font(.caption.weight(.heavy)).foregroundStyle(look.accent).widgetAccentable()
+                            .fitText()
                     }
                     HStack(spacing: 6) {
                         ForEach(PrayerName.obligatory) { prayer in
@@ -300,7 +305,9 @@ struct StreakWidgetView: View {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Image(systemName: "flame.fill").foregroundStyle(look.accent).font(.caption)
                 Text("\(value)").font(.system(size: 30, weight: .heavy, design: .rounded)).widgetAccentable()
+                    .fitText()
                 Text(value == 1 ? "day" : "days").font(.caption).foregroundStyle(.secondary)
+                    .fitText()
             }
             Label(label, systemImage: symbol).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
         }
@@ -321,6 +328,7 @@ struct StreakWidgetView: View {
                     }
                     .frame(width: 18, height: 18)
                     Text(day.formatted(.dateTime.weekday(.narrow))).font(.system(size: 9)).foregroundStyle(.secondary)
+                        .fitText()
                 }
             }
         }
@@ -359,6 +367,7 @@ struct QuranGoalWidgetView: View {
                     Image(systemName: "book.fill")
                 } currentValueLabel: {
                     Text("\(entry.quranToday.count)")
+                        .fitText()
                 }
                 .gaugeStyle(.accessoryCircularCapacity)
                 .widgetAccentable()
@@ -366,8 +375,10 @@ struct QuranGoalWidgetView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Label("Qur'an today", systemImage: "book.fill").font(.caption.weight(.bold)).widgetAccentable()
                     Text(entry.quranGoal.map { "\(entry.quranToday.count) / \($0) ayat" } ?? "\(entry.quranToday.count) ayat")
+                        .fitText()
                         .font(.body.weight(.semibold))
                     Text("\(entry.quranStreak)-day streak").font(.caption2)
+                        .fitText()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             default:
@@ -380,12 +391,13 @@ struct QuranGoalWidgetView: View {
                                     style: StrokeStyle(lineWidth: 8, lineCap: .round))
                             .rotationEffect(.degrees(-90))
                         VStack(spacing: 0) {
-                            Text("\(entry.quranToday.count)").font(.system(size: 26, weight: .heavy, design: .rounded)).widgetAccentable()
-                            Text(entry.quranGoal.map { "of \($0)" } ?? "ayat").font(.caption2).foregroundStyle(.secondary)
+                            Text("\(entry.quranToday.count)").font(.system(size: 26, weight: .heavy, design: .rounded)).fitText(0.4).widgetAccentable()
+                            Text(entry.quranGoal.map { "of \($0)" } ?? "ayat").font(.caption2).fitText().foregroundStyle(.secondary)
                         }
                     }
                     .frame(width: 86, height: 86)
                     Text(entry.quranToday.isComplete ? "Goal complete ✓" : "Qur'an today")
+                        .fitText()
                         .font(.caption.weight(.bold))
                         .foregroundStyle(entry.quranToday.isComplete ? look.accent : Color.primary)
                 }
@@ -424,12 +436,15 @@ struct HijriDateWidgetView: View {
             switch family {
             case .accessoryInline:
                 Text(HijriDate.string(for: date))
+                    .fitText()
             case .accessoryRectangular:
                 VStack(alignment: .leading, spacing: 2) {
                     Text(HijriDate.string(for: date, locale: Locale(identifier: "ar")))
+                        .fitText()
                         .font(.headline)
                         .widgetAccentable()
                     Text(HijriDate.string(for: date)).font(.caption)
+                        .fitText()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             default:
@@ -442,9 +457,11 @@ struct HijriDateWidgetView: View {
                         .multilineTextAlignment(.center)
                         .minimumScaleFactor(0.6)
                     Text(HijriDate.string(for: date))
+                        .fitText()
                         .font(.caption.weight(.semibold))
                         .multilineTextAlignment(.center)
                     Text(date.formatted(.dateTime.weekday(.wide).day().month()))
+                        .fitText()
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

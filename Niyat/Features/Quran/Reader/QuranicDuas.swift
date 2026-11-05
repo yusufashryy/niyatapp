@@ -171,6 +171,7 @@ struct QuranicDuasView: View {
         Button(action: { withAnimation(.smooth) { action() } }) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
+                .badgeText()
                 .padding(.horizontal, 14).padding(.vertical, 8)
                 .foregroundStyle(selected ? .black : .white)
                 .background(selected ? Palette.control : Color.white.opacity(0.08), in: .capsule)

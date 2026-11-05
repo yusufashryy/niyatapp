@@ -214,6 +214,7 @@ private struct MemberRow: View {
         HStack(spacing: 12) {
             Text(String(s.displayName.prefix(1)).uppercased())
                 .font(.headline)
+                .fitText()
                 .foregroundStyle(.black)
                 .frame(width: 38, height: 38)
                 .background(member.isMe ? Palette.highlight : Palette.accent, in: .circle)

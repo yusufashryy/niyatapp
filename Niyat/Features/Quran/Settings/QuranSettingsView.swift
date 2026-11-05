@@ -248,8 +248,10 @@ struct QuranGoalSheet: View {
                 VStack(spacing: 2) {
                     Text("\(goal.today.count)")
                         .font(.display(44, weight: .heavy))
+                        .fitText(0.4)
                         .contentTransition(.numericText(value: Double(goal.today.count)))
                     Text(goal.goal.map { "of \($0) ayat" } ?? "ayat today")
+                        .fitText()
                         .foregroundStyle(.secondary)
                 }
             }

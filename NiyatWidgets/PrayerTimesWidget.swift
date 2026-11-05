@@ -54,6 +54,7 @@ struct PrayerTimesView: View {
                 let isNext = time.id == entry.next?.id
                 HStack(spacing: 4) {
                     Text(time.date, format: .dateTime.hour(.defaultDigits(amPM: .omitted)).minute())
+                        .fitText()
                         .monospacedDigit()
                     Text(time.name.arabicName)
                         .lineLimit(1)
@@ -72,13 +73,16 @@ struct PrayerTimesView: View {
             VStack(alignment: .leading, spacing: 4) {
                 if let next = entry.next {
                     Text("Next")
+                        .fitText()
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(next.name.displayName(on: next.date))
+                        .fitText()
                         .font(.title3.bold())
                         .foregroundStyle(look.accent)
                         .widgetAccentable()
                     Text(next.date, style: .relative)
+                        .fitText()
                         .font(.caption)
                 }
                 Spacer(minLength: 0)
@@ -104,8 +108,10 @@ struct PrayerTimesView: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading) {
                     Text(entry.locationName ?? "")
+                        .fitText()
                         .font(.headline)
                     Text(HijriDate.string(for: entry.date))
+                        .fitText()
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -113,10 +119,12 @@ struct PrayerTimesView: View {
                 if let next = entry.next {
                     VStack(alignment: .trailing) {
                         Text(next.name.displayName(on: next.date))
+                            .fitText()
                             .font(.headline)
                             .foregroundStyle(look.accent)
                             .widgetAccentable()
                         Text(next.date, style: .relative).font(.caption)
+                            .fitText()
                     }
                 }
             }
@@ -140,8 +148,10 @@ struct PrayerTimesView: View {
                     .widgetAccentable()
             }
             Text(time.name.displayName(on: time.date))
+                .fitText()
             Spacer()
             Text(time.date.shortTime).monospacedDigit()
+                .fitText()
         }
         .font(.caption.weight(isNext ? .bold : .regular))
         .padding(.horizontal, 8)

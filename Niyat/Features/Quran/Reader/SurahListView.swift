@@ -285,6 +285,7 @@ private struct SurahRow: View {
         HStack(spacing: 14) {
             Text("\(surah.id)")
                 .font(.footnote.weight(.bold).monospacedDigit())
+                .fitText()
                 .foregroundStyle(Palette.accent)
                 .frame(width: 42, height: 42)
                 .background {
@@ -298,7 +299,7 @@ private struct SurahRow: View {
                 Text("\(surah.translation) · \(verseCount) verses · \(surah.revelationPlace)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(1).minimumScaleFactor(0.75)
             }
 
             Spacer(minLength: 8)
@@ -390,8 +391,8 @@ private struct QuranToolTile: View {
                 .foregroundStyle(Palette.highlight)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline).lineLimit(1).minimumScaleFactor(0.8)
-                Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(title).font(.headline).fitText(0.7)
+                Text(subtitle).font(.caption).foregroundStyle(.secondary).fitText(0.7)
             }
             Spacer(minLength: 0)
         }

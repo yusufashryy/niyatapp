@@ -134,7 +134,7 @@ struct MushafPage: View {
             }
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(label)
-            .lineLimit(1)
+            .lineLimit(1).minimumScaleFactor(0.75)
             .frame(height: MushafMetrics.headerHeight)
             .contentShape(.rect)
             .onTapGesture { onTap(nil, 0) }

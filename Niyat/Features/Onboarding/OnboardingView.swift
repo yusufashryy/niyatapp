@@ -36,6 +36,7 @@ struct OnboardingView: View {
         VStack(spacing: 22) {
             Text("بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ")
                 .font(.quran(size: 30))
+                .fitText()
                 .foregroundStyle(Palette.highlight)
             ZStack {
                 Rosette(color: Palette.highlight.opacity(0.35), lineWidth: 1.2)

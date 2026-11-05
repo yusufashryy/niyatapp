@@ -54,6 +54,7 @@ struct DailyVerseView: View {
                         .font(.caption)
                         .lineLimit(3)
                     Text(entry.verse.reference)
+                        .fitText()
                         .font(.caption2)
                         .widgetAccentable()
                 }
@@ -71,6 +72,7 @@ struct DailyVerseView: View {
                         .minimumScaleFactor(0.7)
                     Spacer(minLength: 0)
                     Text(entry.verse.reference)
+                        .fitText()
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(look.accent)
                         .widgetAccentable()

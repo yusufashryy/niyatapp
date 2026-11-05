@@ -121,6 +121,7 @@ struct NoLocationView: View {
         VStack(spacing: 6) {
             Image(systemName: "location.slash")
             Text("Open Niyat to set your location")
+                .lineLimit(2).minimumScaleFactor(0.8)
                 .font(.caption)
                 .multilineTextAlignment(.center)
         }

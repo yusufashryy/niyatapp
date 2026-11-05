@@ -82,7 +82,7 @@ struct TimeZoneChangedCard: View {
                 } label: {
                     Text("Keep \(location.shortName)")
                         .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
+                        .lineLimit(1).minimumScaleFactor(0.75)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glass)
