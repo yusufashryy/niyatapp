@@ -120,6 +120,8 @@ struct MushafPageView: View {
         }
         .onChange(of: options) { _, new in new.save() }
         .onChange(of: page) { _, new in pageChanged(to: new) }
+        // Highlight the verse being recited.
+        .onChange(of: player.current, initial: true) { _, _ in showPlayingBand() }
         // Follow the recitation onto the page of the verse being recited.
         .onChange(of: player.current) { _, current in
             guard options.followRecitation, case .verse(let surah, let verse)? = current,
@@ -326,8 +328,18 @@ struct MushafPageView: View {
         withAnimation(.smooth) { selected = verse }
         if let verse {
             highlights.setBand(VerseKey(surah: verse.surah, verse: verse.number))
-        } else if case .verse(let surah, let number)? = player.current,
-                  let playing = store.verse(VerseReference(surah: surah, verse: number)) {
+        } else {
+            showPlayingBand()
+        }
+    }
+
+    /// The band follows the verse being recited, unless a verse is selected.
+    /// Driven by `player.current` (what the mini player shows), so it doesn't
+    /// depend on the order the audio callbacks arrive in.
+    private func showPlayingBand() {
+        guard selected == nil else { return }
+        if case .verse(let surah, let number)? = player.current,
+           let playing = store.verse(VerseReference(surah: surah, verse: number)) {
             highlights.setBand(VerseKey(surah: playing.surah, verse: playing.number))
         } else {
             highlights.setBand(nil)

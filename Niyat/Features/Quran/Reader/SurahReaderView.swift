@@ -104,6 +104,8 @@ struct SurahReaderView: View {
                 let target = store.verse(VerseReference(surah: surahID, verse: startVerse))?.id ?? surahID * 1000 + startVerse
                 DispatchQueue.main.async { position.scrollTo(id: target, anchor: .top) }
             }
+            // Highlight the verse being recited (see showPlayingBand).
+            .onChange(of: player.current, initial: true) { _, current in showPlayingBand(current) }
             // Follow along: keep the verse being recited in the middle of the screen.
             .onChange(of: player.current) { _, current in
                 guard let current, current.surah == surahID else { return }
@@ -278,6 +280,8 @@ struct SurahReaderView: View {
         style.dark = true
         style.highContrast = contrast == .increased
         style.weight = (QuranTextWeight(rawValue: textWeight) ?? .regular).stroke
+        // Behind the verse being recited.
+        style.band = UIColor(Palette.highlight).withAlphaComponent(0.2)
         return style
     }
 
@@ -324,6 +328,18 @@ struct SurahReaderView: View {
             }
         }
         Task { await live.start(verses: words, edition: store.edition, at: start, searchingAhead: 300) }
+    }
+
+    /// A band behind the verse being recited. Driven by `player.current` (what
+    /// the mini player shows), so it doesn't depend on the order the audio
+    /// callbacks arrive in.
+    private func showPlayingBand(_ current: RecitationItem?) {
+        if case .verse(let surah, let number)? = current,
+           let playing = store.verse(VerseReference(surah: surah, verse: number)) {
+            highlights.setBand(VerseKey(surah: playing.surah, verse: playing.number))
+        } else {
+            highlights.setBand(nil)
+        }
     }
 
     /// Scrolls so the verse being recited sits in the middle of the screen.
