@@ -258,7 +258,8 @@ final class LiveRecitation {
 
     /// A band behind the ayah being recited, as for the reciter's recitation.
     private func showBand(on verse: VerseKey) {
-        guard verse != bandVerse else { return }
+        // Also when something else cleared the band (the reciter stopping).
+        guard verse != bandVerse || WordHighlights.shared.band != verse else { return }
         bandVerse = verse
         WordHighlights.shared.setBand(verse)
     }
