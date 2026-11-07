@@ -199,6 +199,9 @@ struct MushafPage: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: MushafMetrics.footerHeight)
+        // Around the number: like the top of the page, outside the text.
+        .contentShape(.rect)
+        .onTapGesture { onTap(nil, MushafMetrics.lineCount - 1) }
     }
 
     /// The hizb quarter that starts on this page, if any.

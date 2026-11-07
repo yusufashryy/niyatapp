@@ -48,6 +48,19 @@ struct MushafPageView: View {
     /// Two facing pages are showing.
     @State private var isSpread = false
     @State private var showScrubber = false
+    /// Two-page book view: the bar floats over the pages and steps aside
+    /// while you read. Shown, and when it was last touched.
+    @State private var showsBar = true
+    @State private var barTouched = 0
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+
+    /// The bar floats and hides itself only in the two-page book view (and
+    /// never with VoiceOver, which needs the buttons to stay put).
+    private var barHides: Bool { isSpread && !voiceOver }
+    private var barShown: Bool { !barHides || (showsBar && selected == nil) }
+
+    /// How long the floating bar stays after it was last touched.
+    private static let barDelay: Duration = .seconds(4)
 
     /// Mushaf pages are laid out for the Uthmani script (Hafs); the "fewer
     /// marks" edition has exactly the same words.
@@ -103,7 +116,26 @@ struct MushafPageView: View {
                     .transition(.move(edge: actionsAtTop ? .top : .bottom).combined(with: .opacity))
             }
         }
-        .safeAreaInset(edge: .bottom) { bottomBar(colors) }
+        // One page: the bar keeps its own strip under the page. Two pages: the
+        // pages fill the screen and the bar floats over them, hiding itself
+        // until you tap the page (like a book app).
+        .safeAreaInset(edge: .bottom) {
+            if !barHides { bottomBar(colors) }
+        }
+        .overlay(alignment: .bottom) {
+            if barHides, barShown {
+                bottomBar(colors)
+                    .simultaneousGesture(TapGesture().onEnded { barTouched += 1 })
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.smooth, value: barShown)
+        .task(id: BarTimer(shown: showsBar, hides: barHides, touched: barTouched, scrubbing: showScrubber)) {
+            guard barHides, showsBar, !showScrubber else { return }
+            try? await Task.sleep(for: Self.barDelay)
+            guard !Task.isCancelled else { return }
+            showsBar = false
+        }
         .overlay(alignment: .top) {
             if let error = player.errorMessage {
                 Text(error)
@@ -220,7 +252,11 @@ struct MushafPageView: View {
                         slidePages(colors, spread: spread)
                     }
                 }
-                .onChange(of: spread, initial: true) { _, wide in isSpread = wide }
+                .onChange(of: spread, initial: true) { _, wide in
+                    isSpread = wide
+                    // Opened into the book view: show the bar, then let it step aside.
+                    showsBar = true
+                }
             }
             .padding(.horizontal, side)
         }
@@ -271,7 +307,7 @@ struct MushafPageView: View {
                    weight: (QuranTextWeight(rawValue: textWeight) ?? .regular).stroke,
                    hasRibbon: number == store.ribbonPage, placement: placement,
                    onZoomChange: { isZoomed = $0 },
-                   onPageNumber: { showScrubber.toggle() },
+                   onPageNumber: { pageNumberTapped() },
                    onTap: { word, row in tapped(word, row: row) })
     }
 
@@ -451,8 +487,23 @@ struct MushafPageView: View {
         Binding(get: { page }, set: { jump(to: $0) })
     }
 
+    /// The page number opens the scrubber, which sits in the bar: in the
+    /// book view the bar comes back with it.
+    private func pageNumberTapped() {
+        showScrubber.toggle()
+        if barHides, showScrubber {
+            showsBar = true
+            barTouched += 1
+        }
+    }
+
     private func tapped(_ word: WordID?, row: Int) {
         guard let word, let verse = displayedVerse(word.verseKey) else {
+            // Book view: a tap on the page (not a word) shows or hides the bar.
+            if barHides, selected == nil {
+                showsBar.toggle()
+                barTouched += 1
+            }
             select(nil)
             return
         }
@@ -625,4 +676,12 @@ private struct PageFollower: View {
                 if let word { onWord(word) }
             }
     }
+}
+
+/// What restarts the floating bar's hide timer.
+private struct BarTimer: Equatable {
+    let shown: Bool
+    let hides: Bool
+    let touched: Int
+    let scrubbing: Bool
 }
