@@ -155,6 +155,12 @@ final class WordHighlights {
         if let key = word?.verseKey, key != activeVerse { activeVerse = key }
     }
 
+    /// Marks `verse` as the one being followed before any word in it is
+    /// heard (a place found by reciting), so it's highlighted straight away.
+    func focus(_ verse: VerseKey) {
+        if verse != activeVerse { activeVerse = verse }
+    }
+
     /// The ayah drawn with a band (recited or selected), or nil.
     func setBand(_ verse: VerseKey?) {
         guard verse != band else { return }

@@ -17,6 +17,9 @@ struct SurahListView: View {
     @State private var showMushaf = false
     @State private var showNotifications = false
     @State private var showFinder = false
+    /// Counts places found by reciting, so finding the verse that's already
+    /// open still opens it afresh and starts following.
+    @State private var foundCount = 0
     /// "verses" (default) opens surahs verse by verse; "pages" in the mushaf view.
     @AppStorage("quran.readingLayout") private var readingLayout = "verses"
     @AppStorage("quran.mushafPage") private var mushafPage = 1
@@ -39,6 +42,7 @@ struct SurahListView: View {
             .sheet(isPresented: $showFinder) {
                 FindByRecitingSheet { place in
                     RecitationHandoff.pending = place
+                    foundCount += 1
                     open(ReaderDestination(surah: place.surah, verse: place.verse))
                 }
             }
@@ -85,7 +89,7 @@ struct SurahListView: View {
             if let destination = ReaderDestination(storageKey: openSurah) {
                 NavigationStack {
                     SurahReaderView(surahID: destination.surah, startVerse: destination.verse)
-                        .id(destination)
+                        .id("\(destination.storageKey)|\(foundCount)")
                 }
             } else {
                 VStack(spacing: 24) {

@@ -1,5 +1,6 @@
 import StoreKit
 import SwiftUI
+import UIKit
 import UserNotifications
 
 @main
@@ -70,6 +71,10 @@ struct RootView: View {
             case .background: BackgroundRefresh.schedule()
             default: break
             }
+        }
+        // Memory is low: let go of Qur'an data that's only kept to be quick.
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+            QuranMemory.releaseCaches()
         }
         // Landing after a flight while Niyat is open: re-time alerts and check the location.
         .task {

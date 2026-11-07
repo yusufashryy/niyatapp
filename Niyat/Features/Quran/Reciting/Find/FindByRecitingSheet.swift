@@ -48,6 +48,8 @@ struct FindByRecitingSheet: View {
             guard case .found(let place) = state else { return }
             Task {
                 try? await Task.sleep(for: .milliseconds(700))
+                // Cancelled in the meantime: don't open anything.
+                guard finder.state == .found(place) else { return }
                 dismiss()
                 onFound(place)
             }

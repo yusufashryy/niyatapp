@@ -32,6 +32,7 @@ struct SurahReaderView: View {
     @State private var didScroll = false
     @State private var showSettings = false
     @State private var tafsirTarget: TafsirTarget?
+    @State private var sharing: QuranShareContent?
     @State private var showGoal = false
     @State private var showIntro = false
     /// Verses currently on screen, for counting what's actually read.
@@ -80,10 +81,12 @@ struct SurahReaderView: View {
                                   showTranslation: showTranslation,
                                   isSaved: store.isBookmarked(verse),
                                   hasRibbon: store.hasRibbon(verse),
-                                  isReciting: player.current == .verse(surah: surahID, verse: verse.number),
+                                  isReciting: player.current == .verse(surah: surahID, verse: verse.number)
+                                      || isRecitedByYou(verse),
                                   showsPlay: audioAvailable,
                                   onPlay: { play(from: verse.number) },
                                   onPlaceRibbon: { withAnimation(.smooth) { store.toggleRibbon(verse) } },
+                                  onShare: { sharing = .verse(verse) },
                                   // The tafsirs follow Hafs's numbering of the ayat.
                                   onTafsir: store.edition.riwayah == .hafs
                                       ? { tafsirTarget = TafsirTarget(surah: verse.surah, ayah: verse.number) } : nil) {
@@ -206,6 +209,7 @@ struct SurahReaderView: View {
         .haptic(.selection, trigger: highlights.isHidden)
         .sheet(isPresented: $showSettings) { QuranSettingsView() }
         .sheet(item: $tafsirTarget) { TafsirSheet(surah: $0.surah, ayah: $0.ayah) }
+        .sheet(item: $sharing) { QuranShareSheet(content: $0) }
         .sheet(isPresented: $showGoal) { QuranGoalSheet() }
         .sheet(isPresented: $showIntro) {
             ReciteIntroSheet(edition: store.edition) { startListening() }
@@ -268,6 +272,12 @@ struct SurahReaderView: View {
         })
     }
 
+    /// You're reciting this verse: it's lit like a verse the reciter plays,
+    /// whether the text is showing or hidden.
+    private func isRecitedByYou(_ verse: Verse) -> Bool {
+        live.isListening && highlights.activeVerse == VerseKey(surah: verse.surah, verse: verse.number)
+    }
+
     /// How Qur'an text is drawn in the reader.
     private func textStyle(size: Double, ink: UIColor) -> QuranTextStyle {
         var style = QuranTextStyle()
@@ -280,6 +290,8 @@ struct SurahReaderView: View {
         style.dark = true
         style.highContrast = contrast == .increased
         style.weight = (QuranTextWeight(rawValue: textWeight) ?? .regular).stroke
+        // The word being recited, in the theme's colour so it's easy to follow.
+        style.currentWord = UIColor(Palette.highlight).withAlphaComponent(0.32)
         return style
     }
 
@@ -318,7 +330,9 @@ struct SurahReaderView: View {
         let verses = store.verses(for: surahID)
         let words = verses.map { QuranWords.shared.words(for: $0, edition: store.edition) }
         // Found by reciting: start at the ayah that was found; otherwise the top of the screen.
-        let found = handoffVerse.flatMap { store.verse(VerseReference(surah: surahID, verse: $0))?.id }
+        let foundVerse = handoffVerse.flatMap { store.verse(VerseReference(surah: surahID, verse: $0)) }
+        let found = foundVerse?.id
+        let focus = foundVerse.map { VerseKey(surah: $0.surah, verse: $0.number) }
         handoffVerse = nil
         let top = found ?? visibleVerses.min() ?? store.ribbon.flatMap { $0.surah == surahID ? surahID * 1000 + $0.verse : nil }
         var start = 0
@@ -328,7 +342,7 @@ struct SurahReaderView: View {
                 start += verseWords.words.count
             }
         }
-        Task { await live.start(verses: words, edition: store.edition, at: start, searchingAhead: 300) }
+        Task { await live.start(verses: words, edition: store.edition, at: start, searchingAhead: 300, focus: focus) }
     }
 
     /// Scrolls so the verse being recited sits in the middle of the screen.
@@ -429,6 +443,7 @@ private struct VerseCard: View {
     let showsPlay: Bool
     let onPlay: () -> Void
     let onPlaceRibbon: () -> Void
+    let onShare: () -> Void
     /// Nil where there's no tafsir to show (Warsh and Qalun number the ayat differently).
     let onTafsir: (() -> Void)?
     let onToggleSaved: () -> Void
@@ -493,6 +508,14 @@ private struct VerseCard: View {
                 .buttonStyle(.pressable)
                 .haptic(.impact(weight: .medium), trigger: isSaved)
                 .accessibilityLabel(isSaved ? "Remove from saved verses" : "Save verse")
+                Button(action: onShare) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.secondary)
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.pressable)
+                .accessibilityLabel("Share verse \(verse.number)")
             }
 
             QuranTextView(pieces: [QuranTextPiece(verse: words)], style: style)
@@ -540,6 +563,7 @@ private struct VerseCard: View {
             if let onTafsir {
                 Button("Tafsir", systemImage: "text.book.closed") { onTafsir() }
             }
+            Button("Share", systemImage: "square.and.arrow.up") { onShare() }
             Button("Copy", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = "\(verse.arabic)\n\n\(verse.translation)\n— Qur'an \(verse.surah):\(verse.number)"
             }

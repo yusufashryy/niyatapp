@@ -14,8 +14,8 @@ struct MushafVerseActions: View {
     let onSave: () -> Void
     /// Nil where there's no tafsir to show (Warsh and Qalun number the ayat differently).
     let onTafsir: (() -> Void)?
+    let onShare: () -> Void
     let onClose: () -> Void
-    @State private var copied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -46,21 +46,17 @@ struct MushafVerseActions: View {
                 action(hasRibbon ? "Remove ribbon" : "Ribbon", hasRibbon ? "bookmark.slash.fill" : "bookmark", onRibbon)
                 action(isSaved ? "Saved" : "Save", isSaved ? "star.fill" : "star", onSave)
                 if let onTafsir { action("Tafsir", "text.book.closed", onTafsir) }
-                action(copied ? "Copied" : "Copy", copied ? "checkmark" : "doc.on.doc") {
-                    UIPasteboard.general.string = "\(verse.arabic)\n\n\(verse.translation)\n— Qur'an \(verse.surah):\(verse.number)"
-                    copied = true
-                }
+                // Share has Copy too (the share screen's copy button).
+                action("Share", "square.and.arrow.up", onShare)
             }
             .haptic(.impact(weight: .light), trigger: isSaved)
             .haptic(.impact(weight: .medium), trigger: hasRibbon)
-            .haptic(.success, trigger: copied)
         }
         .foregroundStyle(.white)
         .padding(14)
         .glassPanel(cornerRadius: 24, tint: Palette.glow.opacity(0.35))
         // A dark panel on every paper, so it reads as floating above the page.
         .environment(\.colorScheme, .dark)
-        .onChange(of: verse) { _, _ in copied = false }
     }
 
     private func action(_ title: String, _ icon: String, _ perform: @escaping () -> Void) -> some View {

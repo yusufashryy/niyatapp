@@ -120,17 +120,31 @@ final class RecitationFinder {
         state = .found(place)
     }
 
-    /// Both searches over the reading shown, built once, off the main thread.
+    /// Both searches over the reading shown, built once per reading (kept
+    /// between visits, so opening the finder again starts at once), off the
+    /// main thread.
     private func prepareSearch() async {
         guard search == nil else { return }
         let store = QuranStore.shared
         let edition = store.edition
+        if let cached = Self.cachedSearch, cached.edition == edition {
+            search = cached.value
+            return
+        }
         let verses = store.surahs.flatMap { store.verses(for: $0.id) }
             .map { QuranWords.shared.words(for: $0, edition: edition) }
-        search = await Task.detached(priority: .userInitiated) {
-            (QuranLocator(verses: verses), QuranLetterSearch(verses: verses))
+        let built = await Task.detached(priority: .userInitiated) {
+            (words: QuranLocator(verses: verses), letters: QuranLetterSearch(verses: verses))
         }.value
+        // Only the current reading's search is kept.
+        Self.cachedSearch = (edition, built)
+        search = built
     }
+
+    private static var cachedSearch: (edition: QuranEdition, value: (words: QuranLocator, letters: QuranLetterSearch))?
+
+    /// Forgets the kept search (memory is low); it's rebuilt next time.
+    static func removeCachedSearch() { cachedSearch = nil }
 
     /// The level for the ring, and (with the model) a look at what's been heard.
     private func watch() {

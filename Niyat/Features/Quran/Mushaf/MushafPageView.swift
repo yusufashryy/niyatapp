@@ -31,6 +31,7 @@ struct MushafPageView: View {
     @State private var actionsAtTop = false
     @State private var showJump = false
     @State private var tafsirTarget: TafsirTarget?
+    @State private var sharing: QuranShareContent?
     @State private var showOptions = false
     @State private var showIntro = false
     /// First page of the text live recitation is following.
@@ -95,6 +96,7 @@ struct MushafPageView: View {
                                    onSave: { store.toggleBookmark(selected) },
                                    onTafsir: store.edition.riwayah == .hafs
                                        ? { tafsirTarget = TafsirTarget(surah: selected.surah, ayah: selected.number) } : nil,
+                                   onShare: { sharing = .verse(selected) },
                                    onClose: { select(nil) })
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -120,12 +122,17 @@ struct MushafPageView: View {
             }
         }
         .background { PageFollower { follow($0) } }
+        // Two facing pages: a book across the whole screen. The status bar
+        // steps aside and, on iPhone Duo, no bar runs down the side.
+        .statusBarHidden(isSpread)
+        .horizontalBarsOnly()
         .animation(.smooth, value: selected)
         .animation(.bouncy, value: goal.celebration)
         .preferredColorScheme(colors.isLight ? .light : .dark)
         // Sheets keep the app's dark look, whatever the paper.
         .sheet(isPresented: $showJump) { MushafJumpSheet(page: jumpBinding).preferredColorScheme(.dark) }
         .sheet(item: $tafsirTarget) { TafsirSheet(surah: $0.surah, ayah: $0.ayah).preferredColorScheme(.dark) }
+        .sheet(item: $sharing) { QuranShareSheet(content: $0).preferredColorScheme(.dark) }
         .sheet(isPresented: $showOptions) { MushafOptionsSheet(options: $options).preferredColorScheme(.dark) }
         .sheet(isPresented: $showIntro) {
             ReciteIntroSheet(edition: store.edition) { startListening() }
@@ -170,10 +177,16 @@ struct MushafPageView: View {
             await layout.load()
             await tajweedStore.load()
             // Found by reciting from the Qur'an list: carry on following.
-            if RecitationHandoff.pending != nil {
+            if let found = RecitationHandoff.pending {
                 RecitationHandoff.pending = nil
                 try? await Task.sleep(for: .milliseconds(600))
-                if !live.isListening { toggleListening() }
+                if !live.isListening {
+                    if ReciteIntroSheet.isNeeded(for: store.edition) {
+                        showIntro = true
+                    } else {
+                        startListening(at: found)
+                    }
+                }
             }
             // Opened while listening to the reciter: go to that verse.
             if case .verse(let surah, let verse)? = player.current,
@@ -188,20 +201,28 @@ struct MushafPageView: View {
     /// Pages turn right to left, like a printed mushaf: curled like paper
     /// (or slid, with Reduce Motion), and two facing pages on a wide screen.
     private func pages(_ colors: MushafColors) -> some View {
-        GeometryReader { geo in
-            let spread = options.twoPages && MushafBook.spreadFits(width: geo.size.width, height: geo.size.height)
-            Group {
-                if MushafBook.turn(chosen: options.pageTurn, reduceMotion: reduceMotion) == .curl {
-                    MushafCurlPager(page: $page, spread: spread, isEnabled: !isZoomed, paper: colors.paper) { number in
-                        pageView(number, colors: colors, placement: placement(of: number, spread: spread), spread: spread)
+        // The same room on the left and the right, so the pages sit in the
+        // middle of the screen. On iPhone Duo the status bar (and any bar)
+        // is down one side only; without this the book sat off the fold.
+        GeometryReader { window in
+            let side = max(window.safeAreaInsets.leading, window.safeAreaInsets.trailing)
+            GeometryReader { geo in
+                let spread = options.twoPages && MushafBook.spreadFits(width: geo.size.width, height: geo.size.height)
+                Group {
+                    if MushafBook.turn(chosen: options.pageTurn, reduceMotion: reduceMotion) == .curl {
+                        MushafCurlPager(page: $page, spread: spread, isEnabled: !isZoomed, paper: colors.paper) { number in
+                            pageView(number, colors: colors, placement: placement(of: number, spread: spread), spread: spread)
+                        }
+                        .id(spread)
+                    } else {
+                        slidePages(colors, spread: spread)
                     }
-                    .id(spread)
-                } else {
-                    slidePages(colors, spread: spread)
                 }
+                .onChange(of: spread, initial: true) { _, wide in isSpread = wide }
             }
-            .onChange(of: spread, initial: true) { _, wide in isSpread = wide }
+            .padding(.horizontal, side)
         }
+        .ignoresSafeArea(.container, edges: .horizontal)
         .haptic(.selection, trigger: page)
         .animation(.smooth, value: store.ribbon)
 
@@ -451,6 +472,9 @@ struct MushafPageView: View {
         } else if case .verse(let surah, let number)? = player.current,
                   let playing = store.verse(VerseReference(surah: surah, verse: number)) {
             highlights.setBand(VerseKey(surah: playing.surah, verse: playing.number))
+        } else if live.isListening, let recited = highlights.activeVerse {
+            // Back to the ayah being recited.
+            highlights.setBand(recited)
         } else {
             highlights.setBand(nil)
         }
@@ -532,12 +556,22 @@ struct MushafPageView: View {
         }
     }
 
-    private func startListening() {
+    /// Listens from this page; `found` is a place found by reciting, where
+    /// following starts (and which is highlighted at once).
+    private func startListening(at found: VerseReference? = nil) {
         select(nil)
         listeningFrom = page
         let verses = listeningVerses(from: page)
-        let start = startIndex(onPage: page)
-        Task { await live.start(verses: verses, edition: store.edition, at: start, searchingAhead: 300) }
+        var start = startIndex(onPage: page)
+        var focus: VerseKey?
+        if let found {
+            let key = VerseKey(surah: found.surah, verse: found.verse)
+            if let at = verses.firstIndex(where: { $0.key == key }) {
+                start = verses[..<at].reduce(0) { $0 + $1.words.count }
+                focus = key
+            }
+        }
+        Task { await live.start(verses: verses, edition: store.edition, at: start, searchingAhead: 300, focus: focus) }
         updateIdleTimer()
     }
 

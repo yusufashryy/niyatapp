@@ -151,7 +151,8 @@ struct MushafColors {
         style.dark = !isLight
         style.highContrast = highContrast
         style.band = band
-        style.currentWord = isLight ? UIColor(white: 0, alpha: 0.10) : UIColor(white: 1, alpha: 0.16)
+        // The word being recited, clear on top of the ayah's band.
+        style.currentWord = isLight ? UIColor(white: 0, alpha: 0.16) : UIColor(white: 1, alpha: 0.24)
         style.placeholder = isLight ? ink.withAlphaComponent(0.10) : ink.withAlphaComponent(0.14)
         style.uncertain = isLight ? UIColor(white: 0.45, alpha: 0.9) : UIColor(white: 0.65, alpha: 0.9)
         style.correct = isLight ? UIColor(red: 0.10, green: 0.62, blue: 0.28, alpha: 0.24)

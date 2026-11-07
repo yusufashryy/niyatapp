@@ -30,6 +30,9 @@ struct MushafPageText {
 
     private static var cache: [String: MushafPageText] = [:]
 
+    /// Forgets the laid-out pages (memory is low); they're rebuilt as they're shown.
+    static func removeAll() { cache.removeAll() }
+
     /// The page in the current reading, or nil until the text and layout are loaded.
     static func page(_ number: Int) -> MushafPageText? {
         let store = QuranStore.shared

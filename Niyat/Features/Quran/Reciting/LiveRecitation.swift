@@ -112,6 +112,9 @@ final class LiveRecitation {
     @ObservationIgnored private var lastJumpGeneration = -1
     /// A place found elsewhere, waiting for the next words to confirm it.
     @ObservationIgnored private var jumpCandidate: (index: Int, heard: Int)?
+    /// The ayah given a band because it's being recited (cleared on stop,
+    /// unless something else has taken the band since).
+    @ObservationIgnored private var bandVerse: VerseKey?
 
     /// The built-in model is used for this reading (it knows Hafs only).
     static func modelAvailable(for edition: QuranEdition) -> Bool {
@@ -125,8 +128,10 @@ final class LiveRecitation {
     /// Starts listening. `verses` is the text around the reader's place (the
     /// page and what follows, or the surah); `start` is the word index where
     /// the reader is looking; the first words heard are searched for up to
-    /// `searchingAhead` words from there.
-    func start(verses: [VerseWords], edition: QuranEdition, at start: Int, searchingAhead: Int) async {
+    /// `searchingAhead` words from there. `focus` is an ayah already known to
+    /// be recited (found by reciting): it's highlighted before the next words.
+    func start(verses: [VerseWords], edition: QuranEdition, at start: Int, searchingAhead: Int,
+               focus: VerseKey? = nil) async {
         guard !isListening else { return }
         status = .starting
         let model = Self.modelAvailable(for: edition)
@@ -200,6 +205,10 @@ final class LiveRecitation {
             return
         }
         status = .searching
+        if let focus {
+            WordHighlights.shared.focus(focus)
+            showBand(on: focus)
+        }
         requests.heardVoice()
         modelMeter.heardVoice()
         watchLevel()
@@ -242,7 +251,16 @@ final class LiveRecitation {
         tracker?.finishUtterance()
         publish()
         WordHighlights.shared.setCurrent(nil)
+        if let bandVerse, WordHighlights.shared.band == bandVerse { WordHighlights.shared.setBand(nil) }
+        bandVerse = nil
         status = pausing ? .paused : .idle
+    }
+
+    /// A band behind the ayah being recited, as for the reciter's recitation.
+    private func showBand(on verse: VerseKey) {
+        guard verse != bandVerse else { return }
+        bandVerse = verse
+        WordHighlights.shared.setBand(verse)
     }
 
     /// The "unavailable" message was seen.
@@ -425,6 +443,8 @@ final class LiveRecitation {
         guard let tracker else { return }
         let current = tracker.position.map { tracker.tokens[$0].id }
         WordHighlights.shared.setCurrent(isListening ? current : nil)
+        // The whole ayah stays lit while it's recited, with or without memorisation.
+        if isListening, let current { showBand(on: current.verseKey) }
         // Niyat finds and follows the reciter; it doesn't judge words, so no
         // marks are set. Memorisation: words recited so far show through.
         var passed: [WordID] = tracker.committed.keys.map { tracker.tokens[$0].id }

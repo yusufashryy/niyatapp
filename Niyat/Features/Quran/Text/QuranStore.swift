@@ -206,7 +206,10 @@ final class QuranStore {
     func setEdition(_ newEdition: QuranEdition) async {
         guard newEdition != edition || !isLoaded else { return }
         UserDefaults.standard.set(newEdition.rawValue, forKey: "quran.edition")
+        let switching = isLoaded && newEdition != edition
         await load(edition: newEdition)
+        // The other reading's split words and pages won't be shown again soon.
+        if switching, edition == newEdition { QuranMemory.releaseCaches() }
     }
 
     private func load(edition newEdition: QuranEdition) async {
