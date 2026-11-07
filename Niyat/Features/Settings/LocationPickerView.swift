@@ -5,7 +5,8 @@ struct LocationPickerView: View {
     /// "Continue" when the button follows an explanation of the location
     /// request (onboarding): App Review asks for neutral wording there.
     var locateTitle = "Use my current location"
-    let onPick: (SavedLocation) -> Void
+    /// Automatic when it came from "current location", so it keeps following the device.
+    let onPick: (SavedLocation, LocationMode) -> Void
 
     @State private var query = ""
     @State private var results: [SavedLocation] = []
@@ -54,7 +55,7 @@ struct LocationPickerView: View {
 
             ForEach(results, id: \.self) { result in
                 Button {
-                    onPick(result)
+                    onPick(result, .manual)
                 } label: {
                     HStack {
                         Image(systemName: "mappin.circle.fill").foregroundStyle(Palette.accent)
@@ -79,7 +80,7 @@ struct LocationPickerView: View {
         errorMessage = nil
         defer { isLocating = false }
         do {
-            onPick(try await LocationService.shared.currentSavedLocation())
+            onPick(try await LocationService.shared.currentSavedLocation(), .automatic)
         } catch {
             errorMessage = error.localizedDescription
         }

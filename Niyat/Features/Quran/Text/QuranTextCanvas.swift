@@ -19,9 +19,28 @@ enum WordMark: Hashable {
     case skipped
 }
 
+/// The typefaces Qur'an text can be drawn in (bundled, SIL Open Font License).
+enum QuranTypeface: String, Equatable {
+    /// Amiri Quran: for Warsh and Qalun, whose Maghribi marks Old Madina
+    /// doesn't have, and for the two rare marks Old Madina lacks.
+    case amiri = "AmiriQuran-Regular"
+    /// DigitalKhatt Old Madina: the Madinah mushaf's calligraphy, for every Hafs text.
+    case oldMadina = "DigitalKhattOldMadinaRegular"
+
+    static func `for`(_ edition: QuranEdition) -> QuranTypeface {
+        edition.riwayah == .hafs ? .oldMadina : .amiri
+    }
+
+    /// Pause marks' size against the text: Amiri draws them small.
+    var signScale: CGFloat { self == .amiri ? 1.15 : 1.0 }
+    /// Where a pause mark's bottom sits above the baseline (× the text size).
+    var signBottom: CGFloat { self == .amiri ? 0.5 : 0.62 }
+}
+
 /// Colours and sizes for drawing Qur'an text.
 struct QuranTextStyle: Equatable {
     var fontSize: CGFloat = 26
+    var typeface = QuranTypeface.oldMadina
     /// Paragraphs only: distance between lines as a multiple of the size.
     var lineHeight: CGFloat = 1.6
     var ink: UIColor = .white
@@ -35,6 +54,12 @@ struct QuranTextStyle: Equatable {
     var highContrast = false
     /// Band behind the ayah being recited or selected; nil for none.
     var band: UIColor?
+    /// The ayah your ribbon is on: a soft red wash behind its words, like the
+    /// red ribbon of a printed mushaf lying across it.
+    var ribbon: VerseKey?
+    var ribbonColor: UIColor = QuranTextStyle.ribbonRed.withAlphaComponent(0.16)
+    /// The ribbon's red (fixed, like the mushaf's paper colours: it's the ribbon's own colour).
+    static let ribbonRed = UIColor(red: 0.80, green: 0.16, blue: 0.20, alpha: 1)
     /// Soft highlight behind the word being recited.
     var currentWord: UIColor = UIColor(white: 0.55, alpha: 0.30)
     var uncertain: UIColor = UIColor(white: 0.62, alpha: 0.9)
@@ -62,7 +87,7 @@ struct QuranTextPiece: Equatable {
 
     static func == (lhs: QuranTextPiece, rhs: QuranTextPiece) -> Bool {
         lhs.words.key == rhs.words.key && lhs.range == rhs.range && lhs.showsVerseEnd == rhs.showsVerseEnd
-            && lhs.words.text == rhs.words.text
+            && lhs.words.text == rhs.words.text && lhs.words.readingSigns == rhs.words.readingSigns
     }
 
     /// A whole verse.
@@ -128,6 +153,12 @@ final class WordHighlights {
         redraw([previous?.verseKey, word?.verseKey])
         if let word { activeWord = word }
         if let key = word?.verseKey, key != activeVerse { activeVerse = key }
+    }
+
+    /// Marks `verse` as the one being followed before any word in it is
+    /// heard (a place found by reciting), so it's highlighted straight away.
+    func focus(_ verse: VerseKey) {
+        if verse != activeVerse { activeVerse = verse }
     }
 
     /// The ayah drawn with a band (recited or selected), or nil.
@@ -205,12 +236,22 @@ final class QuranTextCanvas: UIView {
     private(set) var style = QuranTextStyle()
     private(set) var layoutKind = Layout.paragraph
 
+    /// A pause mark: kept in the text invisibly (so it takes its room in the
+    /// line), and drawn on its own over that room, at a set height.
+    private struct Sign {
+        /// The word it follows.
+        let word: WordID
+        let text: String
+        let color: CGColor
+    }
+
     private struct Unit {
         let id: WordID
         let text: NSAttributedString
         /// The word's letters within `text` (without marks or the ayah marker).
         let core: NSRange
         let width: CGFloat
+        var sign: Sign?
     }
 
     private struct Line {
@@ -221,6 +262,8 @@ final class QuranTextCanvas: UIView {
         let scale: CGFloat
         /// Each word's letters and whole unit, as ranges of the line's string.
         let words: [(id: WordID, core: NSRange, whole: NSRange)]
+        /// Pause marks to draw over their room in the line.
+        let signs: [Sign]
     }
 
     private var units: [Unit] = []
@@ -265,7 +308,10 @@ final class QuranTextCanvas: UIView {
         // Hidden words aren't read out either, so reciting from memory works with VoiceOver.
         accessibilityLabel = hidden ? "Hidden to recite from memory" : pieces.map { piece in
             piece.range.filter { piece.words.words.indices.contains($0) }
-                .map { (piece.words.text as NSString).substring(with: piece.words.words[$0].range) }
+                .map { index in
+                    let word = (piece.words.text as NSString).substring(with: piece.words.words[index].range)
+                    return word + (piece.words.readingSigns[index].map { " " + $0 } ?? "")
+                }
                 .joined(separator: " ")
         }.joined(separator: " ")
         units = Self.makeUnits(pieces, style: style, hidden: hidden ? WordHighlights.shared.revealed : nil)
@@ -286,9 +332,10 @@ final class QuranTextCanvas: UIView {
 
     /// Width of the pieces on one line at a size, before justification.
     @MainActor
-    static func naturalWidth(of pieces: [QuranTextPiece], fontSize: CGFloat) -> CGFloat {
+    static func naturalWidth(of pieces: [QuranTextPiece], fontSize: CGFloat, typeface: QuranTypeface = .amiri) -> CGFloat {
         var style = QuranTextStyle()
         style.fontSize = fontSize
+        style.typeface = typeface
         let units = makeUnits(pieces, style: style, hidden: nil)
         let space = width(of: NSAttributedString(string: " ", attributes: baseAttributes(style)))
         return units.reduce(0) { $0 + $1.width } + space * CGFloat(max(units.count - 1, 0))
@@ -296,8 +343,14 @@ final class QuranTextCanvas: UIView {
 
     // MARK: Building
 
-    private static func font(_ size: CGFloat) -> CTFont {
-        CTFontCreateWithName("AmiriQuran-Regular" as CFString, size, nil)
+    private static func font(_ size: CGFloat, _ typeface: QuranTypeface = .amiri) -> CTFont {
+        guard typeface != .amiri else { return CTFontCreateWithName(typeface.rawValue as CFString, size, nil) }
+        let fallback = CTFontDescriptorCreateWithNameAndSize(QuranTypeface.amiri.rawValue as CFString, size)
+        let descriptor = CTFontDescriptorCreateWithAttributes([
+            kCTFontNameAttribute: typeface.rawValue,
+            kCTFontCascadeListAttribute: [fallback],
+        ] as CFDictionary)
+        return CTFontCreateWithFontDescriptor(descriptor, size, nil)
     }
 
     private static let colorKey = NSAttributedString.Key(kCTForegroundColorAttributeName as String)
@@ -307,7 +360,7 @@ final class QuranTextCanvas: UIView {
     private static let kernKey = NSAttributedString.Key(kCTKernAttributeName as String)
 
     private static func baseAttributes(_ style: QuranTextStyle) -> [NSAttributedString.Key: Any] {
-        var attributes: [NSAttributedString.Key: Any] = [fontKey: font(style.fontSize), colorKey: style.ink.cgColor]
+        var attributes: [NSAttributedString.Key: Any] = [fontKey: font(style.fontSize, style.typeface), colorKey: style.ink.cgColor]
         // Negative stroke width: fill and outline in the text's own colour.
         if style.weight > 0 { attributes[strokeKey] = -style.weight }
         return attributes
@@ -331,6 +384,7 @@ final class QuranTextCanvas: UIView {
             for index in piece.range where verse.words.indices.contains(index) {
                 let word = verse.words[index]
                 let display = word.displayRange
+                var sign: Sign?
                 let unit = NSMutableAttributedString(string: text.substring(with: display), attributes: base)
                 if let shown = hidden, !shown.contains(word.id) {
                     unit.addAttribute(colorKey, value: clear, range: NSRange(location: 0, length: unit.length))
@@ -343,13 +397,30 @@ final class QuranTextCanvas: UIView {
                                           range: NSRange(location: start - display.location, length: end - start))
                     }
                 }
+                if let signs = verse.readingSigns[index] {
+                    // Pause marks keep their room in the line here, invisibly,
+                    // and are drawn over it by drawSigns, in the ink of the text
+                    // as printed. (Amiri puts each at its own height, some high
+                    // enough to leave a mushaf row.) The sajdah ornament sits on
+                    // the baseline in the marker colour.
+                    var attributes = signs == "۩" ? markerAttributes : base
+                    let isHidden = hidden.map { !$0.contains(word.id) } ?? false
+                    if signs != "۩" {
+                        attributes[fontKey] = font(style.fontSize * style.typeface.signScale, style.typeface)
+                        attributes[colorKey] = clear
+                        sign = Sign(word: word.id, text: signs, color: isHidden ? clear : style.ink.cgColor)
+                    } else if isHidden {
+                        attributes[colorKey] = clear
+                    }
+                    unit.append(NSAttributedString(string: " " + signs, attributes: attributes))
+                }
                 if piece.showsVerseEnd, index == piece.range.upperBound {
                     unit.append(NSAttributedString(string: " \u{06DD}" + arabicDigits(verse.key.verse),
                                                    attributes: markerAttributes))
                 }
                 result.append(Unit(id: word.id, text: unit,
                                    core: NSRange(location: word.range.location - display.location, length: word.range.length),
-                                   width: width(of: unit)))
+                                   width: width(of: unit), sign: sign))
             }
         }
         return result
@@ -418,6 +489,7 @@ final class QuranTextCanvas: UIView {
         func makeLine(_ range: Range<Int>, justify: Bool, centre: Bool, baseline: CGFloat) -> Line {
             let string = NSMutableAttributedString()
             var words: [(id: WordID, core: NSRange, whole: NSRange)] = []
+            var signs: [Sign] = []
             let space = NSAttributedString(string: " ", attributes: Self.baseAttributes(style))
             var spaces: [Int] = []
             for index in range {
@@ -430,6 +502,7 @@ final class QuranTextCanvas: UIView {
                 string.append(unit.text)
                 words.append((unit.id, NSRange(location: location + unit.core.location, length: unit.core.length),
                               NSRange(location: location, length: unit.text.length)))
+                if let sign = unit.sign { signs.append(sign) }
             }
             let natural = CTLineCreateWithAttributedString(string as CFAttributedString)
             let naturalWidth = CGFloat(CTLineGetTypographicBounds(natural, nil, nil, nil))
@@ -462,7 +535,7 @@ final class QuranTextCanvas: UIView {
                 // Right-to-left: a short line sits against the right edge.
                 x = max(0, width - drawnWidth)
             }
-            return Line(ctLine: ctLine, x: x, baseline: baseline, scale: scale, words: words)
+            return Line(ctLine: ctLine, x: x, baseline: baseline, scale: scale, words: words, signs: signs)
         }
 
         switch layoutKind {
@@ -483,6 +556,33 @@ final class QuranTextCanvas: UIView {
 
     // MARK: Drawing
 
+    /// Draws each pause mark over its room in the line, centred, with the
+    /// bottom of what's drawn at the same height for every mark (the font
+    /// puts each at its own height). In the flipped text context.
+    private func drawSigns(of line: Line, in context: CGContext) {
+        let size = style.fontSize
+        for sign in line.signs {
+            // Just past the end of its word (on the left: right to left),
+            // over the room the invisible mark keeps in the line.
+            guard let word = line.words.first(where: { $0.id == sign.word }) else { continue }
+            let a = CTLineGetOffsetForStringIndex(line.ctLine, word.core.location, nil)
+            let b = CTLineGetOffsetForStringIndex(line.ctLine, NSMaxRange(word.core), nil)
+            let wordEnd = line.x + min(a, b) * line.scale
+            // As printed: close to the end of the word it follows.
+            let centre = wordEnd - spaceWidth * 0.5 * line.scale
+            let attributes: [NSAttributedString.Key: Any] = [Self.fontKey: Self.font(size * style.typeface.signScale, style.typeface),
+                                                             Self.colorKey: sign.color]
+            let mark = CTLineCreateWithAttributedString(NSAttributedString(string: sign.text, attributes: attributes))
+            // Image bounds are measured from the context's text position.
+            context.textPosition = .zero
+            let drawn = CTLineGetImageBounds(mark, context)
+            guard !drawn.isEmpty else { continue }
+            context.textPosition = CGPoint(x: centre - drawn.midX,
+                                           y: bounds.height - line.baseline + size * style.typeface.signBottom - drawn.minY)
+            CTLineDraw(mark, context)
+        }
+    }
+
     private func rect(of range: NSRange, in line: Line) -> CGRect {
         let a = CTLineGetOffsetForStringIndex(line.ctLine, range.location, nil)
         let b = CTLineGetOffsetForStringIndex(line.ctLine, NSMaxRange(range), nil)
@@ -499,6 +599,16 @@ final class QuranTextCanvas: UIView {
         let size = style.fontSize
 
         for line in lines {
+            // The ribbon's ayah: a soft red wash behind its words on this line.
+            if let ribbon = style.ribbon {
+                let inVerse = line.words.filter { $0.id.verseKey == ribbon }
+                if let first = inVerse.first, let last = inVerse.last {
+                    let union = self.rect(of: first.whole, in: line).union(self.rect(of: last.whole, in: line))
+                    style.ribbonColor.setFill()
+                    UIBezierPath(roundedRect: union.insetBy(dx: -size * 0.1, dy: size * 0.05),
+                                 cornerRadius: size * 0.25).fill()
+                }
+            }
             // The recited or selected ayah: a band behind its words on this line.
             if let bandColor = style.band, let band = highlights.band {
                 let inVerse = line.words.filter { $0.id.verseKey == band }
@@ -543,6 +653,7 @@ final class QuranTextCanvas: UIView {
             context.textPosition = .zero
             CTLineDraw(line.ctLine, context)
             context.restoreGState()
+            drawSigns(of: line, in: context)
         }
         context.restoreGState()
 

@@ -26,6 +26,13 @@ enum NotificationScheduler {
         static let kind = "kind"
         static let surah = "surah"
         static let verse = "verse"
+        /// The muezzin whose athan the alert plays (`Muezzin.rawValue`).
+        static let athan = "athan"
+    }
+
+    /// An athan alert's sound: the muezzin's opening, bundled with the app.
+    static func sound(for muezzin: Muezzin?) -> UNNotificationSound {
+        muezzin.map { UNNotificationSound(named: UNNotificationSoundName($0.alertSoundName)) } ?? .default
     }
 
     /// Registers the notification buttons. Call once at launch.
@@ -56,12 +63,14 @@ enum NotificationScheduler {
     @MainActor
     static func reschedule(location: SavedLocation?, prayerSettings: PrayerSettings,
                            notificationSettings: NotificationSettings,
-                           quranReminders: QuranReminderSettings = SettingsStore.quranReminders) async {
+                           quranReminders: QuranReminderSettings = SettingsStore.quranReminders,
+                           athan: AthanSettings = SettingsStore.athan) async {
         let previous = lastReschedule
         let task = Task { @MainActor in
             await previous?.value
             await performReschedule(location: location, prayerSettings: prayerSettings,
-                                    notificationSettings: notificationSettings, quranReminders: quranReminders)
+                                    notificationSettings: notificationSettings, quranReminders: quranReminders,
+                                    athan: athan)
         }
         lastReschedule = task
         await task.value
@@ -74,7 +83,7 @@ enum NotificationScheduler {
 
     private static func performReschedule(location: SavedLocation?, prayerSettings: PrayerSettings,
                                            notificationSettings: NotificationSettings,
-                                           quranReminders: QuranReminderSettings) async {
+                                           quranReminders: QuranReminderSettings, athan: AthanSettings) async {
         let center = UNUserNotificationCenter.current()
         let pending = await center.pendingNotificationRequests().map(\.identifier).filter { !isTest($0) }
         center.removePendingNotificationRequests(withIdentifiers: pending)
@@ -84,21 +93,17 @@ enum NotificationScheduler {
         var candidates: [(date: Date, request: UNNotificationRequest)] = []
 
         if let location, !notificationSettings.enabledPrayers.isEmpty, !notificationSettings.timings.isEmpty {
-            let records = PrayerLog.load()
             let upcoming = PrayerCalculator.upcoming(after: now.addingTimeInterval(-3600), count: 6 * 14, includeSunrise: true,
                                                      location: location, settings: prayerSettings)
             let calendar = PrayerCalculator.calendar(for: location)
-            for time in upcoming where notificationSettings.enabledPrayers.contains(time.name) {
-                let dayKey = PrayerLog.dayKey(for: calendar.startOfDay(for: time.date))
-                let alreadyLogged = records["\(dayKey)|\(time.name.rawValue)"] != nil
-                let timings: [AlertTiming] = time.name.isObligatory ? notificationSettings.timings.sorted() : [.atTime]
-                for timing in timings {
-                    // No point nagging about a prayer that's already logged.
-                    if timing == .after30, alreadyLogged { continue }
-                    let date = time.date.addingTimeInterval(TimeInterval(timing.minutes * 60))
-                    guard date > now else { continue }
-                    candidates.append((date, prayerRequest(for: time, timing: timing, dayKey: dayKey, location: location)))
-                }
+            // The same plan as the Apple Watch's, so the two sets of alerts match.
+            let plan = PrayerAlertPlan.alerts(for: upcoming, settings: notificationSettings,
+                                              dayKey: { PrayerLog.dayKey(for: calendar.startOfDay(for: $0)) },
+                                              logged: Set(PrayerLog.load().keys), now: now, limit: maxPending)
+            for alert in plan {
+                candidates.append((alert.date, prayerRequest(for: alert.time, timing: alert.timing, dayKey: alert.dayKey,
+                                                             location: location,
+                                                             muezzin: athan.muezzin(for: alert.prayer, timing: alert.timing))))
             }
         }
 
@@ -129,16 +134,15 @@ enum NotificationScheduler {
     }
 
     private static func identifier(prayer: PrayerName, dayKey: String, timing: AlertTiming) -> String {
-        "prayer.\(dayKey).\(prayer.rawValue).\(timing.rawValue)"
+        PrayerAlertPlan.identifier(prayer: prayer, dayKey: dayKey, timing: timing)
     }
 
     private static func trigger(at date: Date) -> UNCalendarNotificationTrigger {
-        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-        return UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        UNCalendarNotificationTrigger(dateMatching: date.fixedDateComponents(), repeats: false)
     }
 
     private static func prayerRequest(for time: PrayerTime, timing: AlertTiming, dayKey: String,
-                                      location: SavedLocation) -> UNNotificationRequest {
+                                      location: SavedLocation, muezzin: Muezzin?) -> UNNotificationRequest {
         let content = UNMutableNotificationContent()
         let name = time.name.displayName(on: time.date)
         switch (time.name, timing) {
@@ -156,9 +160,10 @@ enum NotificationScheduler {
             content.title = "Have you prayed \(name)?"
             content.body = "\(name) began 30 minutes ago. Tap Log Prayer once you've prayed."
         }
-        content.sound = .default
+        content.sound = sound(for: muezzin)
         content.threadIdentifier = "prayer.\(dayKey)"
         content.userInfo = [UserInfoKey.prayer: time.name.rawValue, UserInfoKey.dayKey: dayKey, UserInfoKey.kind: "prayer"]
+        if let muezzin { content.userInfo[UserInfoKey.athan] = muezzin.rawValue }
         content.categoryIdentifier = time.name.isObligatory && timing.offersLogging ? Category.loggablePrayer : Category.prayer
         return UNNotificationRequest(identifier: identifier(prayer: time.name, dayKey: dayKey, timing: timing),
                                      content: content, trigger: trigger(at: time.date.addingTimeInterval(TimeInterval(timing.minutes * 60))))
@@ -284,6 +289,7 @@ enum NotificationScheduler {
         let allowed = await requestAuthorization()
         guard allowed else { return false }
         let content = UNMutableNotificationContent()
+        let muezzin = SettingsStore.athan.muezzin(for: current?.name ?? .dhuhr, timing: .atTime)
         if let current, current.name.isObligatory, let location {
             let name = current.name.displayName(on: current.date)
             let dayKey = PrayerLog.dayKey(for: PrayerCalculator.calendar(for: location).startOfDay(for: current.date))
@@ -298,7 +304,8 @@ enum NotificationScheduler {
             content.title = "Niyat test alert"
             content.body = "Adhan alerts are working."
         }
-        content.sound = .default
+        content.sound = sound(for: muezzin)
+        if let muezzin { content.userInfo[UserInfoKey.athan] = muezzin.rawValue }
         content.interruptionLevel = .timeSensitive
         let request = UNNotificationRequest(identifier: "test.\(UUID().uuidString)", content: content,
                                             trigger: UNTimeIntervalNotificationTrigger(timeInterval: testDelay, repeats: false))
@@ -354,8 +361,9 @@ enum NotificationScheduler {
     }
 }
 
-/// Shows alerts while Niyat is open, handles the "Log Prayer" button, and opens
-/// the Qur'an when a Qur'an reminder is tapped.
+/// Shows alerts while Niyat is open, handles the "Log Prayer" button, opens
+/// the Qur'an when a Qur'an reminder is tapped, and plays the full athan when
+/// a prayer alert is opened (or comes while Niyat is open).
 final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationPresenter()
 
@@ -365,7 +373,24 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        DispatchQueue.main.async { completionHandler([.banner, .list, .sound]) }
+        let athan = Self.fullAthan(for: notification)
+        DispatchQueue.main.async {
+            if let athan {
+                // The full athan instead of its opening, so they don't play over each other.
+                MainActor.assumeIsolated { AthanPlayer.shared.play(athan) }
+                completionHandler([.banner, .list])
+            } else {
+                completionHandler([.banner, .list, .sound])
+            }
+        }
+    }
+
+    /// The athan to play in full for an alert, if it has one and that's turned on.
+    private static func fullAthan(for notification: UNNotification) -> Muezzin? {
+        let info = notification.request.content.userInfo
+        guard SettingsStore.athan.playsFullAthan,
+              let id = info[NotificationScheduler.UserInfoKey.athan] as? String else { return nil }
+        return Muezzin(rawValue: id)
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
@@ -377,6 +402,7 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
         let dayKey = info[NotificationScheduler.UserInfoKey.dayKey] as? String
         let surah = info[NotificationScheduler.UserInfoKey.surah] as? Int
         let verse = info[NotificationScheduler.UserInfoKey.verse] as? Int
+        let athan = action == UNNotificationDefaultActionIdentifier ? Self.fullAthan(for: response.notification) : nil
 
         DispatchQueue.main.async {
             defer { completionHandler() }
@@ -388,6 +414,10 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
                     WidgetCenter.shared.reloadAllTimelines()
                 }
                 NotificationCenter.default.post(name: .prayerJournalChanged, object: nil)
+                return
+            }
+            if let athan {
+                MainActor.assumeIsolated { AthanPlayer.shared.play(athan) }
                 return
             }
             if kind == "quran", action == UNNotificationDefaultActionIdentifier {

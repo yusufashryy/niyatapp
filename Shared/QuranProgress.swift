@@ -79,6 +79,19 @@ enum QuranProgress {
         AppGroup.defaults.decoded([String: QuranDay].self, forKey: daysKey) ?? [:]
     }
 
+    /// The days and goal the Apple Watch shows, as sent from the iPhone.
+    static func recent(days count: Int, asOf date: Date = .now) -> [String: QuranDay] {
+        let calendar = Calendar.current
+        let keys = Set((0..<count).compactMap { calendar.date(byAdding: .day, value: -$0, to: date) }.map(dayKey(for:)))
+        return allDays().filter { keys.contains($0.key) }
+    }
+
+    /// On the watch: takes the iPhone's days, which are the record.
+    static func merge(_ days: [String: QuranDay], goal: Int?) {
+        save(allDays().merging(days) { _, phone in phone })
+        dailyGoal = goal
+    }
+
     private static func save(_ days: [String: QuranDay]) {
         AppGroup.defaults.setEncoded(days, forKey: daysKey)
     }

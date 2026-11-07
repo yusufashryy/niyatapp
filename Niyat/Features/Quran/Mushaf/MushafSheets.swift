@@ -6,12 +6,16 @@ struct MushafVerseActions: View {
     let verse: Verse
     let showTranslation: Bool
     let canPlay: Bool
-    let isBookmarked: Bool
+    let isSaved: Bool
+    let hasRibbon: Bool
     let onPlayFromHere: () -> Void
     let onPlayVerse: () -> Void
-    let onBookmark: () -> Void
+    let onRibbon: () -> Void
+    let onSave: () -> Void
+    /// Nil where there's no tafsir to show (Warsh and Qalun number the ayat differently).
+    let onTafsir: (() -> Void)?
+    let onShare: () -> Void
     let onClose: () -> Void
-    @State private var copied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -39,21 +43,20 @@ struct MushafVerseActions: View {
                     action("Play from here", "play.fill", onPlayFromHere)
                     action("This verse", "repeat.1", onPlayVerse)
                 }
-                action(isBookmarked ? "Saved" : "Bookmark", isBookmarked ? "bookmark.fill" : "bookmark", onBookmark)
-                action(copied ? "Copied" : "Copy", copied ? "checkmark" : "doc.on.doc") {
-                    UIPasteboard.general.string = "\(verse.arabic)\n\n\(verse.translation)\n— Qur'an \(verse.surah):\(verse.number)"
-                    copied = true
-                }
+                action(hasRibbon ? "Remove ribbon" : "Ribbon", hasRibbon ? "bookmark.slash.fill" : "bookmark", onRibbon)
+                action(isSaved ? "Saved" : "Save", isSaved ? "star.fill" : "star", onSave)
+                if let onTafsir { action("Tafsir", "text.book.closed", onTafsir) }
+                // Share has Copy too (the share screen's copy button).
+                action("Share", "square.and.arrow.up", onShare)
             }
-            .haptic(.impact(weight: .light), trigger: isBookmarked)
-            .haptic(.success, trigger: copied)
+            .haptic(.impact(weight: .light), trigger: isSaved)
+            .haptic(.impact(weight: .medium), trigger: hasRibbon)
         }
         .foregroundStyle(.white)
         .padding(14)
         .glassPanel(cornerRadius: 24, tint: Palette.glow.opacity(0.35))
         // A dark panel on every paper, so it reads as floating above the page.
         .environment(\.colorScheme, .dark)
-        .onChange(of: verse) { _, _ in copied = false }
     }
 
     private func action(_ title: String, _ icon: String, _ perform: @escaping () -> Void) -> some View {
@@ -89,6 +92,18 @@ struct MushafOptionsSheet: View {
                         }
                     }
                     .padding(.vertical, 4)
+                }
+
+                Section {
+                    Picker("Turning pages", selection: $options.pageTurn) {
+                        ForEach(MushafOptions.PageTurn.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    Toggle("Two pages side by side", isOn: $options.twoPages)
+                } header: {
+                    Text("Pages")
+                } footer: {
+                    Text("Pages turn right to left, like a printed mushaf. With Reduce Motion on (Settings › Accessibility), they slide instead. Two facing pages show when the screen is wide enough, such as an iPad turned sideways.")
                 }
 
                 Section {

@@ -8,8 +8,12 @@ require them to stay exactly as published.
 |---|---|---|---|
 | `Niyat/Resources/Quran/quran-uthmani.json` | Quran Arabic text, Uthmani script (Hafs) | [Tanzil Project](https://tanzil.net), via [risan/quran-json](https://github.com/risan/quran-json) (`data/tanzil/uthmani.json`, sha256 `adaebb37…4b761`) | [CC BY 3.0](https://tanzil.net/docs/text_license): *"Permission is granted to copy and distribute verbatim copies of this text, but changing it is not allowed."* |
 | `Niyat/Resources/Quran/chapters.json` | Surah names and verse counts | Tanzil `quran-data.xml`, via risan/quran-json (`data/tanzil/chapters.json`) | CC BY 3.0 |
+| `Niyat/Resources/Quran/surah-titles.json` | Surah titles with harakat, for the mushaf's headings | [AlQuran Cloud](https://alquran.cloud) (Islamic Network), `api.alquran.cloud/v1/surah`, names unmodified (SHA-256 `841256fe…1600b`) | [AlQuran Cloud terms](https://alquran.cloud/terms-and-conditions): bundling allowed, with acknowledgement of the source |
+| `Niyat/Resources/Tafsir/jalalayn.tafsir` | Tafsir al-Jalalayn (Arabic) | [Quranpedia.net](https://quranpedia.net) (الموسوعة القرآنية), version 2026-08-10, built by `scripts/build_tafsir.py` | [Quranpedia data licence](https://quranpedia.net/dumps/LICENSE.md): free in apps; classical text, shared heritage |
+| `Niyat/Resources/Tafsir/ibn-kathir.tafsir` | Tafsir Ibn Kathir (Arabic), Dar Taybah edition, without the editor's notes | Quranpedia.net, version 2026-08-10, built by `scripts/build_tafsir.py` | Quranpedia data licence, as above |
 | `Niyat/Resources/Quran/translation-en-clearquran.json` | English translation | *Translation by Talal Itani, ClearQuran.com* ("Allah" edition), via risan/quran-json (`data/extra/english_itani_allah.json`, sha256 `2e5d4d9f…250ed`) | [CC BY-ND 4.0](https://blog.clearquran.com/download): free to use and share, including commercially, unmodified, with credit |
 | `Niyat/Resources/Fonts/AmiriQuran-Regular.ttf` | Amiri Quran font | [aliftype/amiri](https://github.com/aliftype/amiri), via google/fonts | SIL Open Font License 1.1 (`AmiriQuran-OFL.txt`) |
+| `Niyat/Resources/Fonts/DigitalKhattOldMadina.otf` | Mushaf pages font (Madinah mushaf calligraphy) | [DigitalKhatt/oldmadinafont](https://github.com/DigitalKhatt/oldmadinafont) at `6e19182f25`, `fonts/oldmadina.otf`, unmodified (SHA-256 `e83c1bdb…bf16f`) | SIL Open Font License 1.1 (`DigitalKhattOldMadina-OFL.txt`) |
 | `Niyat/Resources/Fonts/ArefRuqaa-Bold.ttf` | Aref Ruqaa calligraphy font (headings, art) | [alif-type/aref-ruqaa](https://github.com/alif-type/aref-ruqaa), via google/fonts | SIL Open Font License 1.1 (`ArefRuqaa-OFL.txt`) |
 | `Shared/DailyVerses.swift` | Verses for the Verse of the Day widget | Generated verbatim from the two files above by `scripts/generate_daily_verses.py` | As above |
 | Swift package `Adhan` | Prayer time calculation | [batoulapps/adhan-swift](https://github.com/batoulapps/adhan-swift) | MIT |
@@ -24,6 +28,10 @@ Arabic dhikr phrases in `Shared/Tasbih.swift` are standard phrases, not copied f
 ## Tajweed rules
 
 - **Quran Tajweed** by Collin Fair, [github.com/cpfair/quran-tajweed](https://github.com/cpfair/quran-tajweed), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Built from ReciteQuran.com and the Dar al-Maarifah tajweed masahif. Niyat re-runs its classifier on the bundled Tanzil text (see docs/SOURCES.md); no rule data was changed by hand.
+
+## Recitation model
+
+- **QuranKarim speech-to-text** by TheGreatQuran, [huggingface.co/TheGreatQuran/QuranKarim-SpeechToText-onnxModel](https://huggingface.co/TheGreatQuran/QuranKarim-SpeechToText-onnxModel), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Bundled unmodified and run on the iPhone with [ONNX Runtime](https://github.com/microsoft/onnxruntime) (MIT).
 
 ## Mushaf line layout
 

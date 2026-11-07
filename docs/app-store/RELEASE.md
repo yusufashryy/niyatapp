@@ -87,7 +87,7 @@ in `project.yml` (1, 2, 3…), then `make full` again.
 ## 6. Fill in the listing (**You**, copying from `listing.md`)
 - Name, subtitle, promotional text, description, keywords, category, age rating (answer "None" to everything → 4+).
 - **Privacy Policy URL**: turn on GitHub Pages first (bottom of `listing.md`).
-- **App Privacy**: "No, we do not collect data".
+- **App Privacy**: "No, we do not collect data". Finding and following a recitation runs on the iPhone (Niyat's bundled model for Hafs).
 - **Screenshots**: 6.9" from the `demo-media` branch (see `listing.md`).
 - **In-App Purchases**: the three tips (table in `listing.md`), and join the Small Business Program for a 15% fee.
 - **App Review notes**: paste the text from `listing.md`.

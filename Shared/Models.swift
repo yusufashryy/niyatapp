@@ -82,6 +82,10 @@ struct SavedLocation: Codable, Equatable, Hashable {
 
     var coordinates: Coordinates { Coordinates(latitude: latitude, longitude: longitude) }
     var timeZone: TimeZone { TimeZone(identifier: timeZoneIdentifier) ?? .current }
+    /// "London" from "London, United Kingdom", for tight spaces like buttons.
+    var shortName: String {
+        name.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? name
+    }
 
     static let makkah = SavedLocation(latitude: 21.4225, longitude: 39.8262, name: "Makkah",
                                       timeZoneIdentifier: "Asia/Riyadh", countryCode: "SA")

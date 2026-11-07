@@ -12,9 +12,20 @@ final class AppModel {
     var hijriAdjustment: Int
     var quranReminders: QuranReminderSettings
     private(set) var records: [String: PrayerRecord]
+    /// Automatic follows the device when the app opens (see AppModel+Location).
+    var locationMode: LocationMode
+    /// Set after Niyat moved the location by itself, for the "Updated · Undo" banner.
+    var recentLocationChange: LocationChange?
+    /// The device time zone the user chose to keep their city for.
+    var timeZonePromptDismissed: String?
+    var lastLocationCheck: Date?
+    var lastCheckedTimeZone: TimeZone?
+    var isCheckingLocation = false
 
     init() {
         location = SettingsStore.location
+        locationMode = SettingsStore.locationMode
+        timeZonePromptDismissed = SettingsStore.timeZonePromptDismissed
         prayerSettings = SettingsStore.prayerSettings
         notificationSettings = SettingsStore.notificationSettings
         hijriAdjustment = SettingsStore.hijriAdjustment
@@ -29,6 +40,9 @@ final class AppModel {
     /// Re-reads everything from storage (after "Erase all data").
     func reloadFromStorage() {
         location = SettingsStore.location
+        locationMode = SettingsStore.locationMode
+        timeZonePromptDismissed = SettingsStore.timeZonePromptDismissed
+        recentLocationChange = nil
         prayerSettings = SettingsStore.prayerSettings
         notificationSettings = SettingsStore.notificationSettings
         hijriAdjustment = SettingsStore.hijriAdjustment
@@ -59,6 +73,14 @@ final class AppModel {
     }
 
     // MARK: Updating settings
+
+    /// `mode` is automatic when the user chose "current location", manual for a searched city.
+    func setLocation(_ newLocation: SavedLocation, mode: LocationMode) {
+        locationMode = mode
+        SettingsStore.locationMode = mode
+        recentLocationChange = nil
+        setLocation(newLocation)
+    }
 
     func setLocation(_ newLocation: SavedLocation) {
         location = newLocation

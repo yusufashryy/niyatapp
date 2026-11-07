@@ -95,6 +95,11 @@ struct SettingsView: View {
                 } label: {
                     LabeledContent("Alert times", value: "\(model.notificationSettings.timings.count) per prayer")
                 }
+                NavigationLink {
+                    AthanSettingsView()
+                } label: {
+                    LabeledContent("Athan", value: SettingsStore.athan.muezzin?.name ?? "Standard sound")
+                }
                 Button {
                     Task {
                         let sent = await NotificationScheduler.sendTest(location: model.location,
@@ -148,7 +153,7 @@ struct SettingsView: View {
             } header: {
                 Text("Your data")
             } footer: {
-                Text("Everything Niyat stores lives on this iPhone. Erasing removes your prayer log, Qur'an progress, bookmarks, tasbih counts, theme and settings, cancels scheduled alerts, and starts the app fresh. Groups live in iCloud: leave them from Groups first if you want them gone too.")
+                Text("Everything Niyat stores lives on this iPhone. Erasing removes your prayer log, Qur'an progress, ribbon, saved verses, tasbih counts, theme and settings, cancels scheduled alerts, and starts the app fresh. Groups live in iCloud: leave them from Groups first if you want them gone too.")
             }
         }
         .confirmationDialog("Erase all data?", isPresented: $confirmErase, titleVisibility: .visible) {
@@ -174,6 +179,8 @@ struct SettingsView: View {
 private struct LocationSettingsView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @State private var isLocating = false
+    @State private var errorMessage: String?
 
     var body: some View {
         ScrollView {
@@ -190,8 +197,9 @@ private struct LocationSettingsView: View {
                     .padding(18)
                     .glassPanel(cornerRadius: 24)
                 }
-                LocationPickerView { location in
-                    model.setLocation(location)
+                followToggle
+                LocationPickerView { location, mode in
+                    model.setLocation(location, mode: mode)
                     dismiss()
                 }
             }
@@ -199,6 +207,43 @@ private struct LocationSettingsView: View {
         }
         .niyatBackground()
         .navigationTitle("Location")
+    }
+
+    /// Automatic mode: prayer times move with you when you travel.
+    private var followToggle: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle(isOn: Binding(
+                get: { model.locationMode == .automatic },
+                set: { follows in Task { await setFollows(follows) } }
+            )) {
+                HStack {
+                    Text("Update when I travel").font(.headline)
+                    if isLocating { ProgressView() }
+                }
+            }
+            .disabled(isLocating)
+            Text("Each time you open Niyat, it checks where you are and moves prayer times, alerts and widgets if you've travelled. Your location stays on your device.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(18)
+        .surface(cornerRadius: 24)
+    }
+
+    private func setFollows(_ follows: Bool) async {
+        isLocating = true
+        errorMessage = nil
+        defer { isLocating = false }
+        do {
+            try await model.setFollowsDevice(follows)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }
 

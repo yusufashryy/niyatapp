@@ -127,9 +127,11 @@ struct TasbihView: View {
                     Text("\(count)")
                         .font(.display(84, weight: .heavy))
                         .monospacedDigit()
+                        .fitText(0.4)
                         .contentTransition(.numericText(value: Double(count)))
                     Text(target > 0 ? "of \(target)" : "Tap to count")
                         .font(.headline)
+                        .fitText()
                         .foregroundStyle(.secondary)
                 }
                 .foregroundStyle(.white)

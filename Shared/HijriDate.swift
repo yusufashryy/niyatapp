@@ -16,6 +16,12 @@ enum HijriDate {
         return formatter.string(from: shifted)
     }
 
+    /// The day of the Hijri month (1...30).
+    static func day(for date: Date, adjustmentDays: Int = SettingsStore.hijriAdjustment) -> Int {
+        let shifted = Calendar.current.date(byAdding: .day, value: adjustmentDays, to: date) ?? date
+        return calendar().component(.day, from: shifted)
+    }
+
     static func month(for date: Date, adjustmentDays: Int = SettingsStore.hijriAdjustment) -> Int {
         let shifted = Calendar.current.date(byAdding: .day, value: adjustmentDays, to: date) ?? date
         return calendar().component(.month, from: shifted)

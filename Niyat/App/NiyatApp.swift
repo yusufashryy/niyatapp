@@ -1,5 +1,6 @@
 import StoreKit
 import SwiftUI
+import UIKit
 import UserNotifications
 
 @main
@@ -52,6 +53,9 @@ struct RootView: View {
                 .transition(.opacity)
             }
         }
+        // The athan playing in full, with Stop, over whatever screen is open.
+        .overlay(alignment: .top) { AthanNowPlaying() }
+        .animation(.smooth, value: AthanPlayer.shared.playing)
         // Reading Palette here means the whole app re-tints when the theme changes.
         .tint(Palette.accent)
         .toggleStyle(NiyatToggleStyle())
@@ -61,9 +65,22 @@ struct RootView: View {
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
-            case .active: model.refresh()
+            case .active:
+                model.refresh()
+                if hasOnboarded { Task { await model.followCurrentLocation() } }
             case .background: BackgroundRefresh.schedule()
             default: break
+            }
+        }
+        // Memory is low: let go of Qur'an data that's only kept to be quick.
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+            QuranMemory.releaseCaches()
+        }
+        // Landing after a flight while Niyat is open: re-time alerts and check the location.
+        .task {
+            for await _ in NotificationCenter.default.notifications(named: .NSSystemTimeZoneDidChange) {
+                model.refresh()
+                if hasOnboarded { await model.followCurrentLocation() }
             }
         }
     }
@@ -103,6 +120,10 @@ struct MainTabView: View {
             if !tutorialSeen { showTutorial = true } else { prompter.appOpened() }
         }
         .fullScreenCover(isPresented: $showTutorial) { TutorialView() }
+        #if SCREEN_TIME
+        // Opening Niyat during a Prayer Lock asks "Have you prayed?" and can unlock.
+        .modifier(PrayerLockPromptModifier())
+        #endif
         // Apple's own rating prompt, a moment after a happy event (see ReviewPrompter).
         .onChange(of: prompter.askForReview) { _, ask in
             guard ask else { return }

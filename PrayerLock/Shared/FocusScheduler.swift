@@ -157,10 +157,8 @@ enum FocusScheduler {
     }
 
     private static func schedule(from start: Date, to end: Date) -> DeviceActivitySchedule {
-        let calendar = Calendar.current
-        let units: Set<Calendar.Component> = [.year, .month, .day, .hour, .minute, .second]
-        return DeviceActivitySchedule(intervalStart: calendar.dateComponents(units, from: start),
-                                      intervalEnd: calendar.dateComponents(units, from: end),
-                                      repeats: false)
+        DeviceActivitySchedule(intervalStart: start.fixedDateComponents(),
+                               intervalEnd: end.fixedDateComponents(),
+                               repeats: false)
     }
 }

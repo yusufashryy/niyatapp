@@ -375,6 +375,7 @@ private struct DayCell: View {
                 }
                 Text("\(calendar.component(.day, from: day))")
                     .font(.caption.weight(isToday ? .heavy : .semibold).monospacedDigit())
+                    .fitText()
                     .foregroundStyle(complete ? .black : (isFuture ? .secondary : .primary))
             }
             .frame(width: 34, height: 34)

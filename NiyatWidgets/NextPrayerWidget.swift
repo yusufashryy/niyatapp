@@ -4,8 +4,9 @@ import WidgetKit
 /// Small Home Screen widget + all three Lock Screen styles.
 struct NextPrayerWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "NextPrayerWidget", provider: PrayerProvider()) { entry in
-            NextPrayerView(entry: entry)
+        AppIntentConfiguration(kind: "NextPrayerWidget", intent: WidgetStyleIntent.self,
+                                       provider: StyledProvider(base: PrayerProvider())) { entry in
+            NextPrayerView(entry: entry.base).widgetStyle(entry.style)
         }
         .configurationDisplayName("Next Prayer")
         .description("The next prayer and a countdown to it.")
@@ -31,7 +32,7 @@ struct NextPrayerView: View {
             }
         }
         .fontDesign(.rounded)
-        .containerBackground(for: .widget) {
+        .widgetBackground {
             if family == .systemSmall {
                 if let next = entry.next {
                     PrayerSky(prayer: next.name)
@@ -55,18 +56,20 @@ struct NextPrayerView: View {
                 .font(.system(size: 30, weight: .bold, design: .rounded))
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
+                .widgetAccentable()
             Text(next.date, style: .relative)
+                .fitText()
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.85))
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             if let name = entry.locationName {
                 Text(name)
                     .font(.system(size: 10, weight: .medium, design: .rounded))
                     .lineLimit(1)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(.secondary)
             }
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(.primary)
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -92,8 +95,10 @@ struct NextPrayerView: View {
                 .font(.headline)
                 .widgetAccentable()
             Text(next.date.shortTime)
+                .fitText()
                 .font(.body.weight(.semibold))
             Text(next.date, style: .relative)
+                .fitText()
                 .font(.caption)
                 .multilineTextAlignment(.center)
         }
@@ -108,5 +113,5 @@ struct NextPrayerView: View {
 #Preview(as: .systemSmall) {
     NextPrayerWidget()
 } timeline: {
-    PrayerEntry.preview
+    StyledEntry(base: PrayerEntry.preview, style: .theme)
 }

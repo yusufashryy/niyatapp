@@ -182,6 +182,7 @@ struct SupportView: View {
                             Spacer()
                             Text(product.displayPrice)
                                 .font(.headline.monospacedDigit())
+                                .badgeText()
                                 .foregroundStyle(.black)
                                 .padding(.horizontal, 14).padding(.vertical, 8)
                                 .background(Palette.accent, in: .capsule)
