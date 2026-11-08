@@ -467,74 +467,88 @@ private struct VerseCard: View {
     let onTafsir: (() -> Void)?
     let onToggleSaved: () -> Void
 
+    /// The ribbon's width plus a little room either side.
+    private static let ribbonGap: CGFloat = 24
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        if showsPlay {
+            Button(action: onPlay) {
+                Image(systemName: isReciting ? "speaker.wave.2.fill" : "speaker.wave.2")
+                    .font(.subheadline)
+                    .foregroundStyle(isReciting ? Palette.accent : Color.secondary)
+                    .frame(minWidth: 26, maxWidth: 30, minHeight: 32)
+            }
+            .buttonStyle(.pressable)
+            .accessibilityLabel("Play verse \(verse.number)")
+        }
+        if let onTafsir {
+            Button(action: onTafsir) {
+                Image(systemName: "text.book.closed")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.secondary)
+                    .frame(minWidth: 26, maxWidth: 30, minHeight: 32)
+            }
+            .buttonStyle(.pressable)
+            .accessibilityLabel("Tafsir of verse \(verse.number)")
+        }
+        // One tap puts your ribbon here (it stays until you read on past it).
+        Button(action: onPlaceRibbon) {
+            Image(systemName: hasRibbon ? "bookmark.fill" : "bookmark")
+                .font(.subheadline)
+                .foregroundStyle(hasRibbon ? Color(QuranTextStyle.ribbonRed) : Color.secondary)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(minWidth: 26, maxWidth: 30, minHeight: 32)
+        }
+        .buttonStyle(.pressable)
+        .haptic(.impact(weight: .light), trigger: hasRibbon)
+        .accessibilityLabel(hasRibbon ? "Remove the ribbon" : "Move the ribbon here")
+        Button(action: onToggleSaved) {
+            Image(systemName: isSaved ? "star.fill" : "star")
+                .font(.subheadline)
+                .foregroundStyle(isSaved ? Palette.highlight : Color.secondary)
+                .contentTransition(.symbolEffect(.replace))
+                .symbolEffect(.bounce, value: isSaved)
+                .frame(minWidth: 26, maxWidth: 30, minHeight: 32)
+        }
+        .buttonStyle(.pressable)
+        .haptic(.impact(weight: .medium), trigger: isSaved)
+        .accessibilityLabel(isSaved ? "Remove from saved verses" : "Save verse")
+        Button(action: onShare) {
+            Image(systemName: "square.and.arrow.up")
+                .font(.subheadline)
+                .foregroundStyle(Color.secondary)
+                .frame(minWidth: 26, maxWidth: 30, minHeight: 32)
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel("Share verse \(verse.number)")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // Header row: verse number and small controls, kept apart from the text.
-            HStack(spacing: 4) {
-                Text("\(verse.surah):\(verse.number)")
-                    .font(.caption.weight(.bold).monospacedDigit())
-                    .badgeText()
-                    .foregroundStyle(Palette.accent)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(Palette.accent.opacity(0.14), in: .capsule)
-                if isReciting {
-                    Image(systemName: "waveform")
+            // Top row in two halves around a gap in the middle, where the
+            // ribbon hangs: the verse number on the left, the buttons on the
+            // right. The buttons can't spill past the middle onto the ribbon.
+            HStack(spacing: 0) {
+                HStack(spacing: 4) {
+                    Text("\(verse.surah):\(verse.number)")
+                        .font(.caption.weight(.bold).monospacedDigit())
+                        .badgeText()
                         .foregroundStyle(Palette.accent)
-                        .symbolEffect(.variableColor.iterative, options: .repeating)
-                        .transition(.scale.combined(with: .opacity))
-                        .padding(.leading, 6)
-                }
-                Spacer()
-                if showsPlay {
-                    Button(action: onPlay) {
-                        Image(systemName: isReciting ? "speaker.wave.2.fill" : "speaker.wave.2")
-                            .font(.subheadline)
-                            .foregroundStyle(isReciting ? Palette.accent : Color.secondary)
-                            .frame(width: 32, height: 32)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Palette.accent.opacity(0.14), in: .capsule)
+                    if isReciting {
+                        Image(systemName: "waveform")
+                            .foregroundStyle(Palette.accent)
+                            .symbolEffect(.variableColor.iterative, options: .repeating)
+                            .transition(.scale.combined(with: .opacity))
+                            .padding(.leading, 6)
                     }
-                    .buttonStyle(.pressable)
-                    .accessibilityLabel("Play verse \(verse.number)")
                 }
-                if let onTafsir {
-                    Button(action: onTafsir) {
-                        Image(systemName: "text.book.closed")
-                            .font(.subheadline)
-                            .foregroundStyle(Color.secondary)
-                            .frame(width: 32, height: 32)
-                    }
-                    .buttonStyle(.pressable)
-                    .accessibilityLabel("Tafsir of verse \(verse.number)")
-                }
-                // One tap puts your ribbon here (it stays until you read on past it).
-                Button(action: onPlaceRibbon) {
-                    Image(systemName: hasRibbon ? "bookmark.fill" : "bookmark")
-                        .font(.subheadline)
-                        .foregroundStyle(hasRibbon ? Color(QuranTextStyle.ribbonRed) : Color.secondary)
-                        .contentTransition(.symbolEffect(.replace))
-                        .frame(width: 32, height: 32)
-                }
-                .buttonStyle(.pressable)
-                .haptic(.impact(weight: .light), trigger: hasRibbon)
-                .accessibilityLabel(hasRibbon ? "Remove the ribbon" : "Move the ribbon here")
-                Button(action: onToggleSaved) {
-                    Image(systemName: isSaved ? "star.fill" : "star")
-                        .font(.subheadline)
-                        .foregroundStyle(isSaved ? Palette.highlight : Color.secondary)
-                        .contentTransition(.symbolEffect(.replace))
-                        .symbolEffect(.bounce, value: isSaved)
-                        .frame(width: 32, height: 32)
-                }
-                .buttonStyle(.pressable)
-                .haptic(.impact(weight: .medium), trigger: isSaved)
-                .accessibilityLabel(isSaved ? "Remove from saved verses" : "Save verse")
-                Button(action: onShare) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.secondary)
-                        .frame(width: 32, height: 32)
-                }
-                .buttonStyle(.pressable)
-                .accessibilityLabel("Share verse \(verse.number)")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Color.clear.frame(width: Self.ribbonGap, height: 1)
+                HStack(spacing: 2) { actionButtons }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
             QuranTextView(pieces: [QuranTextPiece(verse: words)], style: style)
@@ -558,8 +572,7 @@ private struct VerseCard: View {
             RoundedRectangle(cornerRadius: 22).fill(Color(QuranTextStyle.ribbonRed).opacity(hasRibbon ? 0.12 : 0))
         }
         .shadow(color: Palette.accent.opacity(isReciting ? 0.35 : 0), radius: 12)
-        // The ribbon hangs from the top of the verse it marks, between the
-        // verse number and the buttons.
+        // The ribbon hangs from the middle of the top of the verse it marks.
         .overlay(alignment: .top) {
             if hasRibbon {
                 RibbonMark(color: Color(QuranTextStyle.ribbonRed), starColor: .white)
