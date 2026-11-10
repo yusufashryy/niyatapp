@@ -244,7 +244,7 @@ struct TopicGrid: View {
                             Text(topic.title)
                                 .font(.body.weight(.semibold))
                                 .multilineTextAlignment(.leading)
-                            Text("\(index.hadiths(in: topic).count.formatted()) hadiths")
+                            Text("\(index.count(in: topic).formatted()) hadiths")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -276,7 +276,7 @@ struct TopicList: View {
                     HStack {
                         Text(topic.title).font(.body).multilineTextAlignment(.leading)
                         Spacer()
-                        Text("\(index.hadiths(in: topic).count)")
+                        Text("\(index.count(in: topic))")
                             .font(.footnote.monospacedDigit())
                             .foregroundStyle(.secondary)
                         Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)

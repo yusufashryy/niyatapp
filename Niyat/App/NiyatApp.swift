@@ -98,6 +98,7 @@ struct MainTabView: View {
     @State private var prompter = ReviewPrompter.shared
     @State private var showFeedback = false
     @Environment(\.requestReview) private var requestReview
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         // On iOS 26+ the tab bar is Liquid Glass and shrinks while scrolling.
@@ -116,8 +117,15 @@ struct MainTabView: View {
         }
         // iPad: tabs at the top that can open into a sidebar.
         .tabViewStyle(.sidebarAdaptable)
-        // Read the hadiths in the background so the Hadith tab opens at once.
-        .task { await HadithLibrary.shared.load() }
+        // Read the hadiths in the background so the Hadith tab opens at once,
+        // a moment after launch so it doesn't compete with the first screen.
+        .task {
+            try? await Task.sleep(for: .seconds(2))
+            await HadithLibrary.shared.load()
+            // The whole athan's parts aren't in backups: make them again if
+            // they're missing (a restored iPhone), then use them in the alerts.
+            if await FullAthanStore.shared.prepareMissing(for: SettingsStore.athan) { model.refresh() }
+        }
         .tabBarMinimizeBehavior(.onScrollDown)
         .haptic(.selection, trigger: selection)
         .onChange(of: deepLink.pending, initial: true) { _, destination in

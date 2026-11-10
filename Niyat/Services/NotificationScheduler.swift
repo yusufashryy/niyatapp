@@ -40,8 +40,11 @@ enum NotificationScheduler {
         let log = UNNotificationAction(identifier: Action.logPrayer, title: "Log Prayer",
                                        options: [], icon: UNNotificationActionIcon(systemImageName: "checkmark.circle"))
         UNUserNotificationCenter.current().setNotificationCategories([
-            UNNotificationCategory(identifier: Category.loggablePrayer, actions: [log], intentIdentifiers: []),
-            UNNotificationCategory(identifier: Category.prayer, actions: [], intentIdentifiers: []),
+            // Dismissing a prayer alert is reported, to stop the rest of a whole athan.
+            UNNotificationCategory(identifier: Category.loggablePrayer, actions: [log], intentIdentifiers: [],
+                                   options: [.customDismissAction]),
+            UNNotificationCategory(identifier: Category.prayer, actions: [], intentIdentifiers: [],
+                                   options: [.customDismissAction]),
             UNNotificationCategory(identifier: Category.quranReminder, actions: [], intentIdentifiers: []),
         ])
     }
@@ -100,10 +103,24 @@ enum NotificationScheduler {
             let plan = PrayerAlertPlan.alerts(for: upcoming, settings: notificationSettings,
                                               dayKey: { PrayerLog.dayKey(for: calendar.startOfDay(for: $0)) },
                                               logged: Set(PrayerLog.load().keys), now: now, limit: maxPending)
+            // The whole athan from the alert, for the next few prayers (each
+            // takes several of the 64 alerts iOS allows).
+            var fullAthans = 0
             for alert in plan {
+                let muezzin = athan.muezzin(for: alert.prayer, timing: alert.timing)
+                var parts: [TimeInterval]?
+                if athan.fullAthanFromAlert, let muezzin, fullAthans < AthanSegments.prayersAhead {
+                    parts = FullAthanStore.parts(for: muezzin)
+                    if parts != nil { fullAthans += 1 }
+                }
                 candidates.append((alert.date, prayerRequest(for: alert.time, timing: alert.timing, dayKey: alert.dayKey,
-                                                             location: location,
-                                                             muezzin: athan.muezzin(for: alert.prayer, timing: alert.timing))))
+                                                             location: location, muezzin: muezzin, fullAthan: parts != nil)))
+                if let muezzin, let parts {
+                    for part in AthanSegments.followUps(start: alert.date, parts: parts) {
+                        candidates.append((part.date, athanPartRequest(muezzin: muezzin, part: part.index, date: part.date,
+                                                                       prayer: alert.prayer, dayKey: alert.dayKey)))
+                    }
+                }
             }
         }
 
@@ -111,8 +128,10 @@ enum NotificationScheduler {
             candidates += quranReminderRequests(settings: quranReminders, now: now)
         }
 
-        if let index = HadithIndex.bundled {
-            for (index, item) in HadithReminders.plan(settings: HadithReminderSettings.saved, index: index, now: now).enumerated() {
+        // The hadiths are only read (off the main thread, once) if the daily hadith is on.
+        let hadithSettings = HadithReminderSettings.saved
+        if hadithSettings.isEnabled, let index = await HadithLibrary.shared.load() {
+            for (index, item) in HadithReminders.plan(settings: hadithSettings, index: index, now: now).enumerated() {
                 candidates.append((item.date, UNNotificationRequest(identifier: "hadith.\(index)",
                                                                    content: HadithReminders.content(for: item.hadith),
                                                                    trigger: trigger(at: item.date))))
@@ -149,8 +168,40 @@ enum NotificationScheduler {
         UNCalendarNotificationTrigger(dateMatching: date.fixedDateComponents(), repeats: false)
     }
 
+    /// A later part of the whole athan: sound only, so it continues the
+    /// alert without another banner.
+    private static func athanPartRequest(muezzin: Muezzin, part: Int, date: Date,
+                                         prayer: PrayerName, dayKey: String) -> UNNotificationRequest {
+        let content = UNMutableNotificationContent()
+        content.sound = UNNotificationSound(named: UNNotificationSoundName(AthanSegments.fileName(muezzin, part: part)))
+        content.interruptionLevel = .timeSensitive
+        content.threadIdentifier = "prayer.\(dayKey)"
+        content.userInfo = [UserInfoKey.kind: "athanPart", UserInfoKey.prayer: prayer.rawValue, UserInfoKey.dayKey: dayKey]
+        // To the second, so the parts follow one another without a gap, and in
+        // a fixed time zone, so they stay with the alert when you travel.
+        return UNNotificationRequest(identifier: AthanSegments.followUpIdentifier(prayer: prayer, dayKey: dayKey, part: part),
+                                     content: content,
+                                     trigger: trigger(at: date))
+    }
+
+    /// Stops the rest of a whole athan: the alert was opened, dismissed or
+    /// answered, or Niyat is playing the athan itself.
+    static func cancelAthanParts(prayer: PrayerName, dayKey: String) {
+        // Every part of this prayer's athan, however many it was cut into.
+        let prefix = AthanSegments.followUpPrefix(prayer: prayer, dayKey: dayKey)
+        let center = UNUserNotificationCenter.current()
+        center.getPendingNotificationRequests { pending in
+            let identifiers = pending.map(\.identifier).filter { $0.hasPrefix(prefix) }
+            center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        }
+        center.getDeliveredNotifications { delivered in
+            let identifiers = delivered.map(\.request.identifier).filter { $0.hasPrefix(prefix) }
+            center.removeDeliveredNotifications(withIdentifiers: identifiers)
+        }
+    }
+
     private static func prayerRequest(for time: PrayerTime, timing: AlertTiming, dayKey: String,
-                                      location: SavedLocation, muezzin: Muezzin?) -> UNNotificationRequest {
+                                      location: SavedLocation, muezzin: Muezzin?, fullAthan: Bool = false) -> UNNotificationRequest {
         let content = UNMutableNotificationContent()
         let name = time.name.displayName(on: time.date)
         switch (time.name, timing) {
@@ -168,7 +219,11 @@ enum NotificationScheduler {
             content.title = "Have you prayed \(name)?"
             content.body = "\(name) began 30 minutes ago. Tap Log Prayer once you've prayed."
         }
-        content.sound = sound(for: muezzin)
+        if fullAthan, let muezzin {
+            content.sound = UNNotificationSound(named: UNNotificationSoundName(AthanSegments.fileName(muezzin, part: 0)))
+        } else {
+            content.sound = sound(for: muezzin)
+        }
         content.threadIdentifier = "prayer.\(dayKey)"
         content.userInfo = [UserInfoKey.prayer: time.name.rawValue, UserInfoKey.dayKey: dayKey, UserInfoKey.kind: "prayer"]
         if let muezzin { content.userInfo[UserInfoKey.athan] = muezzin.rawValue }
@@ -382,10 +437,20 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         let athan = Self.fullAthan(for: notification)
+        let info = notification.request.content.userInfo
+        let isAthanPart = info[NotificationScheduler.UserInfoKey.kind] as? String == "athanPart"
+        let prayer = (info[NotificationScheduler.UserInfoKey.prayer] as? String).flatMap(PrayerName.init(rawValue:))
+        let dayKey = info[NotificationScheduler.UserInfoKey.dayKey] as? String
         DispatchQueue.main.async {
-            if let athan {
+            if isAthanPart {
+                // A later part of the whole athan: heard, never shown; silent
+                // if Niyat is already playing the athan itself.
+                let playing = MainActor.assumeIsolated { AthanPlayer.shared.playing != nil }
+                completionHandler(playing ? [] : [.sound])
+            } else if let athan {
                 // The full athan instead of its opening, so they don't play over each other.
                 MainActor.assumeIsolated { AthanPlayer.shared.play(athan) }
+                if let prayer, let dayKey { NotificationScheduler.cancelAthanParts(prayer: prayer, dayKey: dayKey) }
                 completionHandler([.banner, .list])
             } else {
                 completionHandler([.banner, .list, .sound])
@@ -415,6 +480,11 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
 
         DispatchQueue.main.async {
             defer { completionHandler() }
+            // Opened, dismissed or answered: the rest of a whole athan stops.
+            if kind == "prayer" || kind == "athanPart", let prayer, let dayKey {
+                NotificationScheduler.cancelAthanParts(prayer: prayer, dayKey: dayKey)
+            }
+            if action == UNNotificationDismissActionIdentifier { return }
             if action == NotificationScheduler.Action.logPrayer, let prayer, let dayKey {
                 // logIfNeeded won't overwrite an existing log, so tapping twice (or
                 // on both the adhan and the follow-up alert) never double-counts.

@@ -92,7 +92,11 @@ final class QuranStore {
 
     func verses(for surah: Int) -> [Verse] { versesBySurah[surah] ?? [] }
 
-    func surah(_ id: Int) -> Surah? { surahs.first { $0.id == id } }
+    /// Surahs are stored in order, so number N is at N - 1 (checked, in case a file ever isn't).
+    func surah(_ id: Int) -> Surah? {
+        if surahs.indices.contains(id - 1), surahs[id - 1].id == id { return surahs[id - 1] }
+        return surahs.first { $0.id == id }
+    }
 
     /// Verse count in the selected reading (differs from Hafs for Warsh/Qalun).
     func verseCount(for surah: Int) -> Int { versesBySurah[surah]?.count ?? self.surah(surah)?.totalVerses ?? 0 }

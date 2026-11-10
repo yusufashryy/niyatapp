@@ -41,6 +41,12 @@ struct DailyReaderView: View {
                     VStack(spacing: 22) {
                         goalBar(verse)
                         ayahCard(verse)
+                            // Swipe the ayah sideways to move, like turning a page.
+                            .simultaneousGesture(DragGesture(minimumDistance: 30).onEnded { drag in
+                                guard abs(drag.translation.width) > abs(drag.translation.height) * 1.5,
+                                      abs(drag.translation.width) > 60 else { return }
+                                move(forwards: drag.translation.width < 0)
+                            })
                             .id(place)
                             .transition(.push(from: forwards ? .trailing : .leading))
                     }
@@ -82,6 +88,7 @@ struct DailyReaderView: View {
         .task {
             await store.load()
             guard !started else { return }
+            verseCounts = (1...114).map { store.verseCount(for: $0) }
             started = true
             let ribbon = store.ribbon.map { DailyPlace(surah: $0.surah, verse: $0.verse) }
             place = DailyReading.start(saved: savedPlace, ribbon: ribbon, verseCounts: verseCounts)
@@ -105,7 +112,8 @@ struct DailyReaderView: View {
 
     // MARK: Data
 
-    private var verseCounts: [Int] { (1...114).map { store.verseCount(for: $0) } }
+    /// Ayat per surah in the shown reading, worked out once the text is loaded.
+    @State private var verseCounts: [Int] = Array(repeating: 0, count: 114)
 
     private var verse: Verse? {
         let verses = store.verses(for: place.surah)
@@ -197,7 +205,10 @@ struct DailyReaderView: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                         HStack(spacing: 5) {
-                            Text("\(place.verse)/\(count)")
+                            // The ayah number is in the dock below; here, the surah's name in Arabic.
+                            Text(store.surah(place.surah)?.name ?? "")
+                                .font(.calligraphy(size: 17))
+                                .foregroundStyle(Palette.highlight.opacity(0.85))
                             if counted {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(Palette.highlight)
@@ -296,32 +307,60 @@ struct DailyReaderView: View {
         .accessibilityLabel(label)
     }
 
+    /// A small centred dock: back, where you are, forward.
     private var controls: some View {
-        HStack(spacing: 12) {
+        let canGoBack = DailyReading.previous(before: place, verseCounts: verseCounts) != nil
+        let canGoOn = DailyReading.next(after: place, verseCounts: verseCounts) != nil
+        return HStack(spacing: 0) {
             Button { move(forwards: false) } label: {
-                Image(systemName: "chevron.left").font(.headline).frame(width: 52, height: 52)
+                Image(systemName: "chevron.left")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.white.opacity(canGoBack ? 0.9 : 0.25))
+                    .frame(width: 52, height: 52)
+                    .contentShape(.circle)
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .disabled(DailyReading.previous(before: place, verseCounts: verseCounts) == nil)
+            .buttonStyle(.plain)
+            .disabled(!canGoBack)
             .accessibilityLabel("Previous ayah")
 
-            Button { move(forwards: true) } label: {
-                HStack(spacing: 6) {
-                    Text("Next")
-                    Image(systemName: "chevron.right")
+            // Where you are: the ayah's number in a star, like the mushaf's ayah marks.
+            HStack(spacing: 10) {
+                ZStack {
+                    EightPointStar()
+                        .stroke(Palette.highlight.opacity(0.8), lineWidth: 1.2)
+                    Text("\(place.verse)")
+                        .font(.system(size: place.verse > 99 ? 11 : 13, weight: .bold).monospacedDigit())
+                        .foregroundStyle(Palette.highlight)
+                        .contentTransition(.numericText(value: Double(place.verse)))
                 }
-                .font(.headline)
-                .frame(maxWidth: .infinity, minHeight: 52)
+                .frame(width: 34, height: 34)
+                Text("of \(verseCounts[place.surah - 1])")
+                    .font(.footnote.weight(.medium).monospacedDigit())
+                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.glassProminent)
-            .tint(Palette.control)
-            .disabled(DailyReading.next(after: place, verseCounts: verseCounts) == nil)
+            .frame(minWidth: 110)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Ayah \(place.verse) of \(verseCounts[place.surah - 1])")
+
+            Button { move(forwards: true) } label: {
+                Image(systemName: "chevron.right")
+                    .font(.body.weight(.bold))
+                    .foregroundStyle(.black)
+                    .frame(width: 44, height: 44)
+                    .background(Palette.control.gradient, in: .circle)
+                    .opacity(canGoOn ? 1 : 0.35)
+                    .frame(width: 52, height: 52)
+                    .contentShape(.circle)
+            }
+            .buttonStyle(.pressable)
+            .disabled(!canGoOn)
             .accessibilityLabel("Next ayah")
         }
-        .padding(.horizontal, 16)
+        .padding(4)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .frame(maxWidth: .infinity)
         .padding(.bottom, 8)
-        .readableWidth(720)
+        .animation(.smooth, value: place)
         .haptic(.selection, trigger: place)
     }
 

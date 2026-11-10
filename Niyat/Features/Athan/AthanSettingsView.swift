@@ -6,6 +6,7 @@ struct AthanSettingsView: View {
     @Environment(AppModel.self) private var model
     @State private var settings = SettingsStore.athan
     @State private var player = AthanPlayer.shared
+    @State private var fullAthans = FullAthanStore.shared
 
     var body: some View {
         Form {
@@ -15,7 +16,7 @@ struct AthanSettingsView: View {
             } header: {
                 Text("When a prayer begins")
             } footer: {
-                Text("The alert plays the opening of the athan (iOS lets an alert sound last up to 30 seconds). Tap ▶ to hear it. The reminders before and after a prayer keep the standard sound.")
+                Text("The alert plays the opening of the athan (iOS lets an alert sound last up to 30 seconds; see below for the whole athan). Tap ▶ to hear it. The reminders before and after a prayer keep the standard sound.")
             }
 
             Section {
@@ -34,6 +35,35 @@ struct AthanSettingsView: View {
             }
 
             Section {
+                Toggle("Whole athan from the alert", isOn: $settings.fullAthanFromAlert)
+                if settings.fullAthanFromAlert {
+                    ForEach(chosenMuezzins) { muezzin in
+                        HStack {
+                            Text(title(muezzin)).font(.footnote)
+                            Spacer()
+                            switch fullAthans.state(muezzin) {
+                            case .ready:
+                                Label("Ready", systemImage: "checkmark.circle.fill")
+                                    .font(.footnote).foregroundStyle(Palette.control)
+                            case .preparing, .missing:
+                                ProgressView()
+                            case .failed:
+                                Button("Try again") { prepareFullAthans() }.font(.footnote)
+                            }
+                        }
+                    }
+                    if chosenMuezzins.contains(where: { if case .failed = fullAthans.state($0) { true } else { false } }) {
+                        Text("Couldn't download the athan. Check your internet and try again.")
+                            .font(.footnote).foregroundStyle(.orange)
+                    }
+                }
+            } header: {
+                Text("Without opening Niyat")
+            } footer: {
+                Text("iOS cuts every alert sound at 30 seconds. With this on, Niyat downloads the athan once, cuts it at the muezzin's pauses, and sends the parts one after another, so the whole athan plays from the alert. Swipe the alert away, open it or log the prayer to stop it. It covers the next \(AthanSegments.prayersAhead) prayers at a time (each uses several of the alerts iOS allows), so open Niyat once a day to keep it going. There may be a brief gap between parts.")
+            }
+
+            Section {
                 Text("Recordings from Aladhan.com (Islamic Network).")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -48,7 +78,21 @@ struct AthanSettingsView: View {
             SettingsStore.athan = new
             model.settingsChanged()
         }
+        .onChange(of: [settings.fullAthanFromAlert ? "on" : "off"] + chosenMuezzins.map(\.rawValue), initial: true) { _, _ in
+            prepareFullAthans()
+        }
         .onDisappear { if player.isPreview { player.stop() } }
+    }
+
+    /// The athans in use: the main one and Fajr's, if it has its own.
+    private var chosenMuezzins: [Muezzin] { FullAthanStore.muezzins(in: settings) }
+
+    /// Downloads and cuts the chosen athans, then schedules the alerts again so they use them.
+    private func prepareFullAthans() {
+        let current = settings
+        Task {
+            if await fullAthans.prepareMissing(for: current) { model.refresh() }
+        }
     }
 
     /// A choice of athan (nil: the standard alert sound), with a preview button.

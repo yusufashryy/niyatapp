@@ -258,11 +258,16 @@ private struct WeekBars: View {
         let isToday: Bool
     }
 
+    private static let dayLetter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEEE"
+        return formatter
+    }()
+
     private var days: [Day] {
         let all = QuranProgress.allDays()
         let calendar = Calendar.current
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEEEE"
+        let formatter = Self.dayLetter
         return (0..<7).reversed().compactMap { offset in
             guard let date = calendar.date(byAdding: .day, value: -offset, to: .now) else { return nil }
             let entry = all[QuranProgress.dayKey(for: date)]

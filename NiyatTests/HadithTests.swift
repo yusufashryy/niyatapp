@@ -148,6 +148,29 @@ final class HadithReminderTests: XCTestCase {
         XCTAssertTrue(calendar.isDate(plan[0].date, inSameDayAs: earlyMorning))
     }
 
+    func testSameClockTimeOnTheDayTheClocksChange() {
+        var settings = HadithReminderSettings()
+        settings.isEnabled = true
+        settings.minute = 12 * 60 + 30
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Chicago")!
+        // 8 March 2026: US clocks go forward at 2 am. 1 November 2026: back at 2 am.
+        for (year, month, day) in [(2026, 3, 8), (2026, 11, 1)] {
+            let morning = calendar.date(from: DateComponents(year: year, month: month, day: day, hour: 0, minute: 30))!
+            let plan = HadithReminders.plan(settings: settings, index: index, now: morning, calendar: calendar)
+            XCTAssertEqual(calendar.component(.hour, from: plan[0].date), 12, "\(month)/\(day)")
+            XCTAssertEqual(calendar.component(.minute, from: plan[0].date), 30, "\(month)/\(day)")
+            XCTAssertTrue(calendar.isDate(plan[0].date, inSameDayAs: morning))
+        }
+    }
+
+    func testMinuteOfAClockTime() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Chicago")!
+        let date = calendar.date(from: DateComponents(year: 2026, month: 3, day: 8, hour: 18, minute: 45))!
+        XCTAssertEqual(HadithReminderSettings.minute(of: date, calendar: calendar), 18 * 60 + 45)
+    }
+
     func testTodayIsSkippedOnceItsTimeHasPassed() {
         var settings = HadithReminderSettings()
         settings.isEnabled = true
@@ -181,5 +204,20 @@ private enum HadithFixtureFile {
         }.joined(separator: ",")
         let json = "{\"version\":\"v\",\"topics\":[[1,0,\"Topic\",1]],\"hadiths\":[\(hadiths)]}"
         return try! JSONDecoder().decode(HadithFile.self, from: Data(json.utf8))
+    }
+}
+
+final class HadithLibraryRulesTests: XCTestCase {
+    func testSavingPutsTheNewestFirstAndTogglesOff() {
+        XCTAssertEqual(SavedHadiths.toggled(3, in: [1, 2]), [3, 1, 2])
+        XCTAssertEqual(SavedHadiths.toggled(1, in: [3, 1, 2]), [3, 2])
+    }
+
+    func testTopicCountMatchesItsHadiths() throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "hadith-en", withExtension: "hadith"))
+        let index = HadithIndex(try HadithFile.decode(compressed: Data(contentsOf: url)))
+        for topic in index.rootTopics + index.rootTopics.flatMap(index.subtopics) {
+            XCTAssertEqual(index.count(in: topic), index.hadiths(in: topic).count, topic.title)
+        }
     }
 }

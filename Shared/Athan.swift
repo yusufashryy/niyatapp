@@ -75,6 +75,9 @@ struct AthanSettings: Codable, Equatable {
     var fajrMuezzin: Muezzin?
     /// Opening the alert, or having Niyat open when it comes, plays the whole athan.
     var playsFullAthan = true
+    /// The alert itself plays the whole athan, in parts sent back to back
+    /// (see `AthanSegments`), without opening Niyat.
+    var fullAthanFromAlert = false
 
     init() {}
 
@@ -94,6 +97,7 @@ struct AthanSettings: Codable, Equatable {
         muezzin = c.contains(.muezzin) ? try c.decodeIfPresent(Muezzin.self, forKey: .muezzin) : defaults.muezzin
         fajrMuezzin = (try? c.decodeIfPresent(Muezzin.self, forKey: .fajrMuezzin)) ?? nil
         playsFullAthan = (try? c.decodeIfPresent(Bool.self, forKey: .playsFullAthan)) ?? defaults.playsFullAthan
+        fullAthanFromAlert = (try? c.decodeIfPresent(Bool.self, forKey: .fullAthanFromAlert)) ?? defaults.fullAthanFromAlert
     }
 
     /// Writes "no athan" as an explicit null, so it isn't read back as the default.
@@ -102,7 +106,8 @@ struct AthanSettings: Codable, Equatable {
         try c.encode(muezzin, forKey: .muezzin)
         try c.encode(fajrMuezzin, forKey: .fajrMuezzin)
         try c.encode(playsFullAthan, forKey: .playsFullAthan)
+        try c.encode(fullAthanFromAlert, forKey: .fullAthanFromAlert)
     }
 
-    private enum CodingKeys: String, CodingKey { case muezzin, fajrMuezzin, playsFullAthan }
+    private enum CodingKeys: String, CodingKey { case muezzin, fajrMuezzin, playsFullAthan, fullAthanFromAlert }
 }

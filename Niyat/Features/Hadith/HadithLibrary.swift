@@ -109,6 +109,8 @@ struct HadithScenario: Identifiable, Hashable {
 struct HadithIndex {
     let file: HadithFile
     private let topicsByID: [Int: HadithTopic]
+    /// Hadiths under each topic, counting the topics below it.
+    private let countsByTopic: [Int: Int]
     /// Searchable text of each hadith, folded, by field weight.
     private let fields: [[(text: String, weight: Int)]]
 
@@ -116,6 +118,20 @@ struct HadithIndex {
         self.file = file
         let topics = Dictionary(uniqueKeysWithValues: file.topics.map { ($0.id, $0) })
         topicsByID = topics
+        // Each hadith counts once for every topic above the ones it's filed under.
+        var counts: [Int: Int] = [:]
+        for hadith in file.hadiths {
+            var seen: Set<Int> = []
+            for filed in hadith.topics {
+                var id = filed
+                while id != 0, !seen.contains(id), let topic = topics[id] {
+                    seen.insert(id)
+                    id = topic.parent
+                }
+            }
+            for id in seen { counts[id, default: 0] += 1 }
+        }
+        countsByTopic = counts
         fields = file.hadiths.map { hadith in
             let topicTitles = hadith.topics.compactMap { topics[$0]?.title }.joined(separator: " ")
             return [(Self.fold(hadith.title), 5), (Self.fold(topicTitles), 4),
@@ -132,6 +148,9 @@ struct HadithIndex {
     func subtopics(of topic: HadithTopic) -> [HadithTopic] { file.topics.filter { $0.parent == topic.id } }
 
     func topic(_ id: Int) -> HadithTopic? { topicsByID[id] }
+
+    /// How many hadiths are under the topic or any topic below it (worked out once).
+    func count(in topic: HadithTopic) -> Int { countsByTopic[topic.id] ?? 0 }
 
     /// Hadiths filed under the topic or any topic below it.
     func hadiths(in topic: HadithTopic) -> [Hadith] {
@@ -234,7 +253,7 @@ final class HadithLibrary {
             loadError = LoadError.missing.localizedDescription
             return nil
         }
-        let task = loading ?? Task.detached(priority: .userInitiated) {
+        let task = loading ?? Task.detached(priority: .utility) {
             HadithIndex(try HadithFile.decode(compressed: try Data(contentsOf: url)))
         }
         loading = task
@@ -248,5 +267,37 @@ final class HadithLibrary {
             loadError = "Couldn't open the hadiths. Please try again."
             return nil
         }
+    }
+}
+
+/// Hadiths you've saved to come back to, kept on this iPhone.
+@MainActor @Observable
+final class SavedHadiths {
+    static let shared = SavedHadiths()
+    private static let key = "hadith.saved"
+
+    /// Newest first.
+    private(set) var ids: [Int]
+
+    private init() {
+        ids = UserDefaults.standard.array(forKey: Self.key) as? [Int] ?? []
+    }
+
+    func contains(_ hadith: Hadith) -> Bool { ids.contains(hadith.id) }
+
+    func toggle(_ hadith: Hadith) {
+        ids = Self.toggled(hadith.id, in: ids)
+        UserDefaults.standard.set(ids, forKey: Self.key)
+    }
+
+    /// Adds the id at the front, or removes it if it's there. Pure, so it's tested.
+    nonisolated static func toggled(_ id: Int, in ids: [Int]) -> [Int] {
+        ids.contains(id) ? ids.filter { $0 != id } : [id] + ids
+    }
+
+    /// The saved hadiths that are still in the library, newest first.
+    func hadiths(in index: HadithIndex) -> [Hadith] {
+        let byID = Dictionary(uniqueKeysWithValues: index.hadiths.map { ($0.id, $0) })
+        return ids.compactMap { byID[$0] }
     }
 }

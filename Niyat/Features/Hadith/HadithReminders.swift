@@ -21,20 +21,31 @@ struct HadithReminderSettings: Codable, Equatable {
 
     private static let key = "hadithReminders"
 
+    /// The reminder's clock time on a day, e.g. 12:00. Set as an hour and
+    /// minute (not minutes after midnight), so it stays put on the days the
+    /// clocks change.
+    func time(on day: Date, calendar: Calendar = .current) -> Date? {
+        calendar.date(bySettingHour: minute / 60, minute: minute % 60, second: 0, of: calendar.startOfDay(for: day))
+    }
+
+    /// The minutes after midnight shown by a clock time.
+    static func minute(of date: Date, calendar: Calendar = .current) -> Int {
+        let parts = calendar.dateComponents([.hour, .minute], from: date)
+        return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+    }
+
+    /// The setting's time as a binding for a DatePicker.
+    static func timeBinding(_ settings: Binding<HadithReminderSettings>) -> Binding<Date> {
+        Binding(
+            get: { settings.wrappedValue.time(on: .now) ?? .now },
+            set: { settings.wrappedValue.minute = minute(of: $0) }
+        )
+    }
+
     static var saved: HadithReminderSettings {
         get { AppGroup.defaults.decoded(HadithReminderSettings.self, forKey: key) ?? HadithReminderSettings() }
         set { AppGroup.defaults.setEncoded(newValue, forKey: key) }
     }
-}
-
-extension HadithIndex {
-    /// The bundled hadiths, read once, for work outside the screens (notifications).
-    static let bundled: HadithIndex? = {
-        guard let url = Bundle.main.url(forResource: "hadith-en", withExtension: "hadith"),
-              let data = try? Data(contentsOf: url),
-              let file = try? HadithFile.decode(compressed: data) else { return nil }
-        return HadithIndex(file)
-    }()
 }
 
 /// Which hadith goes out when. Pure, so it's tested.
@@ -50,7 +61,7 @@ enum HadithReminders {
         let today = calendar.startOfDay(for: now)
         return (0..<daysAhead).compactMap { offset in
             guard let day = calendar.date(byAdding: .day, value: offset, to: today),
-                  let date = calendar.date(byAdding: .minute, value: settings.minute, to: day),
+                  let date = settings.time(on: day, calendar: calendar),
                   date > now,
                   let hadith = index.hadithOfTheDay(day, calendar: calendar) else { return nil }
             return (date, hadith)
@@ -105,15 +116,7 @@ struct HadithNotificationSection: View {
         }
     }
 
-    private var time: Binding<Date> {
-        Binding(
-            get: { Calendar.current.startOfDay(for: .now).addingTimeInterval(TimeInterval(settings.minute * 60)) },
-            set: { date in
-                let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
-                settings.minute = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
-            }
-        )
-    }
+    private var time: Binding<Date> { HadithReminderSettings.timeBinding($settings) }
 }
 
 /// The same setting as a small sheet from the Hadith tab's bell: exactly as
@@ -189,13 +192,5 @@ struct HadithNotificationSheet: View {
         }
     }
 
-    private var time: Binding<Date> {
-        Binding(
-            get: { Calendar.current.startOfDay(for: .now).addingTimeInterval(TimeInterval(settings.minute * 60)) },
-            set: { date in
-                let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
-                settings.minute = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
-            }
-        )
-    }
+    private var time: Binding<Date> { HadithReminderSettings.timeBinding($settings) }
 }

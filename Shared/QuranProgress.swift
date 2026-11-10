@@ -109,9 +109,21 @@ enum QuranProgress {
         set { AppGroup.defaults.set(newValue ?? 0, forKey: goalKey) }
     }
 
+    /// Every day's record. Read many times a second while reading, so the
+    /// decoded days are kept until the saved bytes change (another process,
+    /// such as a widget or the watch sync, may write them too).
     static func allDays() -> [String: QuranDay] {
-        AppGroup.defaults.decoded([String: QuranDay].self, forKey: daysKey) ?? [:]
+        guard let data = AppGroup.defaults.data(forKey: daysKey) else { return [:] }
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        if let cache, cache.data == data { return cache.days }
+        let days = (try? JSONDecoder().decode([String: QuranDay].self, from: data)) ?? [:]
+        cache = (data, days)
+        return days
     }
+
+    private static let cacheLock = NSLock()
+    nonisolated(unsafe) private static var cache: (data: Data, days: [String: QuranDay])?
 
     /// The days and goal the Apple Watch shows, as sent from the iPhone.
     static func recent(days count: Int, asOf date: Date = .now) -> [String: QuranDay] {

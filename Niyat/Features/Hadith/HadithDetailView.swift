@@ -7,6 +7,7 @@ struct HadithDetailView: View {
     @State private var library = HadithLibrary.shared
     @State private var sharing: QuranShareContent?
     @State private var copied = false
+    @State private var saved = SavedHadiths.shared
 
     var body: some View {
         ScrollView {
@@ -50,6 +51,15 @@ struct HadithDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                let isSaved = saved.contains(hadith)
+                Button { saved.toggle(hadith) } label: {
+                    Image(systemName: isSaved ? "star.fill" : "star")
+                        .foregroundStyle(isSaved ? Palette.highlight : .white)
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .accessibilityLabel(isSaved ? "Remove from saved hadiths" : "Save the hadith")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     UIPasteboard.general.string = QuranShareContent.hadith(hadith).plainText(includingTranslation: false)
                     copied = true
@@ -65,6 +75,7 @@ struct HadithDetailView: View {
             }
         }
         .haptic(.success, trigger: copied)
+        .haptic(.selection, trigger: saved.ids.count)
         .sheet(item: $sharing) { QuranShareSheet(content: $0) }
     }
 

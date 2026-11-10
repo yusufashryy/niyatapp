@@ -9,6 +9,14 @@ struct HadithListView: View {
     /// A hadith opened from its notification.
     @State private var opened: Hadith?
     @State private var showNotifications = false
+    @State private var saved = SavedHadiths.shared
+    /// The last finished search: what was searched for and what it found.
+    @State private var search: (query: String, results: [Hadith])?
+
+    /// How long typing must pause before the hadiths are searched.
+    private static let searchPause: Duration = .milliseconds(250)
+
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces) }
 
     var body: some View {
         Group {
@@ -32,6 +40,7 @@ struct HadithListView: View {
         .navigationDestination(for: HadithTopic.self) { HadithTopicView(topic: $0) }
         .navigationDestination(for: HadithScenario.self) { HadithScenarioView(scenario: $0) }
         .navigationDestination(item: $opened) { HadithDetailView(hadith: $0) }
+        .navigationDestination(for: HadithRoute.self) { _ in SavedHadithsView() }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { showNotifications = true } label: { Image(systemName: "bell.badge") }
@@ -45,11 +54,21 @@ struct HadithListView: View {
             opened = index.hadiths.first { $0.id == id }
         }
         .task { await library.load() }
+        // Searches once typing pauses, off the main thread, so typing stays smooth.
+        .task(id: trimmedQuery) {
+            let text = trimmedQuery
+            guard !text.isEmpty else { search = nil; return }
+            try? await Task.sleep(for: Self.searchPause)
+            guard !Task.isCancelled, let index = await library.load() else { return }
+            let results = await Task.detached(priority: .userInitiated) { index.search(text) }.value
+            guard !Task.isCancelled else { return }
+            search = (text, results)
+        }
     }
 
     @ViewBuilder
     private func content(_ index: HadithIndex) -> some View {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        let trimmed = trimmedQuery
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 if trimmed.isEmpty {
@@ -63,6 +82,27 @@ struct HadithListView: View {
                     }
                     TrustStrip(count: index.hadiths.count)
                         .appearAnimation(1)
+                    if !saved.ids.isEmpty {
+                        NavigationLink(value: HadithRoute.saved) {
+                            HStack(spacing: 14) {
+                                Image(systemName: "star.fill")
+                                    .foregroundStyle(Palette.highlight)
+                                    .frame(width: 38, height: 38)
+                                    .background(Palette.highlight.opacity(0.14), in: .circle)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Saved hadiths").font(.body.weight(.semibold))
+                                    Text("\(saved.ids.count) saved").font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                            }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .surface(cornerRadius: 22)
+                        }
+                        .buttonStyle(.pressable)
+                    }
                     HadithSectionHeader(title: "Find by situation")
                     ScenarioCloud()
                         .appearAnimation(2)
@@ -71,14 +111,17 @@ struct HadithListView: View {
                         .appearAnimation(3)
                     AuthenticityNote(version: index.file.version, count: index.hadiths.count)
                         .padding(.top, 12)
-                } else {
-                    let results = index.search(trimmed)
-                    if results.isEmpty {
-                        ContentUnavailableView.search(text: trimmed)
+                } else if let search {
+                    // The last results stay up while the next search runs.
+                    if search.results.isEmpty {
+                        ContentUnavailableView.search(text: search.query)
                     } else {
-                        HadithSectionHeader(title: "Results", trailing: "\(results.count) hadith\(results.count == 1 ? "" : "s")")
-                        HadithRows(hadiths: results)
+                        HadithSectionHeader(title: "Results",
+                                            trailing: "\(search.results.count) hadith\(search.results.count == 1 ? "" : "s")")
+                        HadithRows(hadiths: search.results)
                     }
+                } else {
+                    ProgressView().tint(.white).frame(maxWidth: .infinity).padding(.top, 40)
                 }
             }
             .padding(16)
@@ -147,6 +190,37 @@ struct HadithScenarioView: View {
         }
         .niyatBackground()
         .navigationTitle(scenario.title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Places in the Hadith tab that aren't a hadith, topic or situation.
+enum HadithRoute: Hashable { case saved }
+
+/// The hadiths you've starred, newest first.
+struct SavedHadithsView: View {
+    @State private var library = HadithLibrary.shared
+    @State private var saved = SavedHadiths.shared
+
+    var body: some View {
+        ScrollView {
+            if let index = library.index {
+                let hadiths = saved.hadiths(in: index)
+                if hadiths.isEmpty {
+                    ContentUnavailableView("No saved hadiths", systemImage: "star",
+                                           description: Text("Tap the star on a hadith to keep it here."))
+                        .padding(.top, 60)
+                } else {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        HadithRows(hadiths: hadiths)
+                    }
+                    .padding(16)
+                    .readableWidth()
+                }
+            }
+        }
+        .niyatBackground()
+        .navigationTitle("Saved hadiths")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
