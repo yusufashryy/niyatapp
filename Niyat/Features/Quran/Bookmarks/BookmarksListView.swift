@@ -12,7 +12,7 @@ struct BookmarksListView: View {
         ScrollView {
             if bookmarks.all.isEmpty {
                 ContentUnavailableView("No bookmarks yet", systemImage: "bookmark",
-                                       description: Text("Tap the bookmark on any ayah to keep it for a special occasion, with a note."))
+                                       description: Text("Tap the bookmark on any ayah to keep it, with a name, a note and a colour."))
                     .padding(.top, 60)
             } else {
                 LazyVStack(spacing: 10) {

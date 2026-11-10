@@ -43,7 +43,7 @@ final class VerseBookmarkTests: XCTestCase {
     private let kahf = VerseReference(surah: 18, verse: 10)
 
     private func bookmark(_ verse: VerseReference, _ title: String, minutesAgo: Double = 0) -> VerseBookmark {
-        VerseBookmark(verse: verse, title: title, note: "", occasion: .general,
+        VerseBookmark(verse: verse, title: title, note: "", color: .gold,
                       created: Date(timeIntervalSince1970: 1_800_000_000 - minutesAgo * 60))
     }
 
@@ -74,17 +74,33 @@ final class VerseBookmarkTests: XCTestCase {
         XCTAssertEqual(VerseBookmarks.on(kursi, in: [a, b, c]).map(\.title), ["A", "C"])
     }
 
-    func testAnEmptyTitleShowsTheOccasion() {
-        var mark = bookmark(kursi, "  ")
-        mark.occasion = .ramadan
-        XCTAssertEqual(mark.displayTitle, "Ramadan")
-        mark.title = "Night prayer"
-        XCTAssertEqual(mark.displayTitle, "Night prayer")
+    func testANameIsRequired() {
+        XCTAssertFalse(VerseBookmarks.canSave(name: ""))
+        XCTAssertFalse(VerseBookmarks.canSave(name: "   \n "))
+        XCTAssertTrue(VerseBookmarks.canSave(name: "Laylat al-Qadr"))
     }
 
-    func testOldSavesWithoutAnOccasionStillLoad() throws {
+    func testSavesWithoutAColourLoadAsGold() throws {
         let json = #"[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","verse":{"surah":2,"verse":255},"title":"x","note":"","created":0}]"#
         let loaded = try JSONDecoder().decode([VerseBookmark].self, from: Data(json.utf8))
-        XCTAssertEqual(loaded.first?.occasion, .general)
+        XCTAssertEqual(loaded.first?.color, .gold)
+    }
+
+    func testASaveWithoutANameGetsOne() throws {
+        let json = #"[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","verse":{"surah":2,"verse":255},"title":" ","note":"","created":0}]"#
+        let loaded = try JSONDecoder().decode([VerseBookmark].self, from: Data(json.utf8))
+        XCTAssertEqual(loaded.first?.title, "Bookmark")
+    }
+
+    func testNoBookmarkIsRedLikeTheRibbon() throws {
+        XCTAssertFalse(BookmarkColor.allCases.map(\.rawValue).contains("red"))
+        let json = #"[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","verse":{"surah":2,"verse":255},"title":"x","note":"","color":"red","created":0}]"#
+        let loaded = try JSONDecoder().decode([VerseBookmark].self, from: Data(json.utf8))
+        XCTAssertEqual(loaded.first?.color, .gold)
+    }
+
+    func testEveryColourFitsOneRow() {
+        // The swatches share one row inside the card, so keep them few.
+        XCTAssertLessThanOrEqual(BookmarkColor.allCases.count, 8)
     }
 }

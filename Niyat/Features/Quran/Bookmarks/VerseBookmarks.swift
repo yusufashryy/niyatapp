@@ -2,95 +2,71 @@ import Foundation
 import Observation
 import SwiftUI
 
-/// What a bookmark is for: its icon and colour.
-enum BookmarkOccasion: String, Codable, CaseIterable, Identifiable {
-    case general, ramadan, jumuah, eid, hajj, dua, family, memorise
+/// A bookmark's colour, chosen by you. Few enough to sit in one row.
+/// Never red: red is the Continue reading ribbon's own colour.
+enum BookmarkColor: String, Codable, CaseIterable, Identifiable {
+    case gold, orange, green, teal, blue, purple, pink, silver
 
     var id: String { rawValue }
 
-    var title: String {
-        switch self {
-        case .general: "Bookmark"
-        case .ramadan: "Ramadan"
-        case .jumuah: "Jumu'ah"
-        case .eid: "Eid"
-        case .hajj: "Hajj"
-        case .dua: "Dua"
-        case .family: "Family"
-        case .memorise: "To memorise"
-        }
-    }
+    var name: String { rawValue.capitalized }
 
-    var icon: String {
+    var color: Color {
         switch self {
-        case .general: "bookmark.fill"
-        case .ramadan: "moon.stars.fill"
-        case .jumuah: "building.columns.fill"
-        case .eid: "sparkles"
-        case .hajj: "figure.walk.motion"
-        case .dua: "hands.and.sparkles.fill"
-        case .family: "heart.fill"
-        case .memorise: "brain.head.profile"
-        }
-    }
-
-    /// Each occasion's own colour (like the hadith situations), so a list of
-    /// bookmarks reads at a glance.
-    var tint: Color {
-        switch self {
-        case .general: Palette.highlight
-        case .ramadan: .indigo
-        case .jumuah: .teal
-        case .eid: .pink
-        case .hajj: .orange
-        case .dua: .purple
-        case .family: .red
-        case .memorise: .blue
+        case .gold: Color(red: 0.86, green: 0.70, blue: 0.24)
+        case .orange: Color(red: 0.95, green: 0.55, blue: 0.20)
+        case .green: Color(red: 0.25, green: 0.72, blue: 0.42)
+        case .teal: Color(red: 0.20, green: 0.70, blue: 0.72)
+        case .blue: Color(red: 0.27, green: 0.52, blue: 0.95)
+        case .purple: Color(red: 0.62, green: 0.40, blue: 0.92)
+        case .pink: Color(red: 0.93, green: 0.40, blue: 0.65)
+        case .silver: Color(red: 0.76, green: 0.78, blue: 0.82)
         }
     }
 }
 
-/// A bookmark you keep for a special occasion, with your own note.
+/// A bookmark you keep, with a name, your own note and a colour.
 struct VerseBookmark: Codable, Identifiable, Hashable {
     var id = UUID()
     var verse: VerseReference
     var title: String
     var note: String
-    var occasion: BookmarkOccasion
+    var color: BookmarkColor
     var created: Date
 
     init(id: UUID = UUID(), verse: VerseReference, title: String, note: String,
-         occasion: BookmarkOccasion, created: Date = .now) {
+         color: BookmarkColor, created: Date = .now) {
         self.id = id
         self.verse = verse
         self.title = title
         self.note = note
-        self.occasion = occasion
+        self.color = color
         self.created = created
     }
 
-    /// Its title, or the occasion's name when it has none.
-    var displayTitle: String {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? occasion.title : trimmed
-    }
-
-    private enum CodingKeys: String, CodingKey { case id, verse, title, note, occasion, created }
+    private enum CodingKeys: String, CodingKey { case id, verse, title, note, color, created }
 
     // Tolerant, so fields added later don't lose saved bookmarks.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
         verse = try c.decode(VerseReference.self, forKey: .verse)
-        title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? ""
+        // A name is required now; one saved without lands as "Bookmark".
+        let saved = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? ""
+        title = VerseBookmarks.canSave(name: saved) ? saved : "Bookmark"
         note = (try? c.decodeIfPresent(String.self, forKey: .note)) ?? ""
-        occasion = (try? c.decodeIfPresent(BookmarkOccasion.self, forKey: .occasion)) ?? .general
+        color = (try? c.decodeIfPresent(BookmarkColor.self, forKey: .color)) ?? .gold
         created = (try? c.decodeIfPresent(Date.self, forKey: .created)) ?? .now
     }
 }
 
 /// The rules for the list of bookmarks. Pure, so they're tested.
 enum VerseBookmarks {
+    /// A bookmark needs a name.
+    static func canSave(name: String) -> Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     /// Adds the bookmark, or replaces the one with its id; newest first.
     static func saving(_ bookmark: VerseBookmark, in list: [VerseBookmark]) -> [VerseBookmark] {
         (list.filter { $0.id != bookmark.id } + [bookmark]).sorted { $0.created > $1.created }
@@ -106,7 +82,7 @@ enum VerseBookmarks {
     }
 }
 
-/// Your bookmarks for special occasions, kept on this iPhone.
+/// Your bookmarks, kept on this iPhone.
 @MainActor @Observable
 final class VerseBookmarkStore {
     static let shared = VerseBookmarkStore()

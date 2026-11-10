@@ -213,7 +213,7 @@ struct SurahListView: View {
                     .scrollClipDisabled()
                 }
 
-                // Special bookmarks, with their notes: the newest few.
+                // Your bookmarks, with their notes: the newest few.
                 if searchText.isEmpty, !verseBookmarks.all.isEmpty {
                     HStack {
                         Text("Bookmarks").sectionLabelStyle()

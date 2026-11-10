@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// What the bookmark button opens: put your Continue reading ribbon on this
-/// ayah, or keep a bookmark for a special occasion with your own note.
+/// ayah, or keep a bookmark with a name, your own note and a colour.
 struct BookmarkSheet: View {
     let reference: VerseReference
     /// Opened to edit this bookmark (from the bookmarks list).
@@ -12,7 +12,7 @@ struct BookmarkSheet: View {
     @State private var bookmarks = VerseBookmarkStore.shared
     // The bookmark being written or edited.
     @State private var editingID: UUID?
-    @State private var occasion = BookmarkOccasion.general
+    @State private var color = BookmarkColor.gold
     @State private var title = ""
     @State private var note = ""
     @State private var saved = 0
@@ -126,43 +126,32 @@ struct BookmarkSheet: View {
         .accessibilityHint(here ? "Removes your Continue reading ribbon" : "Moves your Continue reading ribbon to this ayah")
     }
 
-    /// A new bookmark for a special occasion, or the one being edited.
+    /// A new bookmark, or the one being edited: name (required), note, colour.
     private var composer: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text(editingID == nil ? "Special bookmark" : "Edit bookmark").font(.headline)
+                Text(editingID == nil ? "New bookmark" : "Edit bookmark").font(.headline)
                 Spacer()
                 if editingID != nil {
                     Button("New") { clear() }.font(.subheadline.weight(.semibold))
                 }
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(BookmarkOccasion.allCases) { option in
-                        Button { occasion = option } label: {
-                            Label(option.title, systemImage: option.icon)
-                                .font(.subheadline.weight(.semibold))
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .foregroundStyle(occasion == option ? .black : .white)
-                                .background(occasion == option ? option.tint : option.tint.opacity(0.16), in: .capsule)
-                        }
-                        .buttonStyle(.pressable)
-                        .accessibilityAddTraits(occasion == option ? .isSelected : [])
-                    }
-                }
-            }
-            .scrollClipDisabled()
-            TextField("Name (optional): \(occasion.title)", text: $title)
+            TextField("Name", text: $title, prompt: Text("Name, e.g. Laylat al-Qadr").foregroundStyle(.secondary))
                 .textInputAutocapitalization(.sentences)
+                .submitLabel(.done)
                 .focused($focused)
                 .padding(12)
                 .background(.white.opacity(0.06), in: .rect(cornerRadius: 14))
-            TextField("Note: why this ayah, or who it's for", text: $note, axis: .vertical)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14).strokeBorder(color.color.opacity(0.6), lineWidth: 1.5)
+                }
+            TextField("Note", text: $note, prompt: Text("Note (optional): why this ayah, or who it's for").foregroundStyle(.secondary),
+                      axis: .vertical)
                 .lineLimit(3...8)
                 .focused($focused)
                 .padding(12)
                 .background(.white.opacity(0.06), in: .rect(cornerRadius: 14))
+            colorPicker
             Button { save() } label: {
                 Label(editingID == nil ? "Add bookmark" : "Save changes", systemImage: "bookmark.fill")
                     .font(.headline)
@@ -170,6 +159,7 @@ struct BookmarkSheet: View {
             }
             .buttonStyle(.glassProminent)
             .tint(Palette.control)
+            .disabled(!VerseBookmarks.canSave(name: title))
             if let editingID, let existing = bookmarks.all.first(where: { $0.id == editingID }) {
                 Button("Delete bookmark", role: .destructive) { delete(existing) }
                     .font(.subheadline.weight(.semibold))
@@ -181,29 +171,66 @@ struct BookmarkSheet: View {
         .surface(cornerRadius: 22)
     }
 
+    /// The colours as circles sharing one row, each as wide as the card
+    /// allows, so they never run past its edge.
+    private var colorPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Colour").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                ForEach(BookmarkColor.allCases) { option in
+                    Button { color = option } label: {
+                        Circle()
+                            .fill(option.color)
+                            .overlay {
+                                if color == option {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 14, weight: .heavy))
+                                        .foregroundStyle(.black.opacity(0.75))
+                                }
+                            }
+                            .padding(3)
+                            .overlay {
+                                Circle().strokeBorder(.white.opacity(color == option ? 0.9 : 0), lineWidth: 2)
+                            }
+                            .frame(maxWidth: 44)
+                            .aspectRatio(1, contentMode: .fit)
+                            .frame(maxWidth: .infinity)
+                            .contentShape(.circle)
+                    }
+                    .buttonStyle(.pressable)
+                    .accessibilityLabel(option.name)
+                    .accessibilityAddTraits(color == option ? .isSelected : [])
+                }
+            }
+            .animation(.smooth(duration: 0.2), value: color)
+            .haptic(.selection, trigger: color)
+        }
+    }
+
     // MARK: Actions
 
     private func edit(_ bookmark: VerseBookmark) {
         editingID = bookmark.id
-        occasion = bookmark.occasion
+        color = bookmark.color
         title = bookmark.title
         note = bookmark.note
     }
 
     private func clear() {
         editingID = nil
-        occasion = .general
+        color = .gold
         title = ""
         note = ""
         focused = false
     }
 
     private func save() {
+        guard VerseBookmarks.canSave(name: title) else { return }
         let existing = bookmarks.all.first { $0.id == editingID }
         bookmarks.save(VerseBookmark(id: editingID ?? UUID(), verse: reference,
                                      title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                                      note: note.trimmingCharacters(in: .whitespacesAndNewlines),
-                                     occasion: occasion, created: existing?.created ?? .now))
+                                     color: color, created: existing?.created ?? .now))
         saved += 1
         clear()
     }
@@ -214,7 +241,7 @@ struct BookmarkSheet: View {
     }
 }
 
-/// One special bookmark: its occasion, name and note.
+/// One bookmark: its colour, name and note.
 struct BookmarkRow: View {
     let bookmark: VerseBookmark
     var place: String?
@@ -223,14 +250,14 @@ struct BookmarkRow: View {
     var body: some View {
         // Centred when there's no note; with one, the icon stays by the name.
         HStack(alignment: bookmark.note.isEmpty ? .center : .top, spacing: 12) {
-            Image(systemName: bookmark.occasion.icon)
+            Image(systemName: "bookmark.fill")
                 .font(.body.weight(.bold))
-                .foregroundStyle(bookmark.occasion.tint)
+                .foregroundStyle(bookmark.color.color)
                 .frame(width: 38, height: 38)
-                .background(bookmark.occasion.tint.opacity(0.16), in: .circle)
+                .background(bookmark.color.color.opacity(0.16), in: .circle)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(bookmark.displayTitle).font(.headline).lineLimit(1)
+                    Text(bookmark.title).font(.headline).lineLimit(1)
                     if let place {
                         Text(place)
                             .font(.caption.weight(.semibold).monospacedDigit())
@@ -253,7 +280,7 @@ struct BookmarkRow: View {
         .surface(cornerRadius: 18)
         .overlay {
             RoundedRectangle(cornerRadius: 18)
-                .strokeBorder(bookmark.occasion.tint.opacity(isEditing ? 0.7 : 0), lineWidth: 1.5)
+                .strokeBorder(bookmark.color.color.opacity(isEditing ? 0.7 : 0), lineWidth: 1.5)
         }
         .contentShape(.rect)
     }

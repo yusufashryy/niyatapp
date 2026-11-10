@@ -524,7 +524,7 @@ private struct VerseCard: View {
     /// Red for the ribbon, the first bookmark's colour, or plain.
     private var bookmarkTint: Color {
         if hasRibbon { return Color(QuranTextStyle.ribbonRed) }
-        return bookmarks.first?.occasion.tint ?? Color.secondary
+        return bookmarks.first?.color.color ?? Color.secondary
     }
 
     var body: some View {
@@ -568,13 +568,13 @@ private struct VerseCard: View {
                 Button(action: onBookmark) {
                     HStack(spacing: 6) {
                         ForEach(bookmarks.prefix(3)) { bookmark in
-                            Label(bookmark.displayTitle, systemImage: bookmark.occasion.icon)
+                            Label(bookmark.title, systemImage: "bookmark.fill")
                                 .font(.caption.weight(.semibold))
                                 .lineLimit(1)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
-                                .foregroundStyle(bookmark.occasion.tint)
-                                .background(bookmark.occasion.tint.opacity(0.16), in: .capsule)
+                                .foregroundStyle(bookmark.color.color)
+                                .background(bookmark.color.color.opacity(0.16), in: .capsule)
                         }
                         if bookmarks.count > 3 {
                             Text("+\(bookmarks.count - 3)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
@@ -582,7 +582,7 @@ private struct VerseCard: View {
                     }
                 }
                 .buttonStyle(.pressable)
-                .accessibilityLabel("Bookmarks: \(bookmarks.map(\.displayTitle).joined(separator: ", "))")
+                .accessibilityLabel("Bookmarks: \(bookmarks.map(\.title).joined(separator: ", "))")
             }
         }
         .padding(18)
@@ -615,7 +615,7 @@ private struct VerseCard: View {
             }
             Button(hasRibbon ? "Remove the ribbon" : "Move the ribbon here",
                    systemImage: hasRibbon ? "bookmark.slash" : "bookmark") { onPlaceRibbon() }
-            Button("Special bookmark…", systemImage: "bookmark.circle") { onBookmark() }
+            Button("Add a bookmark…", systemImage: "bookmark.circle") { onBookmark() }
             Button(isSaved ? "Remove from saved verses" : "Save verse",
                    systemImage: isSaved ? "star.slash" : "star") { onToggleSaved() }
             if let onTafsir {
