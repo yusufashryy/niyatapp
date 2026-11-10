@@ -78,11 +78,13 @@ struct SurahReaderView: View {
                                   showTranslation: showTranslation,
                                   isSaved: store.isBookmarked(verse),
                                   hasRibbon: store.hasRibbon(verse),
+                                  hasDailyMark: store.hasDailyMark(verse),
                                   isReciting: player.current == .verse(surah: surahID, verse: verse.number)
                                       || isRecitedByYou(verse),
                                   showsPlay: audioAvailable,
                                   onPlay: { play(from: verse.number) },
                                   onPlaceRibbon: { withAnimation(.smooth) { store.toggleRibbon(verse) } },
+                                  onReadDailyHere: { withAnimation(.smooth) { store.setDailyMark(to: verse) } },
                                   onShare: { sharing = .verse(verse) },
                                   // The tafsirs follow Hafs's numbering of the ayat.
                                   onTafsir: store.edition.riwayah == .hafs
@@ -444,10 +446,13 @@ private struct VerseCard: View {
     let showTranslation: Bool
     let isSaved: Bool
     let hasRibbon: Bool
+    /// The daily reader's green bookmark is on this verse.
+    let hasDailyMark: Bool
     let isReciting: Bool
     let showsPlay: Bool
     let onPlay: () -> Void
     let onPlaceRibbon: () -> Void
+    let onReadDailyHere: () -> Void
     let onShare: () -> Void
     /// Nil where there's no tafsir to show (Warsh and Qalun number the ayat differently).
     let onTafsir: (() -> Void)?
@@ -455,6 +460,10 @@ private struct VerseCard: View {
 
     /// The ribbon's width plus a little room either side.
     private static let ribbonGap: CGFloat = 24
+    /// Both ribbons (red and green) side by side.
+    private static let twoRibbonGap: CGFloat = 44
+
+    private var gap: CGFloat { hasRibbon && hasDailyMark ? Self.twoRibbonGap : Self.ribbonGap }
 
     @ViewBuilder
     private var actionButtons: some View {
@@ -510,6 +519,15 @@ private struct VerseCard: View {
         .accessibilityLabel("Share verse \(verse.number)")
     }
 
+    /// Reciting outlines the card in the accent; otherwise the ribbon in
+    /// red, or the daily bookmark in green.
+    private var outline: Color {
+        if isReciting { return Palette.accent.opacity(0.8) }
+        if hasRibbon { return Color(QuranTextStyle.ribbonRed).opacity(0.7) }
+        if hasDailyMark { return Color(QuranTextStyle.dailyGreen).opacity(0.7) }
+        return .clear
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             // Top row in two halves around a gap in the middle, where the
@@ -532,7 +550,7 @@ private struct VerseCard: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Color.clear.frame(width: Self.ribbonGap, height: 1)
+                Color.clear.frame(width: gap, height: 1)
                 HStack(spacing: 2) { actionButtons }
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
@@ -551,31 +569,44 @@ private struct VerseCard: View {
         // The ribbon's verse stays outlined, so your place is easy to find again.
         .overlay {
             RoundedRectangle(cornerRadius: 22)
-                .strokeBorder(isReciting ? Palette.accent.opacity(0.8) : Color(QuranTextStyle.ribbonRed).opacity(hasRibbon ? 0.7 : 0),
-                              lineWidth: 1.5)
+                .strokeBorder(outline, lineWidth: 1.5)
         }
         .background {
             RoundedRectangle(cornerRadius: 22).fill(Color(QuranTextStyle.ribbonRed).opacity(hasRibbon ? 0.12 : 0))
         }
         .shadow(color: Palette.accent.opacity(isReciting ? 0.35 : 0), radius: 12)
         // The ribbon hangs from the middle of the top of the verse it marks.
+        // Red: the reader's ribbon. Green: the daily reader's bookmark.
         .overlay(alignment: .top) {
-            if hasRibbon {
-                RibbonMark(color: Color(QuranTextStyle.ribbonRed), starColor: .white)
-                    .frame(width: 16, height: 30)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .accessibilityElement()
-                    .accessibilityLabel("Your ribbon is here")
+            HStack(spacing: 6) {
+                if hasRibbon {
+                    RibbonMark(color: Color(QuranTextStyle.ribbonRed), starColor: .white)
+                        .frame(width: 16, height: 30)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .accessibilityElement()
+                        .accessibilityLabel("Your ribbon is here")
+                }
+                if hasDailyMark {
+                    RibbonMark(color: Color(QuranTextStyle.dailyGreen), starColor: .white)
+                        .frame(width: 16, height: 30)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .accessibilityElement()
+                        .accessibilityLabel("Your daily reading is here")
+                }
             }
         }
         .animation(.smooth(duration: 0.4), value: isReciting)
         .animation(.smooth(duration: 0.3), value: hasRibbon)
+        .animation(.smooth(duration: 0.3), value: hasDailyMark)
         .contextMenu {
             if showsPlay {
                 Button("Play from here", systemImage: "play.fill") { onPlay() }
             }
             Button(hasRibbon ? "Remove the ribbon" : "Move the ribbon here",
                    systemImage: hasRibbon ? "bookmark.slash" : "bookmark") { onPlaceRibbon() }
+            if !hasDailyMark {
+                Button("Read daily ayat from here", systemImage: "pencil") { onReadDailyHere() }
+            }
             Button(isSaved ? "Remove from saved verses" : "Save verse",
                    systemImage: isSaved ? "star.slash" : "star") { onToggleSaved() }
             if let onTafsir {

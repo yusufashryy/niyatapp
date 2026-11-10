@@ -20,22 +20,22 @@ struct DailyPlace: Equatable, Hashable {
     }
 }
 
-/// The rules of the daily reader: one ayah at a time, counted only once it
-/// has been on screen long enough to read, or heard to the end. Pure, so it's tested.
+/// The rules of the daily reader: one ayah at a time, counted once you read
+/// on past it (tap Next or swipe), or hear it to the end. It keeps its own
+/// bookmark, apart from the reader's ribbon. Pure, so it's tested.
 enum DailyReading {
-    static let placeKey = "quran.daily.place"
+    /// The daily reader's bookmark (a Hafs `VerseReference`).
+    static let markKey = "quran.daily.mark"
+    /// Where the daily reader was, as "surah:verse", before it had a bookmark.
+    static let legacyPlaceKey = "quran.daily.place"
 
-    /// Letters read per second, at an unhurried pace (recitation is slower;
-    /// reading silently is faster, so this sits between them).
-    static let lettersPerSecond = 15.0
-    /// Even the shortest ayah stays this long before it counts.
-    static let shortestTime = 2.0
-    /// And the longest never asks for more than this.
-    static let longestTime = 25.0
+    /// Reading on counts the ayah you leave; going back doesn't.
+    static func countsWhenMoving(forwards: Bool) -> Bool { forwards }
 
-    /// How long an ayah of this many letters must stay on screen to count.
-    static func readingTime(letters: Int) -> Double {
-        min(max(Double(letters) / lettersPerSecond, shortestTime), longestTime)
+    /// The daily bookmark: the saved one, else the place the daily reader kept before.
+    static func initialMark(saved: VerseReference?, legacy: String) -> VerseReference? {
+        if let saved { return saved }
+        return DailyPlace(storageKey: legacy).map { VerseReference(surah: $0.surah, verse: $0.verse) }
     }
 
     /// The ayah after `place`, on into the next surah; nil after the last ayah.
@@ -53,11 +53,11 @@ enum DailyReading {
         return DailyPlace(surah: place.surah - 1, verse: verseCounts[place.surah - 2])
     }
 
-    /// Where to open: the ribbon (the one place "where I left off" is kept,
-    /// shared with the reader and the mushaf), else the daily reader's own
-    /// last place, else Al-Fatiha; always a real ayah of the shown reading.
-    static func start(saved: String, ribbon: DailyPlace?, verseCounts: [Int]) -> DailyPlace {
-        let candidate = ribbon ?? DailyPlace(storageKey: saved) ?? DailyPlace(surah: 1, verse: 1)
+    /// Where to open: the daily bookmark, else the reader's ribbon (a first
+    /// daily reading starts where you left off), else Al-Fatiha; always a
+    /// real ayah of the shown reading.
+    static func start(mark: DailyPlace?, ribbon: DailyPlace?, verseCounts: [Int]) -> DailyPlace {
+        let candidate = mark ?? ribbon ?? DailyPlace(surah: 1, verse: 1)
         guard verseCounts.indices.contains(candidate.surah - 1) else { return DailyPlace(surah: 1, verse: 1) }
         return DailyPlace(surah: candidate.surah, verse: min(candidate.verse, max(verseCounts[candidate.surah - 1], 1)))
     }

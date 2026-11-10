@@ -138,13 +138,14 @@ struct DailySummarySheet: View {
         }
     }
 
-    // MARK: Ribbon
+    // MARK: Daily bookmark
 
+    /// Where the daily reading goes on next time: its green bookmark.
     @ViewBuilder
     private var ribbonRow: some View {
-        if let ribbon = store.ribbon {
+        if let ribbon = store.dailyMark {
             HStack(spacing: 12) {
-                RibbonMark(color: Color(QuranTextStyle.ribbonRed), starColor: .white)
+                RibbonMark(color: Color(QuranTextStyle.dailyGreen), starColor: .white)
                     .frame(width: 14, height: 24)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Next time").font(.caption).foregroundStyle(.secondary)

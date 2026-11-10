@@ -76,13 +76,21 @@ final class QuranStore {
     /// The reader just took the ribbon out: reading on doesn't put it back
     /// until they close this surah or mushaf (see `resumeRibbon`).
     @ObservationIgnored private var ribbonPaused = false
+    /// Where the daily reader is: its own green bookmark, apart from the ribbon.
+    private(set) var dailyMark: VerseReference?
     /// Saved verses: a list you keep, apart from the ribbon.
     private(set) var bookmarks: [VerseReference]
 
     private init() {
         edition = UserDefaults.standard.string(forKey: "quran.edition").flatMap(QuranEdition.init(rawValue:)) ?? .default
         ribbon = Self.savedRibbon()
+        dailyMark = Self.savedDailyMark()
         bookmarks = UserDefaults.standard.decoded([VerseReference].self, forKey: "quran.bookmarks") ?? []
+    }
+
+    private static func savedDailyMark() -> VerseReference? {
+        DailyReading.initialMark(saved: UserDefaults.standard.decoded(VerseReference.self, forKey: DailyReading.markKey),
+                                 legacy: UserDefaults.standard.string(forKey: DailyReading.legacyPlaceKey) ?? "")
     }
 
     private static func savedRibbon() -> VerseReference? {
@@ -182,6 +190,32 @@ final class QuranStore {
         return verse.hafsNumbers.contains(ribbon.verse)
     }
 
+    /// Moves the daily reader's bookmark to a verse (reading on, or chosen with the pencil).
+    func setDailyMark(to verse: Verse) {
+        let reference = verse.hafsReference
+        guard reference != dailyMark else { return }
+        dailyMark = reference
+        UserDefaults.standard.setEncoded(reference, forKey: DailyReading.markKey)
+    }
+
+    func hasDailyMark(_ verse: Verse) -> Bool {
+        guard let dailyMark, dailyMark.surah == verse.surah else { return false }
+        return verse.hafsNumbers.contains(dailyMark.verse)
+    }
+
+    /// The daily bookmark as a place in the shown reading's numbering.
+    var dailyPlace: DailyPlace? {
+        guard let dailyMark else { return nil }
+        guard let verse = verse(dailyMark) else { return DailyPlace(surah: dailyMark.surah, verse: dailyMark.verse) }
+        return DailyPlace(surah: verse.surah, verse: verse.number)
+    }
+
+    /// The mushaf page the daily bookmark lies in, once the page index is loaded.
+    var dailyMarkPage: Int? {
+        guard let dailyMark, !pageStarts.isEmpty else { return nil }
+        return page(containing: dailyMark)
+    }
+
     /// The mushaf page the ribbon lies in, once the page index is loaded.
     var ribbonPage: Int? {
         guard let ribbon, !pageStarts.isEmpty else { return nil }
@@ -192,6 +226,7 @@ final class QuranStore {
     func reloadUserData() {
         ribbon = Self.savedRibbon()
         ribbonPinned = UserDefaults.standard.bool(forKey: ReadingRibbon.pinnedKey)
+        dailyMark = Self.savedDailyMark()
         bookmarks = UserDefaults.standard.decoded([VerseReference].self, forKey: "quran.bookmarks") ?? []
     }
 

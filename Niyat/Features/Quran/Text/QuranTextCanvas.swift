@@ -60,6 +60,11 @@ struct QuranTextStyle: Equatable {
     var ribbonColor: UIColor = QuranTextStyle.ribbonRed.withAlphaComponent(0.16)
     /// The ribbon's red (fixed, like the mushaf's paper colours: it's the ribbon's own colour).
     static let ribbonRed = UIColor(red: 0.80, green: 0.16, blue: 0.20, alpha: 1)
+    /// The daily reader's bookmark: a soft green wash behind its ayah.
+    var dailyMark: VerseKey?
+    var dailyMarkColor: UIColor = QuranTextStyle.dailyGreen.withAlphaComponent(0.16)
+    /// The daily bookmark's green (fixed, like the ribbon's red, so the two never look alike).
+    static let dailyGreen = UIColor(red: 0.12, green: 0.58, blue: 0.40, alpha: 1)
     /// Soft highlight behind the word being recited.
     var currentWord: UIColor = UIColor(white: 0.55, alpha: 0.30)
     var uncertain: UIColor = UIColor(white: 0.62, alpha: 0.9)
@@ -612,12 +617,14 @@ final class QuranTextCanvas: UIView {
         let size = style.fontSize
 
         for line in lines {
-            // The ribbon's ayah: a soft red wash behind its words on this line.
-            if let ribbon = style.ribbon {
-                let inVerse = line.words.filter { $0.id.verseKey == ribbon }
+            // The bookmarked ayat: a soft wash behind their words on this line,
+            // red for the ribbon, green for the daily reader's bookmark.
+            for (key, color) in [(style.dailyMark, style.dailyMarkColor), (style.ribbon, style.ribbonColor)] {
+                guard let key else { continue }
+                let inVerse = line.words.filter { $0.id.verseKey == key }
                 if let first = inVerse.first, let last = inVerse.last {
                     let union = self.rect(of: first.whole, in: line).union(self.rect(of: last.whole, in: line))
-                    style.ribbonColor.setFill()
+                    color.setFill()
                     UIBezierPath(roundedRect: union.insetBy(dx: -size * 0.1, dy: size * 0.05),
                                  cornerRadius: size * 0.25).fill()
                 }

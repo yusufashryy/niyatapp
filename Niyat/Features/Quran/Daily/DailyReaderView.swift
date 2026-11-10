@@ -2,7 +2,9 @@ import SwiftUI
 
 /// The daily reader: one ayah at a time, with where it sits in the Qur'an,
 /// its translation, recitation and tafsir. An ayah counts towards today's
-/// goal only after it has been on screen long enough to read, or heard to the end.
+/// goal when you read on past it (Next or a swipe), or hear it to the end.
+/// It keeps its own green bookmark, apart from the reader's red ribbon; the
+/// pencil chooses where it reads from.
 struct DailyReaderView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -11,23 +13,20 @@ struct DailyReaderView: View {
     @State private var goal = QuranGoalModel.shared
     @State private var player = RecitationPlayer.shared
     @State private var tajweedStore = TajweedStore.shared
-    @AppStorage(DailyReading.placeKey) private var savedPlace = ""
     @AppStorage("quran.arabicSize") private var arabicSize = 30.0
     @AppStorage("quran.showTranslation") private var showTranslation = true
     @AppStorage("quran.tajweed") private var tajweedOn = true
     @AppStorage(QuranLineSpacing.key) private var lineHeight = QuranLineSpacing.standard
     @AppStorage(QuranTextWeight.key) private var textWeight = QuranTextWeight.regular.rawValue
-    @AppStorage(ReadingRibbon.followsKey) private var ribbonFollows = true
 
     @State private var place = DailyPlace(surah: 1, verse: 1)
     @State private var started = false
     /// Moving forwards (true) or back, for the slide.
     @State private var forwards = true
-    /// How far through its reading time the shown ayah is (0...1).
-    @State private var readProgress = 0.0
     @State private var tafsirTarget: TafsirTarget?
     @State private var sharing: QuranShareContent?
     @State private var showGoal = false
+    @State private var choosingStart = false
     @State private var showSummary = false
     /// Ayat counted since the reader opened.
     @State private var countedThisVisit = 0
@@ -82,6 +81,13 @@ struct DailyReaderView: View {
         .sheet(item: $tafsirTarget) { TafsirSheet(surah: $0.surah, ayah: $0.ayah) }
         .sheet(item: $sharing) { QuranShareSheet(content: $0) }
         .sheet(isPresented: $showGoal) { QuranGoalSheet() }
+        .sheet(isPresented: $choosingStart) {
+            DailyStartSheet(start: place, verseCounts: verseCounts) { chosen in
+                player.stop()
+                forwards = chosen.surah * 1000 + chosen.verse >= place.surah * 1000 + place.verse
+                withAnimation(.smooth(duration: 0.35)) { place = chosen }
+            }
+        }
         .sheet(isPresented: $showSummary, onDismiss: { dismiss() }) {
             DailySummarySheet(countedNow: countedThisVisit)
         }
@@ -91,13 +97,13 @@ struct DailyReaderView: View {
             verseCounts = (1...114).map { store.verseCount(for: $0) }
             started = true
             let ribbon = store.ribbon.map { DailyPlace(surah: $0.surah, verse: $0.verse) }
-            place = DailyReading.start(saved: savedPlace, ribbon: ribbon, verseCounts: verseCounts)
+            place = DailyReading.start(mark: store.dailyPlace, ribbon: ribbon, verseCounts: verseCounts)
+            if let verse { store.setDailyMark(to: verse) }
         }
-        // The reading clock runs only while the ayah is on screen and the app is open.
-        .task(id: ReadingClock(place: place, active: scenePhase == .active && started && !showSummary)) {
-            await runReadingClock()
+        // The green bookmark stays on the ayah you're on.
+        .onChange(of: place) { _, _ in
+            if started, let verse { store.setDailyMark(to: verse) }
         }
-        .onChange(of: place) { _, new in savedPlace = new.storageKey }
         // Time spent reading: counted while the reader is open and the app is in front.
         .onChange(of: scenePhase, initial: true) { _, phase in
             if phase == .active { sittingStart = sittingStart ?? .now } else { saveReadingTime() }
@@ -177,8 +183,8 @@ struct DailyReaderView: View {
         .accessibilityHint("Changes your daily goal")
     }
 
-    /// The ayah: listen and tafsir, where it is, share; the Arabic; a thin
-    /// line that fills while it's read. The translation sits below.
+    /// The ayah: listen and tafsir, where it is, choose where to read and
+    /// share; the Arabic. The translation sits below.
     private func ayahCard(_ verse: Verse) -> some View {
         let counted = isCounted(verse)
         let surahName = store.surah(place.surah)?.transliteration ?? "Surah \(place.surah)"
@@ -223,7 +229,7 @@ struct DailyReaderView: View {
                     .accessibilityLabel("\(surahName), ayah \(place.verse) of \(count)\(counted ? ", counted" : "")")
                     Spacer(minLength: 4)
                     HStack(spacing: 2) {
-                        ribbonButton(verse)
+                        startButton
                         iconButton("square.and.arrow.up", label: "Share") { sharing = .verse(verse) }
                     }
                     .frame(width: 84, alignment: .trailing)
@@ -249,19 +255,6 @@ struct DailyReaderView: View {
             .padding(.bottom, 24)
             .frame(maxWidth: .infinity)
             .surface(cornerRadius: 28)
-            // Fills while the ayah is read; stays, dimmer, once it counts.
-            .overlay(alignment: .bottom) {
-                GeometryReader { geo in
-                    Capsule()
-                        .fill(Palette.highlight)
-                        .frame(width: geo.size.width * (counted ? 1 : readProgress), height: 3)
-                }
-                .frame(height: 3)
-                .padding(.horizontal, 28)
-                .padding(.bottom, 10)
-                .opacity(counted ? 0.45 : 1)
-                .accessibilityHidden(true)
-            }
             .animation(.smooth, value: counted)
 
             if showTranslation, !verse.translation.isEmpty {
@@ -274,24 +267,18 @@ struct DailyReaderView: View {
         }
     }
 
-    /// The reading ribbon, shared with the reader and the mushaf: the place
-    /// "where I left off". Red when it's on this ayah.
-    private func ribbonButton(_ verse: Verse) -> some View {
-        let here = store.hasRibbon(verse)
-        return Button {
-            withAnimation(.smooth) { store.toggleRibbon(verse) }
-        } label: {
-            Image(systemName: here ? "bookmark.fill" : "bookmark")
+    /// The pencil: choose where the daily reading goes from.
+    private var startButton: some View {
+        Button { choosingStart = true } label: {
+            Image(systemName: "pencil")
                 .font(.title3)
-                .foregroundStyle(here ? Color(QuranTextStyle.ribbonRed) : .white.opacity(0.85))
+                .foregroundStyle(Color(QuranTextStyle.dailyGreen))
                 .frame(width: 40, height: 40)
                 .contentShape(.rect)
-                .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.plain)
-        .haptic(.selection, trigger: here)
-        .accessibilityLabel(here ? "Remove the ribbon" : "Move the ribbon here")
-        .accessibilityHint("The ribbon marks where you left off, here, in the reader and in the mushaf")
+        .accessibilityLabel("Choose where to read")
+        .accessibilityHint("Moves your daily reading, and its green bookmark, to another ayah")
     }
 
     private func iconButton(_ systemImage: String, label: String, action: @escaping () -> Void) -> some View {
@@ -371,6 +358,8 @@ struct DailyReaderView: View {
             ? DailyReading.next(after: place, verseCounts: verseCounts)
             : DailyReading.previous(before: place, verseCounts: verseCounts)
         guard let target else { return }
+        // Reading on past an ayah counts it.
+        if DailyReading.countsWhenMoving(forwards: forwards), let verse { record(verse) }
         let wasPlaying = player.isPlaying
         self.forwards = forwards
         withAnimation(.smooth(duration: 0.35)) { place = target }
@@ -425,23 +414,7 @@ struct DailyReaderView: View {
         withAnimation(.smooth(duration: 0.35)) { place = next }
     }
 
-    private func runReadingClock() async {
-        readProgress = 0
-        guard started, scenePhase == .active, !showSummary, let verse, !isCounted(verse) else { return }
-        let seconds = DailyReading.readingTime(letters: verse.letterCount)
-        withAnimation(.linear(duration: seconds)) { readProgress = 1 }
-        try? await Task.sleep(for: .seconds(seconds))
-        guard !Task.isCancelled else {
-            readProgress = 0
-            return
-        }
-        record(verse)
-    }
-
     private func record(_ verse: Verse) {
-        // Reading on carries the ribbon with you (unless you've turned that off,
-        // or placed it further on yourself).
-        if ribbonFollows { store.followRibbon(to: verse) }
         guard !isCounted(verse) else { return }
         goal.recordRead(verse)
         countedThisVisit += 1
@@ -460,10 +433,4 @@ struct DailyReaderView: View {
         style.weight = (QuranTextWeight(rawValue: textWeight) ?? .regular).stroke
         return style
     }
-}
-
-/// What restarts the reading clock: a new ayah, or the app coming back.
-private struct ReadingClock: Equatable {
-    let place: DailyPlace
-    let active: Bool
 }

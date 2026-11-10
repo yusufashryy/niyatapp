@@ -25,33 +25,36 @@ final class DailyReadingTests: XCTestCase {
         XCTAssertNil(DailyReading.previous(before: DailyPlace(surah: 1, verse: 1), verseCounts: counts))
     }
 
-    func testShortAyahStillTakesTheShortestTime() {
-        XCTAssertEqual(DailyReading.readingTime(letters: 5), DailyReading.shortestTime)
+    func testStartPrefersTheDailyBookmark() {
+        let start = DailyReading.start(mark: DailyPlace(surah: 2, verse: 30), ribbon: DailyPlace(surah: 3, verse: 1), verseCounts: counts)
+        XCTAssertEqual(start, DailyPlace(surah: 2, verse: 30))
     }
 
-    func testReadingTimeGrowsWithLength() {
-        XCTAssertEqual(DailyReading.readingTime(letters: 150), 10)
-    }
-
-    func testLongestAyahIsCapped() {
-        // Ayat al-Dayn (2:282) has over 500 letters.
-        XCTAssertEqual(DailyReading.readingTime(letters: 540), DailyReading.longestTime)
-    }
-
-    func testStartPrefersTheRibbon() {
-        let start = DailyReading.start(saved: "2:30", ribbon: DailyPlace(surah: 3, verse: 1), verseCounts: counts)
-        XCTAssertEqual(start, DailyPlace(surah: 3, verse: 1))
-    }
-
-    func testStartFallsBackToTheSavedPlaceThenAlFatiha() {
-        XCTAssertEqual(DailyReading.start(saved: "2:30", ribbon: nil, verseCounts: counts), DailyPlace(surah: 2, verse: 30))
-        XCTAssertEqual(DailyReading.start(saved: "", ribbon: nil, verseCounts: counts), DailyPlace(surah: 1, verse: 1))
+    func testStartFallsBackToTheRibbonThenAlFatiha() {
+        XCTAssertEqual(DailyReading.start(mark: nil, ribbon: DailyPlace(surah: 3, verse: 1), verseCounts: counts),
+                       DailyPlace(surah: 3, verse: 1))
+        XCTAssertEqual(DailyReading.start(mark: nil, ribbon: nil, verseCounts: counts), DailyPlace(surah: 1, verse: 1))
     }
 
     func testStartKeepsToARealAyah() {
         // Saved in a reading with more ayat in this surah.
-        XCTAssertEqual(DailyReading.start(saved: "1:9", ribbon: nil, verseCounts: counts), DailyPlace(surah: 1, verse: 7))
-        XCTAssertEqual(DailyReading.start(saved: "200:1", ribbon: nil, verseCounts: counts), DailyPlace(surah: 1, verse: 1))
+        XCTAssertEqual(DailyReading.start(mark: DailyPlace(surah: 1, verse: 9), ribbon: nil, verseCounts: counts),
+                       DailyPlace(surah: 1, verse: 7))
+        XCTAssertEqual(DailyReading.start(mark: DailyPlace(surah: 200, verse: 1), ribbon: nil, verseCounts: counts),
+                       DailyPlace(surah: 1, verse: 1))
+    }
+
+    func testDailyBookmarkComesFromTheOldSavedPlace() {
+        // Before the daily reader had its own bookmark it kept "surah:verse".
+        XCTAssertEqual(DailyReading.initialMark(saved: nil, legacy: "18:10"), VerseReference(surah: 18, verse: 10))
+        XCTAssertEqual(DailyReading.initialMark(saved: VerseReference(surah: 2, verse: 5), legacy: "18:10"),
+                       VerseReference(surah: 2, verse: 5))
+        XCTAssertNil(DailyReading.initialMark(saved: nil, legacy: ""))
+    }
+
+    func testOnlyMovingOnCountsTheAyah() {
+        XCTAssertTrue(DailyReading.countsWhenMoving(forwards: true))
+        XCTAssertFalse(DailyReading.countsWhenMoving(forwards: false))
     }
 
     func testPlaceRoundTrips() {

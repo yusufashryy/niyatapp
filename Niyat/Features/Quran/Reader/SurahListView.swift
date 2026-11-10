@@ -328,7 +328,6 @@ private struct SurahRow: View {
 private struct QuranGoalCard: View {
     @State private var goal = QuranGoalModel.shared
     @State private var store = QuranStore.shared
-    @AppStorage(DailyReading.placeKey) private var savedPlace = ""
     let onTap: () -> Void
 
     var body: some View {
@@ -406,10 +405,11 @@ private struct QuranGoalCard: View {
     /// "Continue at Al-Baqarah 2:23", or where a first reading starts.
     private var continueText: String {
         let ribbon = store.ribbon.map { DailyPlace(surah: $0.surah, verse: $0.verse) }
+        let mark = store.dailyPlace
         let counts = (1...114).map { store.verseCount(for: $0) }
-        let place = DailyReading.start(saved: savedPlace, ribbon: ribbon, verseCounts: counts)
+        let place = DailyReading.start(mark: mark, ribbon: ribbon, verseCounts: counts)
         let name = store.surah(place.surah)?.transliteration ?? "Surah \(place.surah)"
-        return "\(savedPlace.isEmpty && ribbon == nil ? "Start at" : "Continue at") \(name) \(place.surah):\(place.verse)"
+        return "\(mark == nil && ribbon == nil ? "Start at" : "Continue at") \(name) \(place.surah):\(place.verse)"
     }
 }
 

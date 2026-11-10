@@ -305,7 +305,8 @@ struct MushafPageView: View {
         MushafPage(number: number, isCurrent: isShowing(number, spread: spread), colors: colors, tajweed: showsTajweed,
                    highContrast: contrast == .increased, textSize: options.textSize,
                    weight: (QuranTextWeight(rawValue: textWeight) ?? .regular).stroke,
-                   hasRibbon: number == store.ribbonPage, placement: placement,
+                   hasRibbon: number == store.ribbonPage, hasDailyMark: number == store.dailyMarkPage,
+                   placement: placement,
                    onZoomChange: { isZoomed = $0 },
                    onPageNumber: { pageNumberTapped() },
                    onTap: { word, row in tapped(word, row: row) })
