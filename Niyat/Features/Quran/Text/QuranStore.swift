@@ -37,7 +37,7 @@ struct Verse: Identifiable, Hashable {
     let hafsNumbers: [Int]
 
     var id: Int { surah * 1000 + number }
-    /// Hafs reference used for bookmarks, reading position and progress, so they
+    /// Hafs reference used for saved verses, the ribbon and progress, so they
     /// survive switching script or reading.
     var hafsReference: VerseReference { VerseReference(surah: surah, verse: hafsNumbers.first ?? number) }
     /// Letters in the displayed Arabic, for the recitation-reward estimate.
@@ -61,7 +61,7 @@ final class QuranStore {
     private(set) var surahs: [Surah] = []
     private(set) var isLoaded = false
     private(set) var loadError: String?
-    /// The text being shown. Changing it never touches bookmarks or progress.
+    /// The text being shown. Changing it never touches saved verses, the ribbon or progress.
     private(set) var edition: QuranEdition
     /// The Bismillah exactly as written in the selected Hafs text (Al-Fatiha 1:1).
     private(set) var bismillah = ""
@@ -69,18 +69,43 @@ final class QuranStore {
     private(set) var isVerified: Bool?
     private var versesBySurah: [Int: [Verse]] = [:]
 
-    private(set) var lastRead: VerseReference?
+    /// Where you are: the reading ribbon (see `ReadingRibbon`).
+    private(set) var ribbon: VerseReference?
+    /// The reader placed the ribbon themselves (see `ReadingRibbon.follows`).
+    private(set) var ribbonPinned = UserDefaults.standard.bool(forKey: ReadingRibbon.pinnedKey)
+    /// The reader just took the ribbon out: reading on doesn't put it back
+    /// until they close this surah or mushaf (see `resumeRibbon`).
+    @ObservationIgnored private var ribbonPaused = false
+    /// Where the daily reader is: its own place, apart from the ribbon (not
+    /// shown in the reader; the daily reader's search moves it).
+    private(set) var dailyMark: VerseReference?
+    /// Saved verses: a list you keep, apart from the ribbon.
     private(set) var bookmarks: [VerseReference]
 
     private init() {
         edition = UserDefaults.standard.string(forKey: "quran.edition").flatMap(QuranEdition.init(rawValue:)) ?? .default
-        lastRead = UserDefaults.standard.decoded(VerseReference.self, forKey: "quran.lastRead")
+        ribbon = Self.savedRibbon()
+        dailyMark = Self.savedDailyMark()
         bookmarks = UserDefaults.standard.decoded([VerseReference].self, forKey: "quran.bookmarks") ?? []
+    }
+
+    private static func savedDailyMark() -> VerseReference? {
+        DailyReading.initialMark(saved: UserDefaults.standard.decoded(VerseReference.self, forKey: DailyReading.markKey),
+                                 legacy: UserDefaults.standard.string(forKey: DailyReading.legacyPlaceKey) ?? "")
+    }
+
+    private static func savedRibbon() -> VerseReference? {
+        ReadingRibbon.initial(saved: UserDefaults.standard.decoded(VerseReference.self, forKey: ReadingRibbon.storageKey),
+                              legacy: UserDefaults.standard.decoded(VerseReference.self, forKey: ReadingRibbon.legacyKey))
     }
 
     func verses(for surah: Int) -> [Verse] { versesBySurah[surah] ?? [] }
 
-    func surah(_ id: Int) -> Surah? { surahs.first { $0.id == id } }
+    /// Surahs are stored in order, so number N is at N - 1 (checked, in case a file ever isn't).
+    func surah(_ id: Int) -> Surah? {
+        if surahs.indices.contains(id - 1), surahs[id - 1].id == id { return surahs[id - 1] }
+        return surahs.first { $0.id == id }
+    }
 
     /// Verse count in the selected reading (differs from Hafs for Warsh/Qalun).
     func verseCount(for surah: Int) -> Int { versesBySurah[surah]?.count ?? self.surah(surah)?.totalVerses ?? 0 }
@@ -118,16 +143,80 @@ final class QuranStore {
         saveBookmarks()
     }
 
-    func markRead(_ verse: Verse) {
-        let reference = verse.hafsReference
-        guard reference != lastRead else { return }
-        lastRead = reference
-        UserDefaults.standard.setEncoded(reference, forKey: "quran.lastRead")
+    /// The reader puts the ribbon on a verse: it stays there until they read on past it.
+    func moveRibbon(to verse: Verse) {
+        setRibbon(verse.hafsReference, pinned: true)
     }
 
-    /// Re-reads bookmarks and reading position (after "Erase all data").
+    /// The reader settled on a verse while reading: the ribbon follows,
+    /// unless they placed it further on themselves.
+    func followRibbon(to verse: Verse) {
+        let reference = verse.hafsReference
+        guard !ribbonPaused, ReadingRibbon.follows(to: reference, from: ribbon, pinned: ribbonPinned) else { return }
+        setRibbon(reference, pinned: false)
+    }
+
+    /// Takes the ribbon out. If it follows you, it comes back next time you read.
+    func removeRibbon() {
+        ribbonPaused = true
+        ribbon = nil
+        ribbonPinned = false
+        UserDefaults.standard.removeObject(forKey: ReadingRibbon.storageKey)
+        UserDefaults.standard.removeObject(forKey: ReadingRibbon.legacyKey)
+        UserDefaults.standard.set(false, forKey: ReadingRibbon.pinnedKey)
+    }
+
+    /// Puts the ribbon on a verse, or takes it out if it's already there.
+    func toggleRibbon(_ verse: Verse) {
+        if hasRibbon(verse) { removeRibbon() } else { moveRibbon(to: verse) }
+    }
+
+    /// The surah or mushaf closed: the ribbon may follow again.
+    func resumeRibbon() {
+        ribbonPaused = false
+    }
+
+    private func setRibbon(_ reference: VerseReference, pinned: Bool) {
+        if pinned { ribbonPaused = false }
+        if reference != ribbon {
+            ribbon = reference
+            UserDefaults.standard.setEncoded(reference, forKey: ReadingRibbon.storageKey)
+        }
+        ribbonPinned = pinned
+        UserDefaults.standard.set(pinned, forKey: ReadingRibbon.pinnedKey)
+    }
+
+    func hasRibbon(_ verse: Verse) -> Bool {
+        guard let ribbon, ribbon.surah == verse.surah else { return false }
+        return verse.hafsNumbers.contains(ribbon.verse)
+    }
+
+    /// Moves the daily reader's place to a verse (reading on, or chosen with its search).
+    func setDailyMark(to verse: Verse) {
+        let reference = verse.hafsReference
+        guard reference != dailyMark else { return }
+        dailyMark = reference
+        UserDefaults.standard.setEncoded(reference, forKey: DailyReading.markKey)
+    }
+
+    /// The daily reader's place in the shown reading's numbering.
+    var dailyPlace: DailyPlace? {
+        guard let dailyMark else { return nil }
+        guard let verse = verse(dailyMark) else { return DailyPlace(surah: dailyMark.surah, verse: dailyMark.verse) }
+        return DailyPlace(surah: verse.surah, verse: verse.number)
+    }
+
+    /// The mushaf page the ribbon lies in, once the page index is loaded.
+    var ribbonPage: Int? {
+        guard let ribbon, !pageStarts.isEmpty else { return nil }
+        return page(containing: ribbon)
+    }
+
+    /// Re-reads saved verses and the ribbon (after "Erase all data").
     func reloadUserData() {
-        lastRead = UserDefaults.standard.decoded(VerseReference.self, forKey: "quran.lastRead")
+        ribbon = Self.savedRibbon()
+        ribbonPinned = UserDefaults.standard.bool(forKey: ReadingRibbon.pinnedKey)
+        dailyMark = Self.savedDailyMark()
         bookmarks = UserDefaults.standard.decoded([VerseReference].self, forKey: "quran.bookmarks") ?? []
     }
 
@@ -141,12 +230,15 @@ final class QuranStore {
         isVerified = await Task.detached(priority: .utility) { Self.verifyChecksums() }.value
     }
 
-    /// Switches to another verified text. Bookmarks, reading position and
+    /// Switches to another verified text. Saved verses, the ribbon and
     /// progress are stored by Hafs reference, so they carry over.
     func setEdition(_ newEdition: QuranEdition) async {
         guard newEdition != edition || !isLoaded else { return }
         UserDefaults.standard.set(newEdition.rawValue, forKey: "quran.edition")
+        let switching = isLoaded && newEdition != edition
         await load(edition: newEdition)
+        // The other reading's split words and pages won't be shown again soon.
+        if switching, edition == newEdition { QuranMemory.releaseCaches() }
     }
 
     private func load(edition newEdition: QuranEdition) async {
@@ -241,6 +333,7 @@ final class QuranStore {
     /// If a file is changed or corrupted in any way, the hash won't match.
     nonisolated static let expectedChecksums: [String: String] = {
         var sums = [
+            "reading-signs": "d916800d4a978c0b19bc8db49276d5e82c0dd7b6fc018640d8d34c31ec1665dd",
             "translation-en-clearquran": "2e5d4d9fc7ee9cad5ed3fc0691d8e398c6f943a9ab7fe49ac515961abf5250ed",
             "chapters": "5b18adae945fcb6f9fbb865dd7dc596f89a63607a4e6617ca9e37f7f10d3386b",
         ]

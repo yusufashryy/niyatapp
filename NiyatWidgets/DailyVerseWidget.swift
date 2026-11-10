@@ -31,8 +31,9 @@ struct VerseProvider: TimelineProvider {
 
 struct DailyVerseWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "DailyVerseWidget", provider: VerseProvider()) { entry in
-            DailyVerseView(entry: entry)
+        AppIntentConfiguration(kind: "DailyVerseWidget", intent: WidgetStyleIntent.self,
+                                       provider: StyledProvider(base: VerseProvider())) { entry in
+            DailyVerseView(entry: entry.base).widgetStyle(entry.style)
         }
         .configurationDisplayName("Verse of the Day")
         .description("A new verse from the Quran every day.")
@@ -41,6 +42,7 @@ struct DailyVerseWidget: Widget {
 }
 
 struct DailyVerseView: View {
+    @Environment(\.widgetLook) private var look
     @Environment(\.widgetFamily) private var family
     let entry: VerseEntry
 
@@ -52,6 +54,7 @@ struct DailyVerseView: View {
                         .font(.caption)
                         .lineLimit(3)
                     Text(entry.verse.reference)
+                        .fitText()
                         .font(.caption2)
                         .widgetAccentable()
                 }
@@ -69,13 +72,15 @@ struct DailyVerseView: View {
                         .minimumScaleFactor(0.7)
                     Spacer(minLength: 0)
                     Text(entry.verse.reference)
+                        .fitText()
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Palette.highlight)
+                        .foregroundStyle(look.accent)
+                        .widgetAccentable()
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
             }
         }
-        .containerBackground(for: .widget) {
+        .widgetBackground {
             if family == .accessoryRectangular {
                 Color.clear
             } else {
@@ -88,5 +93,5 @@ struct DailyVerseView: View {
 #Preview(as: .systemMedium) {
     DailyVerseWidget()
 } timeline: {
-    VerseEntry(date: .now, verse: DailyVerse.all[0])
+    StyledEntry(base: VerseEntry(date: .now, verse: DailyVerse.all[0]), style: .theme)
 }

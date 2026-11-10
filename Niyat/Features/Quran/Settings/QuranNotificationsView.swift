@@ -55,7 +55,7 @@ struct QuranNotificationsView: View {
                 .disabled(goal.goal == nil)
 
                 Section {
-                    reminderRow("Verse of the day", icon: "text.book.closed.fill", isOn: \.verseOfDayEnabled, minute: \.verseOfDayMinute)
+                    reminderRow("Verse of the day", icon: "quote.bubble.fill", isOn: \.verseOfDayEnabled, minute: \.verseOfDayMinute)
                     reminderRow("Friday: Surah Al-Kahf", icon: "moon.stars.fill", isOn: \.kahfEnabled, minute: \.kahfMinute)
                 } header: {
                     Text("Reading")

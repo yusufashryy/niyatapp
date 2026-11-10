@@ -1,27 +1,45 @@
 import CoreLocation
 import SwiftUI
 
+/// Qibla from More: a normal screen.
 struct QiblaView: View {
-    @Environment(AppModel.self) private var model
-    @State private var compass = CompassModel()
-    @State private var showTips = false
-
     var body: some View {
-        NavigationStack {
-            Group {
-                if let location = currentLocation {
-                    content(location: location)
-                } else {
-                    ContentUnavailableView("Set your location", systemImage: "location.slash",
-                                           description: Text("Choose a location in Settings to find the Qibla."))
-                }
-            }
+        QiblaScreen()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .niyatBackground()
             .navigationTitle("Qibla")
             .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// The compass and its readouts. Given a namespace (from Today), the ring,
+/// Kaaba and centre readout take over from the prayer dial's ring, next
+/// prayer and countdown, and the rest fades in after them.
+struct QiblaScreen: View {
+    var namespace: Namespace.ID?
+    @Environment(AppModel.self) private var model
+    @State private var compass = CompassModel()
+    @State private var showTips = false
+    /// The parts that don't morph from the dial come in once the dial has.
+    @State private var appeared = false
+
+    var body: some View {
+        Group {
+            if let location = currentLocation {
+                content(location: location)
+            } else {
+                ContentUnavailableView("Set your location", systemImage: "location.slash",
+                                       description: Text("Choose a location in Settings to find the Qibla."))
+            }
         }
-        .onAppear { compass.start() }
+        .onAppear {
+            compass.start()
+            if namespace == nil {
+                appeared = true
+            } else {
+                withAnimation(.smooth(duration: 0.45).delay(0.3)) { appeared = true }
+            }
+        }
         .onDisappear { compass.stop() }
     }
 
@@ -46,16 +64,20 @@ struct QiblaView: View {
                 instruction(turn: turn, aligned: aligned, qibla: qibla)
                     .padding(.top, 8)
                     .zIndex(1)
+                    .entering(appeared, from: -12)
 
-                QiblaDial(qibla: qibla, continuousHeading: compass.continuousHeading, turn: turn, aligned: aligned)
+                QiblaDial(qibla: qibla, continuousHeading: compass.continuousHeading, turn: turn, aligned: aligned,
+                          namespace: namespace, appeared: appeared)
                     .frame(width: 310, height: 310)
                     .padding(.top, 20)
                     .haptic(.success, trigger: aligned) { _, now in now }
                     .haptic(.selection, trigger: tickBucket(turn))
 
                 infoRow(location: location, qibla: qibla)
+                    .entering(appeared, from: 16)
 
                 tipsCard
+                    .entering(appeared, from: 24)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 28)
@@ -191,17 +213,26 @@ struct QiblaView: View {
 /// The compass face. The ring turns with the phone so N always points north; the
 /// Kaaba sits on the ring at the Qibla bearing. Line the Kaaba up with the marker
 /// at the top and you're facing the Qibla.
-private struct QiblaDial: View {
+struct QiblaDial: View {
     let qibla: Double
     let continuousHeading: Double?
     let turn: Double?
     let aligned: Bool
+    var namespace: Namespace.ID?
+    var appeared = true
 
     private let radius: CGFloat = 132
+    private let side: CGFloat = 310
 
     var body: some View {
         let heading = continuousHeading ?? 0
         ZStack {
+            // The ring the prayer dial's ring becomes.
+            Circle()
+                .stroke(.white.opacity(0.08), lineWidth: 2)
+                .frame(width: radius * 2, height: radius * 2)
+                .matched(QiblaMorph.ring, in: namespace)
+
             // Rotating face: ticks and N/E/S/W.
             ZStack {
                 Rosette(color: Palette.accent.opacity(0.12), lineWidth: 1)
@@ -224,12 +255,9 @@ private struct QiblaDial: View {
                 }
             }
             .rotationEffect(.degrees(-heading))
-
-            // The Kaaba on the ring, kept upright.
-            KaabaMarker(highlighted: aligned)
-                .rotationEffect(.degrees(-(qibla - heading)))
-                .offset(y: -radius)
-                .rotationEffect(.degrees(qibla - heading))
+            // Spins into place as the dial becomes the compass.
+            .rotationEffect(.degrees(appeared ? 0 : -90))
+            .opacity(appeared ? 1 : 0)
 
             // Fixed marker: the direction the top of your phone points.
             Image(systemName: "arrowtriangle.down.fill")
@@ -237,24 +265,64 @@ private struct QiblaDial: View {
                 .foregroundStyle(aligned ? Palette.highlight : .white)
                 .offset(y: -(radius + 34))
                 .shadow(color: aligned ? Palette.highlight : .clear, radius: 8)
+                .opacity(appeared ? 1 : 0)
 
-            // Centre readout.
+            // Centre readout (the dial's countdown becomes this).
             VStack(spacing: 2) {
                 Text("\(Int(qibla.rounded()))°")
                     .font(.display(34, weight: .heavy))
+                    // Never "11…" while the countdown's frame turns into this one.
+                    .lineLimit(1)
+                    .fixedSize()
                 Text("Qibla")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
+            .matched(QiblaMorph.center, in: namespace)
+
+            // The Kaaba on the ring, kept upright (the dial's next prayer becomes it).
+            KaabaMarker(highlighted: aligned)
+                .matched(QiblaMorph.kaaba, in: namespace)
+                .position(kaabaPoint(angle: qibla - heading))
+
         }
+        .frame(width: side, height: side)
         .animation(.interactiveSpring(response: 0.35, dampingFraction: 0.85), value: heading)
         .animation(.smooth(duration: 0.4), value: aligned)
+    }
+
+    /// Where on the ring a bearing (clockwise from the top) falls.
+    private func kaabaPoint(angle degrees: Double) -> CGPoint {
+        let radians = degrees * .pi / 180
+        return CGPoint(x: side / 2 + radius * CGFloat(sin(radians)), y: side / 2 - radius * CGFloat(cos(radians)))
+    }
+}
+
+/// The parts of the prayer dial that turn into the compass.
+enum QiblaMorph {
+    static let ring = "qibla.ring"
+    static let kaaba = "qibla.kaaba"
+    static let center = "qibla.center"
+    static let button = "qibla.button"
+}
+
+extension View {
+    /// A matched-geometry link, only when there's a namespace to match in.
+    @ViewBuilder
+    func matched(_ id: String, in namespace: Namespace.ID?) -> some View {
+        if let namespace { matchedGeometryEffect(id: id, in: namespace) } else { self }
+    }
+
+    /// Fades and slides in once `shown` is true.
+    func entering(_ shown: Bool, from offset: CGFloat) -> some View {
+        opacity(shown ? 1 : 0).offset(y: shown ? 0 : offset)
     }
 }
 
 /// A small drawing of the Kaaba: a black cube with its gold band (the Kiswah).
-private struct KaabaMarker: View {
+struct KaabaMarker: View {
     let highlighted: Bool
+    var size: CGFloat = 30
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -265,10 +333,10 @@ private struct KaabaMarker: View {
                 }
             Rectangle()
                 .fill(Palette.highlight)
-                .frame(height: 4)
-                .padding(.top, 8)
+                .frame(height: size * 0.13)
+                .padding(.top, size * 0.27)
         }
-        .frame(width: 30, height: 32)
+        .frame(width: size, height: size * 1.07)
         .shadow(color: highlighted ? Palette.highlight : .black.opacity(0.5), radius: highlighted ? 14 : 4)
         .scaleEffect(highlighted ? 1.15 : 1)
         .accessibilityLabel("Kaaba")

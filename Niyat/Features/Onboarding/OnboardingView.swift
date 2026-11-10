@@ -36,6 +36,7 @@ struct OnboardingView: View {
         VStack(spacing: 22) {
             Text("بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ")
                 .font(.quran(size: 30))
+                .fitText()
                 .foregroundStyle(Palette.highlight)
             ZStack {
                 Rosette(color: Palette.highlight.opacity(0.35), lineWidth: 1.2)
@@ -73,8 +74,8 @@ struct OnboardingView: View {
             Text("Prayer times depend on where you are. Your location never leaves your device.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white.opacity(0.75))
-            LocationPickerView(locateTitle: "Continue") { location in
-                model.setLocation(location)
+            LocationPickerView(locateTitle: "Continue") { location, mode in
+                model.setLocation(location, mode: mode)
                 step = 2
             }
         }

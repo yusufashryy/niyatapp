@@ -2,7 +2,6 @@ import StoreKit
 import SwiftUI
 
 struct MoreView: View {
-    @State private var tipJar = TipJar.shared
     @State private var showTutorial = false
     @Environment(\.openURL) private var openURL
     @Environment(\.requestReview) private var requestReview
@@ -13,14 +12,14 @@ struct MoreView: View {
                 VStack(spacing: 12) {
                     GlassEffectContainer(spacing: 12) {
                         HStack(spacing: 12) {
+                            tile("Qibla", systemImage: "location.north.circle.fill", tint: Palette.highlight) { QiblaView() }
                             tile("Tasbih", systemImage: "circle.hexagongrid.fill", tint: Palette.accent) { TasbihView() }
-                            tile("Prayer Lock", systemImage: "lock.shield.fill", tint: Palette.highlight) { FocusView() }
                         }
                     }
                     GlassEffectContainer(spacing: 12) {
                         HStack(spacing: 12) {
-                            tile("Groups", systemImage: "person.3.fill", tint: Palette.highlight) { GroupsView() }
-                            tile("Qibla", systemImage: "location.north.circle.fill", tint: Palette.accent) { QiblaView() }
+                            tile("Prayer Lock", systemImage: "lock.shield.fill", tint: Palette.highlight) { FocusView() }
+                            tile("Groups", systemImage: "person.3.fill", tint: Palette.accent) { GroupsView() }
                         }
                     }
                     .appearAnimation(0)
@@ -43,12 +42,10 @@ struct MoreView: View {
                     .appearAnimation(1)
 
                     VStack(spacing: 0) {
-                        // Only once the tips have loaded from the App Store, so
-                        // nobody lands on a page with nothing to buy.
-                        if !tipJar.products.isEmpty {
-                            row("Support Niyat", systemImage: "heart.fill") { SupportView() }
-                            Divider().overlay(Palette.hairline).padding(.leading, 56)
-                        }
+                        // Always shown, so App Review can find the tips. If they
+                        // can't load, the page says so instead of listing them.
+                        row("Support Niyat", systemImage: "heart.fill") { SupportView() }
+                        Divider().overlay(Palette.hairline).padding(.leading, 56)
                         row("Send feedback", systemImage: "envelope.fill") { FeedbackView() }
                         Divider().overlay(Palette.hairline).padding(.leading, 56)
                         Button {
@@ -84,7 +81,8 @@ struct MoreView: View {
             }
             .niyatBackground()
             .navigationTitle("More")
-            .task { await tipJar.load() }
+            // Loads the tips early so the Support page opens with them ready.
+            .task { await TipJar.shared.load() }
             .fullScreenCover(isPresented: $showTutorial) { TutorialView() }
         }
     }
@@ -166,6 +164,7 @@ private struct WidgetGuideView: View {
                 HStack(alignment: .top, spacing: 12) {
                     Text("\(index + 1)")
                         .font(.footnote.weight(.heavy))
+                        .fitText()
                         .foregroundStyle(.black)
                         .frame(width: 26, height: 26)
                         .background(Palette.accent, in: .circle)
@@ -211,10 +210,12 @@ struct AboutView: View {
                     credit("English translation", "Translation by Talal Itani, ClearQuran.com. CC BY-ND 4.0.")
                     credit("Surah information", "Tanzil Project metadata. CC BY 3.0.")
                     credit("Quran font", "Amiri Quran by Khaled Hosny and the Amiri Quran Project Authors. SIL Open Font License 1.1.")
+                    credit("Mushaf font", "DigitalKhatt Old Madina by Amine Anane and the DigitalKhatt contributors (github.com/DigitalKhatt). SIL Open Font License 1.1.")
                     credit("Calligraphy font", "Aref Ruqaa by the Aref Ruqaa Project Authors. SIL Open Font License 1.1.")
                     credit("Prayer time calculation", "Adhan by Batoul Apps. MIT License.")
                     credit("Mushaf lines", "Line breaks of the Madinah mushaf from the mushaf-layout project by zonetecde (positions only), checked word by word against the Tanzil text.")
                     credit("Tajweed rules", "Quran Tajweed by Collin Fair. CC BY 4.0.")
+                    credit("Recitation model", "QuranKarim speech-to-text by TheGreatQuran (huggingface.co/TheGreatQuran), CC BY 4.0. Runs on your iPhone.")
                     credit("Recitation audio", "Streamed from the Islamic Network CDN (islamic.network), free for non-commercial use, and EveryAyah.com for Yasser Al-Dosari. Each recitation's copyright stays with its reciter.")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -21,12 +21,22 @@ struct MushafOptions: Codable, Equatable {
         var margin: CGFloat { self == .standard ? 0.04 : 0.02 }
     }
 
+    /// How pages turn: curled like paper, or slid sideways.
+    enum PageTurn: String, Codable, CaseIterable, Identifiable {
+        case curl, slide
+        var id: String { rawValue }
+        var title: String { self == .curl ? "Page curl" : "Slide" }
+    }
+
     var style = MushafStyle.cream
     var textSize = TextSize.standard
     var tapAction = TapAction.actions
     var showTranslation = true
     var followRecitation = true
     var keepScreenOn = false
+    var pageTurn = PageTurn.curl
+    /// Two facing pages when the screen is wide enough.
+    var twoPages = true
 
     // v3: rebuilt on the 15-line Madinah layout, cream paper by default.
     private static let key = "quran.mushafOptions.v3"
@@ -54,6 +64,8 @@ struct MushafOptions: Codable, Equatable {
         showTranslation = value(.showTranslation, d.showTranslation)
         followRecitation = value(.followRecitation, d.followRecitation)
         keepScreenOn = value(.keepScreenOn, d.keepScreenOn)
+        pageTurn = value(.pageTurn, d.pageTurn)
+        twoPages = value(.twoPages, d.twoPages)
     }
 }
 
@@ -132,13 +144,15 @@ struct MushafColors {
                    squeeze: CGFloat = MushafMetrics.stretch.lowerBound) -> QuranTextStyle {
         var style = QuranTextStyle()
         style.fontSize = size
+        style.typeface = MushafMetrics.typeface
         style.ink = ink
         style.marker = marker
         style.tajweed = tajweed
         style.dark = !isLight
         style.highContrast = highContrast
         style.band = band
-        style.currentWord = isLight ? UIColor(white: 0, alpha: 0.10) : UIColor(white: 1, alpha: 0.16)
+        // The word being recited, clear on top of the ayah's band.
+        style.currentWord = isLight ? UIColor(white: 0, alpha: 0.16) : UIColor(white: 1, alpha: 0.24)
         style.placeholder = isLight ? ink.withAlphaComponent(0.10) : ink.withAlphaComponent(0.14)
         style.uncertain = isLight ? UIColor(white: 0.45, alpha: 0.9) : UIColor(white: 0.65, alpha: 0.9)
         style.correct = isLight ? UIColor(red: 0.10, green: 0.62, blue: 0.28, alpha: 0.24)
@@ -147,6 +161,8 @@ struct MushafColors {
                                 : UIColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 1)
         // Words may be squeezed or stretched a little to fill each line, as in print.
         style.stretch = squeeze...MushafMetrics.stretch.upperBound
+        // ...but a space never grows into a gap: past this, the line is centred.
+        style.maxSpaceGrowth = MushafMetrics.maxSpaceGrowth
         style.weight = weight
         return style
     }

@@ -1,5 +1,6 @@
 import StoreKit
 import SwiftUI
+import UIKit
 import UserNotifications
 
 @main
@@ -52,6 +53,9 @@ struct RootView: View {
                 .transition(.opacity)
             }
         }
+        // The athan playing in full, with Stop, over whatever screen is open.
+        .overlay(alignment: .top) { AthanNowPlaying() }
+        .animation(.smooth, value: AthanPlayer.shared.playing)
         // Reading Palette here means the whole app re-tints when the theme changes.
         .tint(Palette.accent)
         .toggleStyle(NiyatToggleStyle())
@@ -61,16 +65,29 @@ struct RootView: View {
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
-            case .active: model.refresh()
+            case .active:
+                model.refresh()
+                if hasOnboarded { Task { await model.followCurrentLocation() } }
             case .background: BackgroundRefresh.schedule()
             default: break
+            }
+        }
+        // Memory is low: let go of Qur'an data that's only kept to be quick.
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+            QuranMemory.releaseCaches()
+        }
+        // Landing after a flight while Niyat is open: re-time alerts and check the location.
+        .task {
+            for await _ in NotificationCenter.default.notifications(named: .NSSystemTimeZoneDidChange) {
+                model.refresh()
+                if hasOnboarded { await model.followCurrentLocation() }
             }
         }
     }
 }
 
 enum AppTab: Hashable {
-    case today, quran, qibla, stats, more
+    case today, quran, hadith, stats, more
 }
 
 struct MainTabView: View {
@@ -81,28 +98,49 @@ struct MainTabView: View {
     @State private var prompter = ReviewPrompter.shared
     @State private var showFeedback = false
     @Environment(\.requestReview) private var requestReview
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         // On iOS 26+ the tab bar is Liquid Glass and shrinks while scrolling.
         TabView(selection: $selection) {
             Tab("Today", systemImage: "sun.horizon.fill", value: .today) { TodayView() }
             Tab("Quran", systemImage: "book.closed.fill", value: .quran) { SurahListView() }
-            Tab("Qibla", systemImage: "location.north.circle.fill", value: .qibla) { QiblaView() }
+            // Qibla lives in More; hadiths get the tab.
+            // ﷺ: hadith are the words of the Prophet ﷺ.
+            Tab(value: .hadith) {
+                NavigationStack { HadithListView() }
+            } label: {
+                Label { Text("Hadith") } icon: { Image(uiImage: SalawatIcon.tab) }
+            }
             Tab("Stats", systemImage: "chart.bar.xaxis", value: .stats) { StatsView() }
             Tab("More", systemImage: "circle.grid.2x2.fill", value: .more) { MoreView() }
         }
         // iPad: tabs at the top that can open into a sidebar.
         .tabViewStyle(.sidebarAdaptable)
+        // Read the hadiths in the background so the Hadith tab opens at once,
+        // a moment after launch so it doesn't compete with the first screen.
+        .task {
+            try? await Task.sleep(for: .seconds(2))
+            await HadithLibrary.shared.load()
+            // The whole athan's parts aren't in backups: make them again if
+            // they're missing (a restored iPhone), then use them in the alerts.
+            if await FullAthanStore.shared.prepareMissing(for: SettingsStore.athan) { model.refresh() }
+        }
         .tabBarMinimizeBehavior(.onScrollDown)
         .haptic(.selection, trigger: selection)
         .onChange(of: deepLink.pending, initial: true) { _, destination in
             if destination?.isQuran == true { selection = .quran }
+            if case .hadith? = destination { selection = .hadith }
         }
         // First launch after onboarding: a quick walkthrough.
         .onAppear {
             if !tutorialSeen { showTutorial = true } else { prompter.appOpened() }
         }
         .fullScreenCover(isPresented: $showTutorial) { TutorialView() }
+        #if SCREEN_TIME
+        // Opening Niyat during a Prayer Lock asks "Have you prayed?" and can unlock.
+        .modifier(PrayerLockPromptModifier())
+        #endif
         // Apple's own rating prompt, a moment after a happy event (see ReviewPrompter).
         .onChange(of: prompter.askForReview) { _, ask in
             guard ask else { return }

@@ -1,6 +1,6 @@
 # Generates Niyat.xcodeproj from project.yml. Needs XcodeGen: `brew install xcodegen`.
 
-.PHONY: setup project full open update verses clean
+.PHONY: setup project full open update verses athan tafsir tafsir-en hadith clean
 
 # First time: finds your team ID, writes Config/Local.xcconfig, opens Xcode.
 setup:
@@ -12,11 +12,15 @@ update:
 	$(MAKE) project
 
 # Free Apple ID: everything except Prayer Lock.
-project:
+# The built-in recitation model (166 MB, not in git).
+model:
+	./scripts/fetch_recitation_model.sh
+
+project: model
 	NIYAT_FULL=false xcodegen generate
 
 # Paid Apple Developer account: adds Prayer Lock (Screen Time) and Time Sensitive alerts.
-full:
+full: model
 	NIYAT_FULL=true xcodegen generate
 
 open:
@@ -24,6 +28,22 @@ open:
 
 verses:
 	python3 scripts/generate_daily_verses.py
+
+# Refresh the bundled tafsirs from Quranpedia (it keeps correcting its texts).
+tafsir:
+	python3 scripts/build_tafsir.py
+
+# Refresh the English Abridged Explanation from QuranEnc (its terms ask for current copies).
+tafsir-en:
+	python3 scripts/build_tafsir_en.py
+
+# Refresh the authentic hadiths from HadeethEnc (Sahih and Hasan only).
+hadith:
+	python3 scripts/build_hadith.py
+
+# Rebuild the athan alert sounds from Aladhan's recordings (needs ffmpeg).
+athan:
+	./scripts/make_athan_sounds.sh
 
 clean:
 	rm -rf Niyat.xcodeproj build DerivedData

@@ -24,3 +24,6 @@ __pycache__/
 
 # CI demo output
 demo/
+
+# The built-in recitation model (166 MB): fetched by `make model`
+Niyat/Resources/RecitationModel/

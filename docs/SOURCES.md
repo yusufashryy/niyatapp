@@ -30,6 +30,8 @@ Tanzil's Qur'an metadata (in `chapters.json`, same CC BY 3.0 source) gives where
 
 Four slips in the source layout are corrected by the script, each checked against the rules above: a missing title and Bismillah line on pages 586 and 590, a title placed at the top of page 207 instead of the bottom, and 19 title lines labelled with the wrong surah.
 
+**Surah headings.** Each surah's heading is Niyat's own vector drawing (`SurahFrameArt.swift`), laid out after the printed Madinah mushaf: an arabesque band, the title in a cartouche, and medallions giving the surah's number (ترتيبها) and count of ayat (آياتها) from `chapters.json`. No artwork is copied. The titles with their harakat («سُورَةُ البَقَرَةِ») are AlQuran Cloud's surah names (Islamic Network, [api.alquran.cloud/v1/surah](https://api.alquran.cloud/v1/surah), fetched 4 November 2026), kept exactly as published in `Niyat/Resources/Quran/surah-titles.json` (SHA-256 `841256fe…1600b`). Its [terms](https://alquran.cloud/terms-and-conditions) allow bundling with an acknowledgement, given in CREDITS.md. Their ayah counts were checked against `chapters.json` for all 114 surahs. The surah-name and heading fonts on the Quranic Universal Library were not used: their pages say "We don't have copyright information for this resource".
+
 Niyat does **not** bundle the printed page images: the King Fahd Complex scans are copyrighted. Each line is drawn by the app from the verified text in the Amiri Quran font, stretched to the full width like print (words may be widened or narrowed by up to 10%, then the spaces between them grow). Pages are for the Uthmani script (Hafs), and the "fewer marks" Uthmani text, which has exactly the same words (tested). With another script or riwayah selected, the pages say so and offer to switch rather than placing a different text on Hafs lines.
 
 ## Translation
@@ -55,7 +57,36 @@ Notes on the chosen source:
 - **Missing files:** Husary, Minshawi and Basfar's collections are missing one verse file each on the CDN. The player skips a missing verse rather than stopping.
 - **Caching:** audio currently streams. A future "download surah for offline" option could cache files locally; the licence allows it for non-commercial use.
 
+## Athan audio
+
+Six recordings from [Aladhan's Download Adhans page](https://aladhan.com/download-adhans) (Islamic Network, the same people as the recitation CDN): Mishary Rashid Alafasy (three recordings: `a9`, `a7`, and `a4` from Dubai One TV), Ahmad al-Nafees (`a1`), Hafiz Mustafa Özcan (`a2`) and Mansour Al-Zahrani (`a11`). Not used: the athan from Karl Jenkins' *The Armed Man: A Mass for Peace* (`a3`), which is part of his copyrighted work.
+
+**Permission.** Islamic Network's admin (gokboru, Admin and Staff on community.islamic.network) answered two developers of free prayer apps in July 2026: bundling the athans in the app is allowed, attribution isn't required, and there are no restrictions for a free app ([thread 255](https://community.islamic.network/d/255-permission-to-bundle-an-adhan-audio-file-in-our-android-app-nurafiq), [thread 256](https://community.islamic.network/d/256-audio-licensing-query-for-azan-pro-app)). The second reply also says copyright belongs to the muezzins. To do: ask Islamic Network for written confirmation naming Niyat (mention that `a4` comes from a TV broadcast). If a muezzin or rights holder objects, remove that case from `Muezzin`.
+
+**How they're used.**
+- *Alert sound:* iOS plays a notification sound for at most 30 seconds, so `scripts/make_athan_sounds.sh` (`make athan`) cuts each athan's opening, from where the muezzin begins (after any intro) to the breathing pause before 30 seconds, and writes it to `Niyat/Resources/Athan` (IMA4 .caf, 13–26 s, 2.5 MB in all). The start times were found from each recording's loudness and pauses.
+- *Full athan:* opening the alert (or having Niyat open when it comes) streams the whole recording from `cdn.aladhan.com`, starting where the muezzin begins. Without internet, the bundled opening plays.
+- Only the alert when a prayer begins plays the athan; the reminders before and after, and sunrise, keep the standard sound. Fajr can have its own muezzin.
+
+Wikimedia Commons' freely licensed recordings (CC0 and CC BY-SA) were considered and not used: the owner judged their quality too low. Recordings from the Haram in Makkah and the Prophet's Mosque that other sites label "public domain" were not used: those labels come from the uploaders, not the rights holders.
+
+## Tafsir
+
+**English: The Abridged Explanation of the Quran** (al-Mukhtasar fi Tafsir al-Qur'an al-Karim, Tafsir Center for Quranic Studies), English translation as served by [QuranEnc.com](https://quranenc.com) (the Encyclopedia of the Noble Qur'an, Rowwad Translation Center) through its public API as `english_mokhtasar`. It is the sheet's default. `scripts/build_tafsir_en.py` (`make tafsir-en`) fetches all 114 surahs, checks that every one of the 6,236 ayat has an explanation, and writes `Niyat/Resources/Tafsir/mukhtasar-en.tafsir` (0.55 MB) with the fetch date as its version. **Licence:** QuranEnc's published terms let its contents be downloaded and republished without asking, provided the text isn't modified, QuranEnc.com is named as the source with the version, and copies are kept up to date: the text is stored exactly as served (the sheet only hides the leading ayah number, which it already shows) and is credited in the sheet and CREDITS.md. Note: at the time of fetching, this English edition is served by the API but not listed on QuranEnc's English browse page; re-run `make tafsir-en` before each release, and if it disappears from the API, remove `TafsirBook.abridgedEnglish`.
+
+**Arabic.** Two classical tafsirs in Arabic, bundled and offline, shown from an ayah's Tafsir button in the reader and the mushaf (Hafs only: both follow its numbering of the ayat).
+- **Tafsir al-Jalalayn** (al-Mahalli and al-Suyuti), Dar al-Hadith, Cairo, 1422 AH / 2001: [Quranpedia](https://quranpedia.net) `tafsir-book-272.json.gz` (SHA-256 `20be5cc1…f3af5`).
+- **Tafsir al-Qur'an al-'Azim** (Ibn Kathir), ed. Sami Salama, Dar Taybah, 1420 AH: Quranpedia `tafsir-book-136.json.gz` (SHA-256 `26749df0…4f230`).
+
+**Licence.** Quranpedia's data licence (version 2026-08-10, in every file and at [quranpedia.net/dumps/LICENSE.md](https://quranpedia.net/dumps/LICENSE.md)): the classical tafsirs are the ummah's shared heritage; the digitisation is Quranpedia's work; use "inside apps, websites, and research tools" is free with no attribution required (Niyat credits it anyway, in the sheet and CREDITS.md). Republishing the data as a downloadable dataset needs credit and the version. Translations and contemporary works stay with their owners, so they aren't used.
+
+**How they're made.** `scripts/build_tafsir.py` (`make tafsir`) downloads both files, checks them against Quranpedia's manifest checksums, and writes `Niyat/Resources/Tafsir/jalalayn.tafsir` and `ibn-kathir.tafsir` (raw-DEFLATE-compressed JSON, 0.7 MB and 6.6 MB). The commentators' words are kept as published; only the HTML becomes plain paragraphs. Left out, because they're the modern editor's work, not Ibn Kathir's: the editor's footnotes and their «(١)» markers, the editor's study (the data's "volume 0"), and Ibn Kathir's own introduction, which the data files under An-Nas 6 rather than any ayah. Commentators often explain several ayat together: an entry covers its ayah up to the next entry's, and the sheet says so ("On ayat 5–6"). The tests check that Ibn Kathir covers all 6,236 ayat and Jalalayn all but 1:1 (it explains the Basmala of Al-Fatiha with the next ayah), that entries never overlap, and that no footnote markers or markup are left.
+
+**Keeping current.** Quranpedia corrects its texts over time and asks that copies be kept current (`/api/v1/changes?since=<version>`). Run `make tafsir` before a release; the sheet shows the version.
+
 ## Hadith
+
+**The Hadith tab** carries the English hadiths of [HadeethEnc.com](https://hadeethenc.com), the Encyclopedia of Translated Prophetic Hadiths (the same centre as QuranEnc): frequently cited hadiths chosen, graded, translated and explained by its scholars, each with who recorded it (Bukhari, Muslim, …), its grade, an explanation and lessons, filed by topic. `scripts/build_hadith.py` (`make hadith`) downloads every English hadith from its public developer API and keeps only those the grading scholar's Arabic verdict calls Sahih (صحيح) or Hasan (حسن), the two grades accepted as proof. Left out, to stay on the safe side: anything mentioning weakness (ضعيف); sayings of Companions rather than of the Prophet ﷺ (موقوف, الآثار); hadiths authentic only "except" a part (دون …); and notes that aren't a verdict (no grading found, a grading only relayed, or a comment on the narrators). Fetched 9 November 2026: 2,315 hadiths kept (2,141 Sahih, 174 Hasan), 13 left out; the script prints each one left out and why. Text, translation and explanation are kept exactly as published. Situations ("Anger", "Debt", …) are Niyat's own search words over that text; they add no wording. **Licence:** HadeethEnc states its aim is to provide the translations "for free through all available means" and offers a public API; it publishes no other terms. Niyat credits it on every hadith and share card. If HadeethEnc ever objects, remove `Niyat/Resources/Hadith/hadith-en.hadith` and the Hadith tab.
 
 - **Recitation reward estimate:** Jami' at-Tirmidhi 2910 (Abdullah ibn Mas'ud), shown as an English paraphrase and linked to [sunnah.com/tirmidhi:2910](https://sunnah.com/tirmidhi:2910) rather than quoting Arabic wording in the app.
 - **"Actions are judged by intentions":** the opening words of the famous hadith (Bukhari 1, Muslim 1907) in the More tab.
@@ -87,6 +118,14 @@ The microphone button in the reader and on the mushaf pages listens while you re
 
 Tested with the tracker's scenarios (following along, starting mid-ayah, skipping, repeating, pausing, restarting an ayah, unrelated speech) and, while building it, by reciting the whole Qur'an's Imla'i text through it: no word marked as a mistake. See `docs/research/recitation-checker.md`.
 
+## The built-in recitation model
+
+For Hafs, finding and following a recitation uses **QuranKarim** ([TheGreatQuran/QuranKarim-SpeechToText-onnxModel](https://huggingface.co/TheGreatQuran/QuranKarim-SpeechToText-onnxModel), CC BY 4.0), an NVIDIA FastConformer model fine-tuned on Qur'an recitation. The 8-bit file (`qurankarim-fastconformer-q8.onnx`, 166 MB) is bundled with the app (`make model` fetches it; it isn't in git) and runs on the iPhone with ONNX Runtime. Nothing is sent anywhere.
+
+- **What it's used for:** writing down what was recited, to find the place (anywhere in the Qur'an) and follow it. It doesn't judge recitation: its spelling is too loose for that (`docs/research/asr-eval-qurankarim.md` on `research/asr-eval`).
+- **Finding a place** (`QuranLocator`, `QuranLetterSearch`, `FindConfirmation`): matching pairs of whole words is trusted at once (never wrong on the 726 test recordings); otherwise a looser letter-by-letter search must name the same ayah twice. On the model's transcripts of 564 professional recordings, the word pairs alone found the right ayah 73% of the time with no wrong answers, and the letter search 88%.
+- **Warsh and Qalun** use Apple's speech recognition, which the model wasn't trained on.
+
 ## Word-by-word highlighting of the reciter
 
 The recitation audio (Islamic Network, EveryAyah) comes with no word timings. The best published timings ([quran-align](https://github.com/cpfair/quran-align), CC BY 4.0) were made for other copies of these recordings, so they can't be trusted to match Niyat's files. Instead, each ayah's recording is aligned on the iPhone: Apple's on-device speech recognition transcribes the reciter with the time of each word, and the recognised words are matched to the verified text by the same aligner as live recitation. Only words clearly recognised are placed; words between them share the time in between by their number of letters. An ayah is followed word by word only when at least 60% of its words were placed and in order; otherwise the whole ayah is highlighted as before. Results (the start time of each word) are cached on the device; the audio isn't kept. Settings › Qur'an › Follow the reciter word by word turns it off.
@@ -101,3 +140,16 @@ Its published file points into a 2017 copy of the Tanzil text whose encoding dif
 - 32 verses: 34 "madd, 2 counts" marks from the published file are not produced, and one extra "madd lazim" mark is.
 
 The tests check every hamzat al-wasl, lam shamsiyyah and qalqalah mark lands on the right letter. Colours are shown only with the Uthmani script (Hafs), the text they were made for. Each rule has a colour for light paper and a brighter one for dark pages; with Increase Contrast on (iOS Settings › Accessibility), both are made 30% deeper or brighter.
+
+### Waqf and sajdah signs
+
+`reading-signs.json` contains word positions of the six Madinah waqf marks,
+the brief-pause (saktah) mark, and 15 sajdah signs for each Hafs script. These
+are separate display annotations; the original text/translation files are unchanged.
+Source: [Tanzil Uthmani/Uthmani Minimal/Simple XML downloads](https://tanzil.net/pub/download/index.php),
+version 1.1, with pause marks and sajdah enabled, retrieved 2026-10-06.
+See [Tanzil's pause-mark reference](https://tanzil.net/docs/pause_marks).
+`scripts/generate_reading_signs.py` verifies all 6,236 verses per edition against
+the bundled source before extracting positions. Warsh and Qalun retain their own
+source signs without adding Hafs annotations. Data SHA-256:
+`d916800d4a978c0b19bc8db49276d5e82c0dd7b6fc018640d8d34c31ec1665dd`.

@@ -30,7 +30,7 @@ struct TutorialPrayerSetup: View {
                     }
                 } label: {
                     HStack(spacing: 4) {
-                        Text(model.prayerSettings.method.title).lineLimit(1)
+                        Text(model.prayerSettings.method.title).lineLimit(1).minimumScaleFactor(0.75)
                         Image(systemName: "chevron.up.chevron.down").font(.caption)
                     }
                     .font(.subheadline.weight(.semibold))

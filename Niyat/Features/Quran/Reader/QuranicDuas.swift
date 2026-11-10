@@ -124,6 +124,7 @@ struct QuranicDuasView: View {
     @State private var store = QuranStore.shared
     @State private var player = RecitationPlayer.shared
     @State private var category: QuranicDua.Category?
+    @State private var sharing: QuranShareContent?
     let onOpen: (VerseReference) -> Void
 
     var body: some View {
@@ -145,7 +146,8 @@ struct QuranicDuasView: View {
                         .padding(.top, 6)
                     ForEach(group.duas) { dua in
                         DuaCard(dua: dua, canPlay: store.edition.riwayah.hasVerseAudio,
-                                onPlay: { play(dua) }, onOpen: { onOpen(VerseReference(surah: dua.surah, verse: dua.verses.lowerBound)) })
+                                onPlay: { play(dua) }, onShare: { sharing = $0 },
+                                onOpen: { onOpen(VerseReference(surah: dua.surah, verse: dua.verses.lowerBound)) })
                     }
                 }
 
@@ -164,6 +166,7 @@ struct QuranicDuasView: View {
             RecitationMiniPlayer().padding(.bottom, 6)
         }
         .haptic(.selection, trigger: category)
+        .sheet(item: $sharing) { QuranShareSheet(content: $0) }
         .task { await store.load() }
     }
 
@@ -171,6 +174,7 @@ struct QuranicDuasView: View {
         Button(action: { withAnimation(.smooth) { action() } }) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
+                .badgeText()
                 .padding(.horizontal, 14).padding(.vertical, 8)
                 .foregroundStyle(selected ? .black : .white)
                 .background(selected ? Palette.control : Color.white.opacity(0.08), in: .capsule)
@@ -188,6 +192,7 @@ private struct DuaCard: View {
     let dua: QuranicDua
     let canPlay: Bool
     let onPlay: () -> Void
+    let onShare: (QuranShareContent) -> Void
     let onOpen: () -> Void
     @State private var store = QuranStore.shared
 
@@ -208,6 +213,11 @@ private struct DuaCard: View {
                     .buttonStyle(.pressable)
                     .accessibilityLabel("Listen")
                 }
+                Button { onShare(.dua(dua, verses: unique)) } label: {
+                    Image(systemName: "square.and.arrow.up").frame(width: 32, height: 32)
+                }
+                .buttonStyle(.pressable)
+                .accessibilityLabel("Share \(dua.title)")
             }
             Text(unique.map(\.arabic).joined(separator: " "))
                 .font(.quran(size: 24))
@@ -231,6 +241,7 @@ private struct DuaCard: View {
         .padding(16)
         .surface(cornerRadius: 20)
         .contextMenu {
+            Button("Share", systemImage: "square.and.arrow.up") { onShare(.dua(dua, verses: unique)) }
             Button("Copy", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = "\(unique.map(\.arabic).joined(separator: " "))\n\n\(unique.map(\.translation).joined(separator: " "))\n— Qur'an \(dua.reference)"
             }

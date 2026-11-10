@@ -30,6 +30,9 @@ struct MushafPageText {
 
     private static var cache: [String: MushafPageText] = [:]
 
+    /// Forgets the laid-out pages (memory is low); they're rebuilt as they're shown.
+    static func removeAll() { cache.removeAll() }
+
     /// The page in the current reading, or nil until the text and layout are loaded.
     static func page(_ number: Int) -> MushafPageText? {
         let store = QuranStore.shared
@@ -67,7 +70,7 @@ struct MushafPageText {
         }
         let widths = rows.map { row -> CGFloat in
             guard case .text(let pieces) = row else { return 0 }
-            return QuranTextCanvas.naturalWidth(of: pieces, fontSize: 100) / 100
+            return QuranTextCanvas.naturalWidth(of: pieces, fontSize: 100, typeface: MushafMetrics.typeface) / 100
         }
         let surah = wordsBySurah.max { $0.value < $1.value }?.key ?? layout.firstWord(onPage: number)?.surah ?? 1
         let start = verses.first ?? VerseKey(surah: surah, verse: 1)
@@ -102,20 +105,37 @@ struct MushafPageText {
 
 /// Sizes for a mushaf page on this screen.
 enum MushafMetrics {
+    /// Mushaf pages are drawn in the Madinah mushaf's calligraphy.
+    static let typeface = QuranTypeface.oldMadina
     /// Surah and part labels above the lines.
     static let headerHeight: CGFloat = 30
     /// Page number below the lines.
     static let footerHeight: CGFloat = 26
     /// The widest line of a typical page, in multiples of the font size (the
-    /// 90th percentile of all 8,807 lines, measured with the bundled Amiri
-    /// Quran font). Keeps the text the same size on most pages.
-    static let typicalLineWidth: CGFloat = 19.5
+    /// 90th percentile of all 8,820 lines, measured with DigitalKhatt Old
+    /// Madina; Amiri needed 19.5). Keeps the text the same size on most pages.
+    static let typicalLineWidth: CGFloat = 17.5
     /// How much a line's words may be squeezed or stretched to fill it.
     static let stretch: ClosedRange<CGFloat> = 0.96...1.1
     /// Lines on a full page.
     static let lineCount = 15
     /// Widest a page gets, as a share of its height (about a printed mushaf).
     static let pageShape: CGFloat = 0.72
+
+    /// A line whose words fill less than this share of the width is centred
+    /// instead of stretched: stretching it would leave wide gaps between the
+    /// words (the last lines of short surahs, such as An-Nas).
+    static let centreBelow: CGFloat = 0.78
+    /// The most a space between words may grow on a justified line, as a
+    /// multiple of the font size (a normal space is about a quarter of it).
+    static let maxSpaceGrowth: CGFloat = 0.3
+
+    /// Whether a line of this natural width (at font size 1) is centred
+    /// rather than justified, at this font size and line width.
+    static func isShortLine(naturalWidth: CGFloat, fontSize: CGFloat, width: CGFloat) -> Bool {
+        guard naturalWidth > 0, width > 0 else { return false }
+        return naturalWidth * fontSize < width * centreBelow
+    }
 
     static func margin(for width: CGFloat, share: CGFloat = 0.04) -> CGFloat {
         max(8, (width * share).rounded())

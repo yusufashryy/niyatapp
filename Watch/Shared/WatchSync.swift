@@ -4,9 +4,10 @@ import WidgetKit
 
 /// Keeps the Apple Watch in step with the iPhone. Compiled into both apps.
 ///
-/// - iPhone → watch: the location, calculation settings and the last week of
-///   the prayer log (the watch works out prayer times itself, so it's right
-///   even when the iPhone isn't nearby).
+/// - iPhone → watch: the location, calculation and alert settings, the last
+///   week of the prayer log and the Qur'an goal's recent days (the watch works
+///   out prayer times and schedules its alerts itself, so it's right even when
+///   the iPhone isn't nearby).
 /// - Watch → iPhone: prayers logged on the wrist.
 final class WatchSync: NSObject, WCSessionDelegate {
     static let shared = WatchSync()
@@ -18,6 +19,13 @@ final class WatchSync: NSObject, WCSessionDelegate {
         static let location = "location"
         static let settings = "prayerSettings"
         static let records = "records"
+        static let notifications = "notificationSettings"
+        static let quranDays = "quranDays"
+        static let quranGoal = "quranGoal"
+        static let hijriAdjustment = "hijriAdjustment"
+        static let theme = "theme"
+        static let themeAccent = "themeAccent"
+        static let themeHighlight = "themeHighlight"
         static let log = "log"
         static let day = "day"
     }
@@ -48,6 +56,16 @@ final class WatchSync: NSObject, WCSessionDelegate {
             recentDays.contains(String(key.prefix { $0 != "|" }))
         }
         if let data = try? encoder.encode(recent) { context[Key.records] = data }
+        // Which alerts to show on the wrist, and the Qur'an goal (60 days covers the streak).
+        if let data = try? encoder.encode(SettingsStore.notificationSettings) { context[Key.notifications] = data }
+        if let data = try? encoder.encode(QuranProgress.recent(days: 60)) { context[Key.quranDays] = data }
+        context[Key.quranGoal] = QuranProgress.dailyGoal ?? 0
+        context[Key.hijriAdjustment] = SettingsStore.hijriAdjustment
+        // The watch draws in the same theme as the iPhone.
+        let theme = ThemeManager.shared
+        context[Key.theme] = theme.selectedID
+        if let data = try? encoder.encode(theme.customAccent) { context[Key.themeAccent] = data }
+        if let data = try? encoder.encode(theme.customHighlight) { context[Key.themeHighlight] = data }
         try? session.updateApplicationContext(context)
     }
 
@@ -98,6 +116,27 @@ final class WatchSync: NSObject, WCSessionDelegate {
            let recent = try? decoder.decode([String: PrayerRecord].self, from: data) {
             // The iPhone is the record keeper; keep anything logged here meanwhile.
             PrayerLog.save(PrayerLog.load().merging(recent) { _, phone in phone })
+        }
+        if let data = context[Key.notifications] as? Data,
+           let settings = try? decoder.decode(NotificationSettings.self, from: data) {
+            SettingsStore.notificationSettings = settings
+        }
+        if let data = context[Key.quranDays] as? Data, let days = try? decoder.decode([String: QuranDay].self, from: data) {
+            let goal = context[Key.quranGoal] as? Int ?? 0
+            QuranProgress.merge(days, goal: goal > 0 ? goal : nil)
+        }
+        if let days = context[Key.hijriAdjustment] as? Int { SettingsStore.hijriAdjustment = days }
+        if let id = context[Key.theme] as? String {
+            let accent = (context[Key.themeAccent] as? Data).flatMap { try? decoder.decode(ThemeColor.self, from: $0) }
+            let highlight = (context[Key.themeHighlight] as? Data).flatMap { try? decoder.decode(ThemeColor.self, from: $0) }
+            DispatchQueue.main.async {
+                let theme = ThemeManager.shared
+                if id == "custom", let accent, let highlight {
+                    theme.setCustom(accent: accent, highlight: highlight)
+                } else if theme.selectedID != id {
+                    theme.select(id)
+                }
+            }
         }
         WidgetCenter.shared.reloadAllTimelines()
         DispatchQueue.main.async { NotificationCenter.default.post(name: WatchSync.changed, object: nil) }
