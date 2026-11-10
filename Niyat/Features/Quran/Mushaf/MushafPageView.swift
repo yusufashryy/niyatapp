@@ -32,6 +32,8 @@ struct MushafPageView: View {
     @State private var showJump = false
     @State private var tafsirTarget: TafsirTarget?
     @State private var sharing: QuranShareContent?
+    /// The verse whose bookmark sheet is open.
+    @State private var bookmarking: VerseReference?
     @State private var showOptions = false
     @State private var showIntro = false
     /// First page of the text live recitation is following.
@@ -105,7 +107,7 @@ struct MushafPageView: View {
                                    hasRibbon: store.hasRibbon(selected),
                                    onPlayFromHere: { play(from: selected) },
                                    onPlayVerse: { play(from: selected, only: true) },
-                                   onRibbon: { withAnimation(.smooth) { store.toggleRibbon(selected) } },
+                                   onRibbon: { bookmarking = selected.hafsReference },
                                    onSave: { store.toggleBookmark(selected) },
                                    onTafsir: store.edition.riwayah == .hafs
                                        ? { tafsirTarget = TafsirTarget(surah: selected.surah, ayah: selected.number) } : nil,
@@ -165,6 +167,7 @@ struct MushafPageView: View {
         .sheet(isPresented: $showJump) { MushafJumpSheet(page: jumpBinding).preferredColorScheme(.dark) }
         .sheet(item: $tafsirTarget) { TafsirSheet(surah: $0.surah, ayah: $0.ayah).preferredColorScheme(.dark) }
         .sheet(item: $sharing) { QuranShareSheet(content: $0).preferredColorScheme(.dark) }
+        .sheet(item: $bookmarking) { BookmarkSheet(reference: $0).preferredColorScheme(.dark) }
         .sheet(isPresented: $showOptions) { MushafOptionsSheet(options: $options).preferredColorScheme(.dark) }
         .sheet(isPresented: $showIntro) {
             ReciteIntroSheet(edition: store.edition) { startListening() }
@@ -305,8 +308,7 @@ struct MushafPageView: View {
         MushafPage(number: number, isCurrent: isShowing(number, spread: spread), colors: colors, tajweed: showsTajweed,
                    highContrast: contrast == .increased, textSize: options.textSize,
                    weight: (QuranTextWeight(rawValue: textWeight) ?? .regular).stroke,
-                   hasRibbon: number == store.ribbonPage, hasDailyMark: number == store.dailyMarkPage,
-                   placement: placement,
+                   hasRibbon: number == store.ribbonPage, placement: placement,
                    onZoomChange: { isZoomed = $0 },
                    onPageNumber: { pageNumberTapped() },
                    onTap: { word, row in tapped(word, row: row) })

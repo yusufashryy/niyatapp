@@ -37,7 +37,7 @@ struct TutorialView: View {
             TutorialPage(icon: "book.closed.fill", title: "Qur'an",
                          subtitle: "Read a little every day.",
                          points: [
-                             TutorialPoint("target", "Set a daily goal in ayat, then tap Read: one ayah at a time, with its juz, page, recitation and tafsir. An ayah counts when you tap Next, or hear it to the end. Its green bookmark keeps your place; the pencil moves it."),
+                             TutorialPoint("target", "Set a daily goal in ayat, then tap Read: one ayah at a time, with its juz, page, recitation and tafsir. An ayah counts when you tap Next, or hear it to the end. It keeps its own place; the pencil searches for where to read."),
                              TutorialPoint("speaker.wave.2.fill", "Tap the speaker on any verse to hear it, or play to recite on. The text follows the reciter word by word."),
                              TutorialPoint("mic.fill", "Tap the mic and recite: Niyat follows you word by word and marks words to double-check. The eye next to it hides the text so you can recite from memory."),
                              TutorialPoint("book.pages.fill", "The book icon opens the mushaf: the 604 pages of the Madinah mushaf, line for line. Swipe right-to-left like a printed copy."),

@@ -76,7 +76,8 @@ final class QuranStore {
     /// The reader just took the ribbon out: reading on doesn't put it back
     /// until they close this surah or mushaf (see `resumeRibbon`).
     @ObservationIgnored private var ribbonPaused = false
-    /// Where the daily reader is: its own green bookmark, apart from the ribbon.
+    /// Where the daily reader is: its own place, apart from the ribbon (not
+    /// shown in the reader; the daily reader's search moves it).
     private(set) var dailyMark: VerseReference?
     /// Saved verses: a list you keep, apart from the ribbon.
     private(set) var bookmarks: [VerseReference]
@@ -190,7 +191,7 @@ final class QuranStore {
         return verse.hafsNumbers.contains(ribbon.verse)
     }
 
-    /// Moves the daily reader's bookmark to a verse (reading on, or chosen with the pencil).
+    /// Moves the daily reader's place to a verse (reading on, or chosen with its search).
     func setDailyMark(to verse: Verse) {
         let reference = verse.hafsReference
         guard reference != dailyMark else { return }
@@ -198,22 +199,11 @@ final class QuranStore {
         UserDefaults.standard.setEncoded(reference, forKey: DailyReading.markKey)
     }
 
-    func hasDailyMark(_ verse: Verse) -> Bool {
-        guard let dailyMark, dailyMark.surah == verse.surah else { return false }
-        return verse.hafsNumbers.contains(dailyMark.verse)
-    }
-
-    /// The daily bookmark as a place in the shown reading's numbering.
+    /// The daily reader's place in the shown reading's numbering.
     var dailyPlace: DailyPlace? {
         guard let dailyMark else { return nil }
         guard let verse = verse(dailyMark) else { return DailyPlace(surah: dailyMark.surah, verse: dailyMark.verse) }
         return DailyPlace(surah: verse.surah, verse: verse.number)
-    }
-
-    /// The mushaf page the daily bookmark lies in, once the page index is loaded.
-    var dailyMarkPage: Int? {
-        guard let dailyMark, !pageStarts.isEmpty else { return nil }
-        return page(containing: dailyMark)
     }
 
     /// The mushaf page the ribbon lies in, once the page index is loaded.

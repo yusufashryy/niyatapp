@@ -18,6 +18,8 @@ struct SurahListView: View {
     @State private var showMushaf = false
     @State private var showNotifications = false
     @State private var showFinder = false
+    @State private var verseBookmarks = VerseBookmarkStore.shared
+    @State private var editingBookmark: VerseBookmark?
     /// Counts places found by reciting, so finding the verse that's already
     /// open still opens it afresh and starts following.
     @State private var foundCount = 0
@@ -40,6 +42,7 @@ struct SurahListView: View {
                 }
             }
             .niyatBackground()
+            .sheet(item: $editingBookmark) { BookmarkSheet(reference: $0.verse, editing: $0) }
             .sheet(isPresented: $showFinder) {
                 FindByRecitingSheet { place in
                     RecitationHandoff.pending = place
@@ -133,14 +136,8 @@ struct SurahListView: View {
     }
 
     private var filteredSurahs: [Surah] {
-        let query = searchText.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return store.surahs }
-        if let number = Int(query) { return store.surahs.filter { $0.id == number } }
-        return store.surahs.filter {
-            $0.transliteration.localizedCaseInsensitiveContains(query)
-                || $0.translation.localizedCaseInsensitiveContains(query)
-                || $0.name.contains(query)
-        }
+        let found = Set(SurahSearch.matches(store.surahs.map(SurahSearch.Entry.init), query: searchText).map(\.id))
+        return store.surahs.filter { found.contains($0.id) }
     }
 
     private var list: some View {
@@ -214,6 +211,27 @@ struct SurahListView: View {
                         }
                     }
                     .scrollClipDisabled()
+                }
+
+                // Special bookmarks, with their notes: the newest few.
+                if searchText.isEmpty, !verseBookmarks.all.isEmpty {
+                    HStack {
+                        Text("Bookmarks").sectionLabelStyle()
+                        Spacer()
+                        if verseBookmarks.all.count > 3 {
+                            NavigationLink {
+                                BookmarksListView { open(ReaderDestination(surah: $0.surah, verse: $0.verse)) }
+                            } label: {
+                                Text("See all \(verseBookmarks.all.count)").font(.subheadline.weight(.semibold))
+                            }
+                        }
+                    }
+                    .padding(.top, 8)
+                    ForEach(verseBookmarks.all.prefix(3)) { bookmark in
+                        BookmarkListItem(bookmark: bookmark,
+                                         onOpen: { open(ReaderDestination(surah: $0.surah, verse: $0.verse)) },
+                                         onEdit: { editingBookmark = bookmark })
+                    }
                 }
 
                 Text("Surahs").sectionLabelStyle().padding(.top, 8)

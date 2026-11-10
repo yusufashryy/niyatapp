@@ -33,6 +33,9 @@ struct SurahReaderView: View {
     @State private var showSettings = false
     @State private var tafsirTarget: TafsirTarget?
     @State private var sharing: QuranShareContent?
+    /// The verse whose bookmark sheet is open.
+    @State private var bookmarking: VerseReference?
+    @State private var verseBookmarks = VerseBookmarkStore.shared
     @State private var showGoal = false
     @State private var showIntro = false
     /// Verses currently on screen, for counting what's actually read.
@@ -78,13 +81,13 @@ struct SurahReaderView: View {
                                   showTranslation: showTranslation,
                                   isSaved: store.isBookmarked(verse),
                                   hasRibbon: store.hasRibbon(verse),
-                                  hasDailyMark: store.hasDailyMark(verse),
+                                  bookmarks: verseBookmarks.on(verse),
                                   isReciting: player.current == .verse(surah: surahID, verse: verse.number)
                                       || isRecitedByYou(verse),
                                   showsPlay: audioAvailable,
                                   onPlay: { play(from: verse.number) },
                                   onPlaceRibbon: { withAnimation(.smooth) { store.toggleRibbon(verse) } },
-                                  onReadDailyHere: { withAnimation(.smooth) { store.setDailyMark(to: verse) } },
+                                  onBookmark: { bookmarking = verse.hafsReference },
                                   onShare: { sharing = .verse(verse) },
                                   // The tafsirs follow Hafs's numbering of the ayat.
                                   onTafsir: store.edition.riwayah == .hafs
@@ -208,6 +211,7 @@ struct SurahReaderView: View {
         .sheet(isPresented: $showSettings) { QuranSettingsView() }
         .sheet(item: $tafsirTarget) { TafsirSheet(surah: $0.surah, ayah: $0.ayah) }
         .sheet(item: $sharing) { QuranShareSheet(content: $0) }
+        .sheet(item: $bookmarking) { BookmarkSheet(reference: $0) }
         .sheet(isPresented: $showGoal) { QuranGoalSheet() }
         .sheet(isPresented: $showIntro) {
             ReciteIntroSheet(edition: store.edition) { startListening() }
@@ -446,13 +450,14 @@ private struct VerseCard: View {
     let showTranslation: Bool
     let isSaved: Bool
     let hasRibbon: Bool
-    /// The daily reader's green bookmark is on this verse.
-    let hasDailyMark: Bool
+    /// Your special bookmarks on this verse.
+    let bookmarks: [VerseBookmark]
     let isReciting: Bool
     let showsPlay: Bool
     let onPlay: () -> Void
     let onPlaceRibbon: () -> Void
-    let onReadDailyHere: () -> Void
+    /// Opens the bookmark sheet: Continue reading, or a special bookmark.
+    let onBookmark: () -> Void
     let onShare: () -> Void
     /// Nil where there's no tafsir to show (Warsh and Qalun number the ayat differently).
     let onTafsir: (() -> Void)?
@@ -460,10 +465,6 @@ private struct VerseCard: View {
 
     /// The ribbon's width plus a little room either side.
     private static let ribbonGap: CGFloat = 24
-    /// Both ribbons (red and green) side by side.
-    private static let twoRibbonGap: CGFloat = 44
-
-    private var gap: CGFloat { hasRibbon && hasDailyMark ? Self.twoRibbonGap : Self.ribbonGap }
 
     @ViewBuilder
     private var actionButtons: some View {
@@ -487,17 +488,18 @@ private struct VerseCard: View {
             .buttonStyle(.pressable)
             .accessibilityLabel("Tafsir of verse \(verse.number)")
         }
-        // One tap puts your ribbon here (it stays until you read on past it).
-        Button(action: onPlaceRibbon) {
-            Image(systemName: hasRibbon ? "bookmark.fill" : "bookmark")
+        // Continue reading (the ribbon), or a special bookmark with a note.
+        Button(action: onBookmark) {
+            Image(systemName: hasRibbon || !bookmarks.isEmpty ? "bookmark.fill" : "bookmark")
                 .font(.subheadline)
-                .foregroundStyle(hasRibbon ? Color(QuranTextStyle.ribbonRed) : Color.secondary)
+                .foregroundStyle(bookmarkTint)
                 .contentTransition(.symbolEffect(.replace))
                 .frame(minWidth: 26, maxWidth: 30, minHeight: 32)
         }
         .buttonStyle(.pressable)
         .haptic(.impact(weight: .light), trigger: hasRibbon)
-        .accessibilityLabel(hasRibbon ? "Remove the ribbon" : "Move the ribbon here")
+        .accessibilityLabel("Bookmark")
+        .accessibilityValue(hasRibbon ? "Your ribbon is here" : bookmarks.isEmpty ? "" : "\(bookmarks.count) bookmarks")
         Button(action: onToggleSaved) {
             Image(systemName: isSaved ? "star.fill" : "star")
                 .font(.subheadline)
@@ -519,13 +521,10 @@ private struct VerseCard: View {
         .accessibilityLabel("Share verse \(verse.number)")
     }
 
-    /// Reciting outlines the card in the accent; otherwise the ribbon in
-    /// red, or the daily bookmark in green.
-    private var outline: Color {
-        if isReciting { return Palette.accent.opacity(0.8) }
-        if hasRibbon { return Color(QuranTextStyle.ribbonRed).opacity(0.7) }
-        if hasDailyMark { return Color(QuranTextStyle.dailyGreen).opacity(0.7) }
-        return .clear
+    /// Red for the ribbon, the first bookmark's colour, or plain.
+    private var bookmarkTint: Color {
+        if hasRibbon { return Color(QuranTextStyle.ribbonRed) }
+        return bookmarks.first?.occasion.tint ?? Color.secondary
     }
 
     var body: some View {
@@ -550,7 +549,7 @@ private struct VerseCard: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Color.clear.frame(width: gap, height: 1)
+                Color.clear.frame(width: Self.ribbonGap, height: 1)
                 HStack(spacing: 2) { actionButtons }
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
@@ -563,50 +562,60 @@ private struct VerseCard: View {
                     .font(.body)
                     .foregroundStyle(.white.opacity(0.72))
             }
+
+            // Your special bookmarks here, as small tags; tap to see the notes.
+            if !bookmarks.isEmpty {
+                Button(action: onBookmark) {
+                    HStack(spacing: 6) {
+                        ForEach(bookmarks.prefix(3)) { bookmark in
+                            Label(bookmark.displayTitle, systemImage: bookmark.occasion.icon)
+                                .font(.caption.weight(.semibold))
+                                .lineLimit(1)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .foregroundStyle(bookmark.occasion.tint)
+                                .background(bookmark.occasion.tint.opacity(0.16), in: .capsule)
+                        }
+                        if bookmarks.count > 3 {
+                            Text("+\(bookmarks.count - 3)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .buttonStyle(.pressable)
+                .accessibilityLabel("Bookmarks: \(bookmarks.map(\.displayTitle).joined(separator: ", "))")
+            }
         }
         .padding(18)
         .surface(cornerRadius: 22)
         // The ribbon's verse stays outlined, so your place is easy to find again.
         .overlay {
             RoundedRectangle(cornerRadius: 22)
-                .strokeBorder(outline, lineWidth: 1.5)
+                .strokeBorder(isReciting ? Palette.accent.opacity(0.8) : Color(QuranTextStyle.ribbonRed).opacity(hasRibbon ? 0.7 : 0),
+                              lineWidth: 1.5)
         }
         .background {
             RoundedRectangle(cornerRadius: 22).fill(Color(QuranTextStyle.ribbonRed).opacity(hasRibbon ? 0.12 : 0))
         }
         .shadow(color: Palette.accent.opacity(isReciting ? 0.35 : 0), radius: 12)
         // The ribbon hangs from the middle of the top of the verse it marks.
-        // Red: the reader's ribbon. Green: the daily reader's bookmark.
         .overlay(alignment: .top) {
-            HStack(spacing: 6) {
-                if hasRibbon {
-                    RibbonMark(color: Color(QuranTextStyle.ribbonRed), starColor: .white)
-                        .frame(width: 16, height: 30)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .accessibilityElement()
-                        .accessibilityLabel("Your ribbon is here")
-                }
-                if hasDailyMark {
-                    RibbonMark(color: Color(QuranTextStyle.dailyGreen), starColor: .white)
-                        .frame(width: 16, height: 30)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .accessibilityElement()
-                        .accessibilityLabel("Your daily reading is here")
-                }
+            if hasRibbon {
+                RibbonMark(color: Color(QuranTextStyle.ribbonRed), starColor: .white)
+                    .frame(width: 16, height: 30)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .accessibilityElement()
+                    .accessibilityLabel("Your ribbon is here")
             }
         }
         .animation(.smooth(duration: 0.4), value: isReciting)
         .animation(.smooth(duration: 0.3), value: hasRibbon)
-        .animation(.smooth(duration: 0.3), value: hasDailyMark)
         .contextMenu {
             if showsPlay {
                 Button("Play from here", systemImage: "play.fill") { onPlay() }
             }
             Button(hasRibbon ? "Remove the ribbon" : "Move the ribbon here",
                    systemImage: hasRibbon ? "bookmark.slash" : "bookmark") { onPlaceRibbon() }
-            if !hasDailyMark {
-                Button("Read daily ayat from here", systemImage: "pencil") { onReadDailyHere() }
-            }
+            Button("Special bookmark…", systemImage: "bookmark.circle") { onBookmark() }
             Button(isSaved ? "Remove from saved verses" : "Save verse",
                    systemImage: isSaved ? "star.slash" : "star") { onToggleSaved() }
             if let onTafsir {

@@ -3,8 +3,8 @@ import SwiftUI
 /// The daily reader: one ayah at a time, with where it sits in the Qur'an,
 /// its translation, recitation and tafsir. An ayah counts towards today's
 /// goal when you read on past it (Next or a swipe), or hear it to the end.
-/// It keeps its own green bookmark, apart from the reader's red ribbon; the
-/// pencil chooses where it reads from.
+/// It keeps its own place, apart from the reader's ribbon; the pencil
+/// searches for where it reads from.
 struct DailyReaderView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -100,7 +100,7 @@ struct DailyReaderView: View {
             place = DailyReading.start(mark: store.dailyPlace, ribbon: ribbon, verseCounts: verseCounts)
             if let verse { store.setDailyMark(to: verse) }
         }
-        // The green bookmark stays on the ayah you're on.
+        // Its own place stays on the ayah you're on.
         .onChange(of: place) { _, _ in
             if started, let verse { store.setDailyMark(to: verse) }
         }
@@ -271,14 +271,14 @@ struct DailyReaderView: View {
     private var startButton: some View {
         Button { choosingStart = true } label: {
             Image(systemName: "pencil")
-                .font(.title3)
-                .foregroundStyle(Color(QuranTextStyle.dailyGreen))
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Palette.highlight)
                 .frame(width: 40, height: 40)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Choose where to read")
-        .accessibilityHint("Moves your daily reading, and its green bookmark, to another ayah")
+        .accessibilityHint("Search for the surah and ayah your daily reading goes on from")
     }
 
     private func iconButton(_ systemImage: String, label: String, action: @escaping () -> Void) -> some View {

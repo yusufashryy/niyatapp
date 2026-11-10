@@ -42,6 +42,7 @@ enum DataReset {
 
         // Reload what's held in memory so nothing old lingers on screen.
         QuranStore.shared.reloadUserData()
+        VerseBookmarkStore.shared.reload()
         QuranGoalModel.shared.refresh()
         ThemeManager.shared.reload()
         model.reloadFromStorage()

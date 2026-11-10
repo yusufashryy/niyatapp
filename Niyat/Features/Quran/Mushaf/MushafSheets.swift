@@ -43,7 +43,8 @@ struct MushafVerseActions: View {
                     action("Play from here", "play.fill", onPlayFromHere)
                     action("This verse", "repeat.1", onPlayVerse)
                 }
-                action(hasRibbon ? "Remove ribbon" : "Ribbon", hasRibbon ? "bookmark.slash.fill" : "bookmark", onRibbon)
+                // Continue reading (the ribbon), or a special bookmark with a note.
+                action("Bookmark", hasRibbon ? "bookmark.fill" : "bookmark", onRibbon)
                 action(isSaved ? "Saved" : "Save", isSaved ? "star.fill" : "star", onSave)
                 if let onTafsir { action("Tafsir", "text.book.closed", onTafsir) }
                 // Share has Copy too (the share screen's copy button).

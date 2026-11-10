@@ -14,8 +14,6 @@ struct MushafPage: View {
     var weight: CGFloat = 0
     /// The reading ribbon lies in this page.
     var hasRibbon = false
-    /// The daily reader's green bookmark lies in this page.
-    var hasDailyMark = false
     var placement = MushafBook.Placement.single
     /// The page was zoomed in (true) or back to fit (false).
     var onZoomChange: (Bool) -> Void = { _ in }
@@ -110,8 +108,6 @@ struct MushafPage: View {
                                      weight: weight, squeeze: textSize.squeeze)
         style.ribbon = store.ribbon.map { VerseKey(surah: $0.surah, verse: $0.verse) }
         style.ribbonColor = QuranTextStyle.ribbonRed.withAlphaComponent(colors.isLight ? 0.13 : 0.24)
-        style.dailyMark = store.dailyMark.map { VerseKey(surah: $0.surah, verse: $0.verse) }
-        style.dailyMarkColor = QuranTextStyle.dailyGreen.withAlphaComponent(colors.isLight ? 0.14 : 0.26)
         let label = Color(colors.label)
 
         return VStack(spacing: 0) {
@@ -141,23 +137,15 @@ struct MushafPage: View {
             footer(label: label)
         }
         .padding(.horizontal, margin)
-        // The ribbons hang from the top edge, over the gap between the surah
-        // name and the part number, just reaching the first line: red for
-        // the reader's ribbon, green for the daily reader's bookmark.
+        // The ribbon hangs from the top edge, over the gap between the surah
+        // name and the part number, just reaching the first line.
         .overlay(alignment: .top) {
-            HStack(spacing: 6) {
-                if hasRibbon {
-                    RibbonMark(color: Color(QuranTextStyle.ribbonRed), starColor: Color(colors.paper))
-                        .frame(width: 18, height: MushafMetrics.headerHeight + 16)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
-                if hasDailyMark {
-                    RibbonMark(color: Color(QuranTextStyle.dailyGreen), starColor: Color(colors.paper))
-                        .frame(width: 18, height: MushafMetrics.headerHeight + 16)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
+            if hasRibbon {
+                RibbonMark(color: Color(QuranTextStyle.ribbonRed), starColor: Color(colors.paper))
+                    .frame(width: 18, height: MushafMetrics.headerHeight + 16)
+                    .offset(y: -6)
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
-            .offset(y: -6)
         }
         .frame(width: size.width, height: size.height)
         .overlay { PageBinding(placement: placement, page: number, colors: colors) }
