@@ -3,6 +3,12 @@ import SwiftUI
 struct TodayView: View {
     @Environment(AppModel.self) private var model
     @State private var checkIn: PrayerSlot?
+    /// The dial has turned into the Qibla compass.
+    @State private var qiblaOpen = false
+    @Namespace private var qiblaMorph
+
+    /// One spring for both ways, so opening and closing feel the same.
+    static let morph = Animation.spring(duration: 0.65, bounce: 0.18)
 
     var body: some View {
         NavigationStack {
@@ -37,7 +43,17 @@ struct TodayView: View {
             .sheet(item: $checkIn) { slot in
                 CheckInSheet(slot: slot)
             }
+            .toolbar(qiblaOpen ? .hidden : .visible, for: .tabBar)
         }
+        .overlay {
+            if qiblaOpen {
+                QiblaTakeover(namespace: qiblaMorph) {
+                    withAnimation(Self.morph) { qiblaOpen = false }
+                }
+                .transition(.opacity)
+            }
+        }
+        .haptic(.impact(weight: .light), trigger: qiblaOpen)
     }
 
     /// The sky behind the screen follows the real time of day.
@@ -62,7 +78,10 @@ struct TodayView: View {
             if let schedule {
                 PrayerDial(schedule: schedule, now: now, next: next,
                            locationName: model.location?.name ?? "",
-                           hijri: HijriDate.string(for: now, adjustmentDays: model.hijriAdjustment)) { time in
+                           hijri: HijriDate.string(for: now, adjustmentDays: model.hijriAdjustment),
+                           qiblaOpen: qiblaOpen, namespace: qiblaMorph,
+                           qiblaBearing: model.location.map { PrayerCalculator.qiblaDirection(from: $0) },
+                           onQibla: { withAnimation(Self.morph) { qiblaOpen = true } }) { time in
                     checkIn = PrayerSlot(prayer: time.name, day: schedule.day)
                 }
                 .appearAnimation(0)
@@ -128,6 +147,13 @@ private struct PrayerDial: View {
     let next: PrayerTime?
     let locationName: String
     let hijri: String
+    /// While the Qibla is open, the ring, next prayer and countdown have
+    /// become the compass, and the rest folds into the centre.
+    let qiblaOpen: Bool
+    let namespace: Namespace.ID
+    /// Degrees from north to the Kaaba, shown on the button.
+    let qiblaBearing: Double?
+    let onQibla: () -> Void
     let onSelect: (PrayerTime) -> Void
 
     var body: some View {
@@ -148,6 +174,8 @@ private struct PrayerDial: View {
                 ZStack {
                     Rosette(color: Palette.highlight.opacity(0.09), lineWidth: 1)
                         .frame(width: radius * 1.55, height: radius * 1.55)
+                        .rotationEffect(.degrees(qiblaOpen ? 90 : 0))
+                        .opacity(qiblaOpen ? 0 : 1)
 
                     // Hour ticks, longer every 6 hours.
                     ForEach(0..<24, id: \.self) { hour in
@@ -157,37 +185,68 @@ private struct PrayerDial: View {
                             .offset(y: -(radius + 18))
                             .rotationEffect(.degrees(Double(hour) * 15 + 180))
                     }
+                    .opacity(qiblaOpen ? 0 : 1)
 
-                    // Track and daylight arc.
-                    Circle()
-                        .stroke(.white.opacity(0.07), lineWidth: 16)
+                    // Track and daylight arc: they become the compass ring.
+                    if !qiblaOpen {
+                        ZStack {
+                        Circle()
+                            .stroke(.white.opacity(0.07), lineWidth: 16)
+                            .frame(width: radius * 2, height: radius * 2)
+                        if let sunrise = schedule.time(for: .sunrise), let maghrib = schedule.time(for: .maghrib) {
+                            arc(from: fraction(sunrise.date), to: fraction(maghrib.date))
+                                .stroke(LinearGradient(colors: [Palette.highlight.opacity(0.5), Palette.highlight.opacity(0.2)],
+                                                       startPoint: .top, endPoint: .bottom),
+                                        style: StrokeStyle(lineWidth: 16, lineCap: .round))
+                                .frame(width: radius * 2, height: radius * 2)
+                        }
+                        // Time elapsed since the current prayer began.
+                        if let current = model.currentPrayer(at: now), current.date >= schedule.day {
+                            arc(from: fraction(current.date), to: fraction(now))
+                                .stroke(Palette.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                                .frame(width: radius * 2, height: radius * 2)
+                                .shadow(color: Palette.accent, radius: 6)
+                        }
+                        }
                         .frame(width: radius * 2, height: radius * 2)
-                    if let sunrise = schedule.time(for: .sunrise), let maghrib = schedule.time(for: .maghrib) {
-                        arc(from: fraction(sunrise.date), to: fraction(maghrib.date))
-                            .stroke(LinearGradient(colors: [Palette.highlight.opacity(0.5), Palette.highlight.opacity(0.2)],
-                                                   startPoint: .top, endPoint: .bottom),
-                                    style: StrokeStyle(lineWidth: 16, lineCap: .round))
-                            .frame(width: radius * 2, height: radius * 2)
-                    }
-                    // Time elapsed since the current prayer began.
-                    if let current = model.currentPrayer(at: now), current.date >= schedule.day {
-                        arc(from: fraction(current.date), to: fraction(now))
-                            .stroke(Palette.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                            .frame(width: radius * 2, height: radius * 2)
-                            .shadow(color: Palette.accent, radius: 6)
+                        .matchedGeometryEffect(id: QiblaMorph.ring, in: namespace)
                     }
 
                     ForEach(schedule.times) { time in
-                        node(for: time)
-                            .position(point(fraction(time.date), radius: radius, center: center))
+                        if time.id == next?.id {
+                            // The next prayer becomes the Kaaba.
+                            if !qiblaOpen {
+                                node(for: time)
+                                    .matchedGeometryEffect(id: QiblaMorph.kaaba, in: namespace)
+                                    .position(point(fraction(time.date), radius: radius, center: center))
+                            }
+                        } else {
+                            // The others fold into the centre.
+                            // The others fold into the centre.
+                            node(for: time)
+                                .scaleEffect(qiblaOpen ? 0.2 : 1)
+                                .opacity(qiblaOpen ? 0 : 1)
+                                .position(qiblaOpen ? center : point(fraction(time.date), radius: radius, center: center))
+                        }
                     }
 
                     nowMarker
-                        .position(point(fraction(now), radius: radius, center: center))
+                        .scaleEffect(qiblaOpen ? 0.2 : 1)
+                        .opacity(qiblaOpen ? 0 : 1)
+                        .position(qiblaOpen ? center : point(fraction(now), radius: radius, center: center))
 
-                    centerLabel
-                        .frame(width: radius * 1.25)
-                        .position(center)
+                    // The countdown, with the way into the Qibla set beneath it as one centred line.
+                    VStack(spacing: 4) {
+                        if !qiblaOpen {
+                            centerLabel
+                                .allowsHitTesting(false)
+                                .matchedGeometryEffect(id: QiblaMorph.center, in: namespace)
+                            QiblaLink(bearing: qiblaBearing, action: onQibla)
+                                .transition(.opacity)
+                        }
+                    }
+                    .frame(width: radius * 1.45)
+                    .position(x: center.x, y: center.y + 8)
                 }
             }
             .frame(height: 340)
@@ -542,5 +601,93 @@ private struct StreakStrip: View {
         }
         .padding(18)
         .surface(cornerRadius: 26)
+    }
+}
+
+/// The Qibla, opened from the dial: full screen, with the dial's parts
+/// carried into the compass. Closing plays it back.
+private struct QiblaTakeover: View {
+    let namespace: Namespace.ID
+    let onClose: () -> Void
+    @State private var closeShown = false
+
+    var body: some View {
+        ZStack {
+            AmbientBackground()
+                .ignoresSafeArea()
+            VStack(spacing: 0) {
+                ZStack {
+                    Text("Qibla").font(.headline)
+                    HStack {
+                        Spacer()
+                        Button(action: onClose) {
+                            Image(systemName: "xmark")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 44, height: 44)
+                                .background(.white.opacity(0.08), in: .circle)
+                                .overlay(Circle().strokeBorder(Palette.highlight.opacity(0.45), lineWidth: 1))
+                        }
+                        .buttonStyle(.pressable)
+                        // Drops in from the top of the screen and fades in.
+                        .offset(y: closeShown ? 0 : -70)
+                        .opacity(closeShown ? 1 : 0)
+                        .accessibilityLabel("Close the Qibla")
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                QiblaScreen(namespace: namespace)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .onAppear {
+            withAnimation(.spring(duration: 0.55, bounce: 0.3).delay(0.25)) { closeShown = true }
+        }
+        // Swipe down to close, as with a sheet.
+        .gesture(DragGesture(minimumDistance: 40).onEnded { drag in
+            if drag.translation.height > 120, abs(drag.translation.width) < drag.translation.height { onClose() }
+        })
+    }
+}
+
+/// The way into the Qibla: the Kaaba in a round, gold-edged button, centred
+/// under the countdown. A soft ring breathes out from it now and then, so it
+/// reads as something to tap.
+private struct QiblaLink: View {
+    let bearing: Double?
+    let action: () -> Void
+    @State private var pulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                // The breathing ring.
+                Circle()
+                    .stroke(Palette.highlight.opacity(pulse ? 0 : 0.5), lineWidth: 1.5)
+                    .frame(width: 44, height: 44)
+                    .scaleEffect(pulse ? 1.45 : 1)
+                // Gold-tinted glass, lit from the top like the dial's arc.
+                Circle()
+                    .fill(RadialGradient(colors: [Palette.highlight.opacity(0.32), Palette.highlight.opacity(0.08)],
+                                         center: .top, startRadius: 2, endRadius: 40))
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular.tint(Palette.highlight.opacity(0.18)), in: .circle)
+                    .overlay(Circle().strokeBorder(
+                        LinearGradient(colors: [Palette.highlight.opacity(0.9), Palette.highlight.opacity(0.25)],
+                                       startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                KaabaMarker(highlighted: false, size: 18)
+            }
+            .frame(width: 64, height: 64)
+            .contentShape(.circle)
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel("Qibla")
+        .accessibilityHint("Turns the dial into the Qibla compass")
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeOut(duration: 2.2).repeatForever(autoreverses: false)) { pulse = true }
+        }
     }
 }
