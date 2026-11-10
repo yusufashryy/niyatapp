@@ -49,4 +49,10 @@ final class QuranGoalModel {
         }
         GroupSync.shared.publishSoon()
     }
+
+    /// Time spent in the daily reader, added to today.
+    func addReadingTime(_ seconds: Int) {
+        QuranProgress.addReadingTime(seconds)
+        refresh()
+    }
 }

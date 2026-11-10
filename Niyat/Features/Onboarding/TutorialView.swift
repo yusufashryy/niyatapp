@@ -37,15 +37,22 @@ struct TutorialView: View {
             TutorialPage(icon: "book.closed.fill", title: "Qur'an",
                          subtitle: "Read a little every day.",
                          points: [
-                             TutorialPoint("target", "Set a daily goal in ayat. A verse counts once it has been on screen for a few seconds. The ring at the top shows today's progress."),
+                             TutorialPoint("target", "Set a daily goal in ayat, then tap Read: one ayah at a time, with its juz, page, recitation and tafsir. An ayah counts once you've had time to read it, or heard it to the end."),
                              TutorialPoint("speaker.wave.2.fill", "Tap the speaker on any verse to hear it, or play to recite on. The text follows the reciter word by word."),
                              TutorialPoint("mic.fill", "Tap the mic and recite: Niyat follows you word by word and marks words to double-check. The eye next to it hides the text so you can recite from memory."),
                              TutorialPoint("book.pages.fill", "The book icon opens the mushaf: the 604 pages of the Madinah mushaf, line for line. Swipe right-to-left like a printed copy."),
                              TutorialPoint("bell.badge.fill", "The bell sets Qur'an reminders: morning, afternoon, streak, verse of the day and Surah Al-Kahf on Fridays."),
                          ],
                          action: .quran),
+            TutorialPage(icon: "salawat", title: "Hadith",
+                         subtitle: "Authentic hadiths, explained.",
+                         points: [
+                             TutorialPoint("checkmark.seal.fill", "Only hadiths graded Sahih or Hasan, each with who recorded it, its grade, an explanation and lessons."),
+                             TutorialPoint("magnifyingglass", "Search a word, or tap a situation such as anger, debt or grief."),
+                             TutorialPoint("square.and.arrow.up", "Share any hadith as a card or as text."),
+                         ]),
             TutorialPage(icon: "location.north.circle.fill", title: "Qibla",
-                         subtitle: "Find the direction of the Ka'bah.",
+                         subtitle: "Find the direction of the Ka'bah. It's in More.",
                          points: [
                              TutorialPoint("iphone", "Hold your phone flat, screen up, away from magnets and metal."),
                              TutorialPoint("arrow.triangle.turn.up.right.circle.fill", "Turn until the arrow lines up at the top. You'll feel a tap when you're facing the Qibla."),
@@ -143,7 +150,8 @@ struct TutorialView: View {
             ZStack {
                 Rosette(color: Palette.highlight.opacity(0.3), lineWidth: 1)
                     .frame(width: 150, height: 150)
-                Image(systemName: content.icon)
+                // An SF Symbol, or ﷺ for the Hadith page.
+                (content.icon == "salawat" ? Image(uiImage: SalawatIcon.large) : Image(systemName: content.icon))
                     .font(.system(size: 40, weight: .semibold))
                     .foregroundStyle(Palette.highlight)
                     .frame(width: 86, height: 86)

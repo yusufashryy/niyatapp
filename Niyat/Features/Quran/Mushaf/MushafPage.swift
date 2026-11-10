@@ -23,8 +23,6 @@ struct MushafPage: View {
     let onTap: (WordID?, Int) -> Void
 
     @State private var store = QuranStore.shared
-    @State private var goal = QuranGoalModel.shared
-    @State private var readTask: Task<Void, Never>?
     // Pinch to zoom: the settled zoom and pan, and the gesture in progress.
     @State private var zoom: CGFloat = 1
     @State private var pan: CGSize = .zero
@@ -55,20 +53,6 @@ struct MushafPage: View {
             if !current { resetZoom() }
         }
         .onChange(of: zoom > 1) { _, zoomed in onZoomChange(zoomed) }
-        .onChange(of: isCurrent, initial: true) { _, current in
-            readTask?.cancel()
-            let verses = store.verses(onPage: number)
-            guard current, !verses.isEmpty else { return }
-            // Count the page towards today's goal once it has stayed open long
-            // enough to actually be read.
-            let dwell = ReadingRibbon.pageDwell(verseCount: verses.count)
-            readTask = Task {
-                try? await Task.sleep(for: .seconds(dwell))
-                guard !Task.isCancelled else { return }
-                for verse in verses { goal.recordRead(verse) }
-            }
-        }
-        .onDisappear { readTask?.cancel() }
     }
 
     private var magnify: some Gesture {
@@ -143,7 +127,9 @@ struct MushafPage: View {
             // The opening pages have fewer, centred lines, in the middle of the page.
             if text.isOpening { Spacer(minLength: 0) }
             ForEach(Array(text.rows.enumerated()), id: \.offset) { index, row in
-                rowView(row, index: index, style: style, opening: text.isOpening)
+                rowView(row, index: index, style: style,
+                        centred: text.isOpening || MushafMetrics.isShortLine(naturalWidth: text.widths[index],
+                                                                            fontSize: fontSize, width: width))
                     .frame(height: rowHeight)
             }
             Spacer(minLength: 0)
@@ -211,7 +197,7 @@ struct MushafPage: View {
     }
 
     @ViewBuilder
-    private func rowView(_ row: MushafPageText.Row, index: Int, style: QuranTextStyle, opening: Bool) -> some View {
+    private func rowView(_ row: MushafPageText.Row, index: Int, style: QuranTextStyle, centred: Bool) -> some View {
         switch row {
         case .header(let surah):
             SurahFrame(surah: store.surah(surah), colors: colors, fontSize: style.fontSize)
@@ -222,7 +208,7 @@ struct MushafPage: View {
             QuranTextView(pieces: [piece], style: basmalaStyle(style), layout: .centredLine,
                           sharpness: zoom) { _ in onTap(nil, index) }
         case .text(let pieces):
-            QuranTextView(pieces: pieces, style: style, layout: opening ? .centredLine : .justifiedLine,
+            QuranTextView(pieces: pieces, style: style, layout: centred ? .centredLine : .justifiedLine,
                           sharpness: zoom) { word in
                 onTap(word, index)
             }

@@ -111,6 +111,14 @@ enum NotificationScheduler {
             candidates += quranReminderRequests(settings: quranReminders, now: now)
         }
 
+        if let index = HadithIndex.bundled {
+            for (index, item) in HadithReminders.plan(settings: HadithReminderSettings.saved, index: index, now: now).enumerated() {
+                candidates.append((item.date, UNNotificationRequest(identifier: "hadith.\(index)",
+                                                                   content: HadithReminders.content(for: item.hadith),
+                                                                   trigger: trigger(at: item.date))))
+            }
+        }
+
         candidates.sort { $0.date < $1.date }
         // Reserve one slot for the "open the app" nudge.
         let budget = maxPending - 1
@@ -402,6 +410,7 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
         let dayKey = info[NotificationScheduler.UserInfoKey.dayKey] as? String
         let surah = info[NotificationScheduler.UserInfoKey.surah] as? Int
         let verse = info[NotificationScheduler.UserInfoKey.verse] as? Int
+        let hadithID = info["hadith"] as? Int
         let athan = action == UNNotificationDefaultActionIdentifier ? Self.fullAthan(for: response.notification) : nil
 
         DispatchQueue.main.async {
@@ -418,6 +427,10 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
             }
             if let athan {
                 MainActor.assumeIsolated { AthanPlayer.shared.play(athan) }
+                return
+            }
+            if kind == "hadith", action == UNNotificationDefaultActionIdentifier, let id = hadithID {
+                MainActor.assumeIsolated { DeepLink.shared.pending = .hadith(id: id) }
                 return
             }
             if kind == "quran", action == UNNotificationDefaultActionIdentifier {

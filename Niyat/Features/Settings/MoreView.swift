@@ -12,14 +12,14 @@ struct MoreView: View {
                 VStack(spacing: 12) {
                     GlassEffectContainer(spacing: 12) {
                         HStack(spacing: 12) {
+                            tile("Qibla", systemImage: "location.north.circle.fill", tint: Palette.highlight) { QiblaView() }
                             tile("Tasbih", systemImage: "circle.hexagongrid.fill", tint: Palette.accent) { TasbihView() }
-                            tile("Prayer Lock", systemImage: "lock.shield.fill", tint: Palette.highlight) { FocusView() }
                         }
                     }
                     GlassEffectContainer(spacing: 12) {
                         HStack(spacing: 12) {
-                            tile("Groups", systemImage: "person.3.fill", tint: Palette.highlight) { GroupsView() }
-                            tile("Qibla", systemImage: "location.north.circle.fill", tint: Palette.accent) { QiblaView() }
+                            tile("Prayer Lock", systemImage: "lock.shield.fill", tint: Palette.highlight) { FocusView() }
+                            tile("Groups", systemImage: "person.3.fill", tint: Palette.accent) { GroupsView() }
                         }
                     }
                     .appearAnimation(0)

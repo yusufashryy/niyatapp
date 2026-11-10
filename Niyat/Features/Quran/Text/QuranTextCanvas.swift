@@ -72,6 +72,10 @@ struct QuranTextStyle: Equatable {
     /// How much a justified line's words may be squeezed or stretched
     /// horizontally to fill it (1...1: only the spaces between words grow).
     var stretch: ClosedRange<CGFloat> = 1...1
+    /// Justified lines: the most each space may grow, as a multiple of the
+    /// font size. A line that would need more is centred instead, so it never
+    /// shows wide gaps between its words (nil: no limit).
+    var maxSpaceGrowth: CGFloat?
     /// Thicker strokes for easier reading, as a percentage of the size
     /// (0 = the font as designed). Letter widths don't change, so lines don't move.
     var weight: CGFloat = 0
@@ -224,6 +228,8 @@ final class QuranTextCanvas: UIView {
     enum Layout: Equatable {
         /// Wraps like a paragraph: full lines justified, the last line to the right.
         case paragraph
+        /// Wraps like a paragraph, with the last (or only) line centred.
+        case centredParagraph
         /// One line stretched to the full width (a mushaf line).
         case justifiedLine
         /// One line, centred (the opening pages, the Bismillah).
@@ -509,6 +515,7 @@ final class QuranTextCanvas: UIView {
             var ctLine = natural
             var lineWidth = naturalWidth
             var scale: CGFloat = 1
+            var centred = centre
             if justify, naturalWidth > 0 {
                 // Squeeze or stretch the words a little (within the style's
                 // range), then widen the spaces for the rest. Only the spaces:
@@ -517,7 +524,11 @@ final class QuranTextCanvas: UIView {
                 scale = min(max(width / naturalWidth, style.stretch.lowerBound), style.stretch.upperBound)
                 let target = width / scale
                 if !spaces.isEmpty, naturalWidth < target {
-                    let extra = (target - naturalWidth) / CGFloat(spaces.count)
+                    var extra = (target - naturalWidth) / CGFloat(spaces.count)
+                    if let limit = style.maxSpaceGrowth.map({ $0 * style.fontSize / scale }), extra > limit {
+                        extra = limit
+                        centred = true
+                    }
                     for location in spaces {
                         string.addAttribute(Self.kernKey, value: extra, range: NSRange(location: location, length: 1))
                     }
@@ -529,7 +540,7 @@ final class QuranTextCanvas: UIView {
             if lineWidth * scale > width, lineWidth > 0 { scale = width / lineWidth }
             let drawnWidth = lineWidth * scale
             let x: CGFloat
-            if centre {
+            if centred {
                 x = (width - drawnWidth) / 2
             } else {
                 // Right-to-left: a short line sits against the right edge.
@@ -539,13 +550,15 @@ final class QuranTextCanvas: UIView {
         }
 
         switch layoutKind {
-        case .paragraph:
+        case .paragraph, .centredParagraph:
             let breaks = Self.wrap(units.map(\.width), space: spaceWidth, width: width)
             let advance = style.fontSize * style.lineHeight
             let top = Self.rooms(style).top
             for (number, range) in breaks.enumerated() {
                 let baseline = top + CGFloat(number) * advance + advance / 2 + Self.inkOffset * style.fontSize
-                lines.append(makeLine(range, justify: number < breaks.count - 1, centre: false, baseline: baseline))
+                let isLast = number == breaks.count - 1
+                lines.append(makeLine(range, justify: !isLast, centre: isLast && layoutKind == .centredParagraph,
+                                      baseline: baseline))
             }
         case .justifiedLine, .centredLine:
             let baseline = bounds.height / 2 + Self.inkOffset * style.fontSize
@@ -742,7 +755,7 @@ struct QuranTextView: UIViewRepresentable {
         canvas.configure(pieces: pieces, style: style, layout: layout)
         let width = proposal.width ?? 320
         switch layout {
-        case .paragraph:
+        case .paragraph, .centredParagraph:
             return CGSize(width: width, height: canvas.paragraphHeight(for: width))
         case .justifiedLine, .centredLine:
             return CGSize(width: width, height: proposal.height ?? style.fontSize * 1.8)

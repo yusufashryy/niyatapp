@@ -14,6 +14,7 @@ struct SurahListView: View {
     @State private var deepLink = DeepLink.shared
     @State private var showSettings = false
     @State private var showGoal = false
+    @State private var showDaily = false
     @State private var showMushaf = false
     @State private var showNotifications = false
     @State private var showFinder = false
@@ -72,6 +73,7 @@ struct SurahListView: View {
                 NavigationStack { QuranNotificationsView(showsDone: true) }
             }
             .fullScreenCover(isPresented: $showMushaf) { MushafPageView() }
+            .fullScreenCover(isPresented: $showDaily, onDismiss: { goal.refresh() }) { DailyReaderView() }
             .task { await store.load() }
             .onAppear { goal.refresh() }
             // A Qur'an reminder was tapped: go straight to the ribbon.
@@ -80,7 +82,7 @@ struct SurahListView: View {
                 switch destination {
                 case .quranContinueReading: target = store.ribbon ?? VerseReference(surah: 1, verse: 1)
                 case .quranVerse(let surah, let verse): target = VerseReference(surah: surah, verse: verse)
-                case nil: return
+                case .hadith, nil: return
                 }
                 deepLink.pending = nil
                 open(ReaderDestination(surah: target.surah, verse: target.verse))
@@ -145,7 +147,10 @@ struct SurahListView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
                 if searchText.isEmpty {
-                    QuranGoalCard { showGoal = true }
+                    // The daily reader is where ayat count; without a goal yet, set one first.
+                    QuranGoalCard {
+                        if goal.goal == nil { showGoal = true } else { showDaily = true }
+                    }
                         .appearAnimation(0)
                 }
                 if searchText.isEmpty, let ribbon = store.ribbon, let surah = store.surah(ribbon.surah) {
@@ -319,9 +324,11 @@ private struct SurahRow: View {
     }
 }
 
-/// Today's goal at the top of the Qur'an tab.
+/// Today's goal at the top of the Qur'an tab: opens the daily reader.
 private struct QuranGoalCard: View {
     @State private var goal = QuranGoalModel.shared
+    @State private var store = QuranStore.shared
+    @AppStorage(DailyReading.placeKey) private var savedPlace = ""
     let onTap: () -> Void
 
     var body: some View {
@@ -357,6 +364,20 @@ private struct QuranGoalCard: View {
                         }
                     }
                     .frame(height: 8)
+                    HStack(spacing: 10) {
+                        Text(continueText)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Spacer()
+                        Label(goal.today.isComplete ? "Read more" : "Read", systemImage: "book.fill")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Palette.control.gradient, in: .capsule)
+                    }
                 } else {
                     HStack(spacing: 14) {
                         Image(systemName: "target")
@@ -364,7 +385,7 @@ private struct QuranGoalCard: View {
                             .foregroundStyle(Palette.highlight)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Set a daily Qur'an goal").font(.headline)
-                            Text("A few ayat a day, every day. Track it and build a streak.")
+                            Text("A few ayat a day, one at a time. Track it and build a streak.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -378,7 +399,17 @@ private struct QuranGoalCard: View {
             .glassPanel(cornerRadius: 26, tint: Palette.glow.opacity(0.3), interactive: true)
         }
         .buttonStyle(.pressable)
+        .accessibilityHint(goal.goal == nil ? "Choose how many ayat to read each day" : "Opens the daily reader")
         .onAppear { goal.refresh() }
+    }
+
+    /// "Continue at Al-Baqarah 2:23", or where a first reading starts.
+    private var continueText: String {
+        let ribbon = store.ribbon.map { DailyPlace(surah: $0.surah, verse: $0.verse) }
+        let counts = (1...114).map { store.verseCount(for: $0) }
+        let place = DailyReading.start(saved: savedPlace, ribbon: ribbon, verseCounts: counts)
+        let name = store.surah(place.surah)?.transliteration ?? "Surah \(place.surah)"
+        return "\(savedPlace.isEmpty && ribbon == nil ? "Start at" : "Continue at") \(name) \(place.surah):\(place.verse)"
     }
 }
 

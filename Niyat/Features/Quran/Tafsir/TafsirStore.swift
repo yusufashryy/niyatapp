@@ -1,8 +1,11 @@
 import Foundation
 import Observation
 
-/// The tafsirs bundled with Niyat, from Quranpedia (scripts/build_tafsir.py, docs/SOURCES.md).
+/// The tafsirs bundled with Niyat: the English Abridged Explanation from
+/// QuranEnc (scripts/build_tafsir_en.py) and two Arabic classics from
+/// Quranpedia (scripts/build_tafsir.py). Sources in docs/SOURCES.md.
 enum TafsirBook: String, CaseIterable, Identifiable {
+    case abridgedEnglish = "mukhtasar-en"
     case jalalayn
     case ibnKathir = "ibn-kathir"
 
@@ -10,6 +13,7 @@ enum TafsirBook: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .abridgedEnglish: "English"
         case .jalalayn: "Al-Jalalayn"
         case .ibnKathir: "Ibn Kathir"
         }
@@ -18,9 +22,24 @@ enum TafsirBook: String, CaseIterable, Identifiable {
     /// One line on what it's like, for choosing between them.
     var summary: String {
         switch self {
-        case .jalalayn: "Short notes, word by word"
-        case .ibnKathir: "Full commentary with hadith"
+        case .abridgedEnglish: "The Abridged Explanation of the Quran, in English"
+        case .jalalayn: "Arabic: short notes, word by word"
+        case .ibnKathir: "Arabic: full commentary with hadith"
         }
+    }
+
+    /// Shown left to right, in the app's English text.
+    var isEnglish: Bool { self == .abridgedEnglish }
+
+    /// The one most people can read.
+    static let standard = TafsirBook.abridgedEnglish
+
+    /// The commentary as shown: the English explanation repeats the ayah's
+    /// number at the start ("4. ..."), which the sheet already shows, so it's
+    /// hidden. The bundled text itself is left exactly as published.
+    func displayText(_ text: String) -> String {
+        guard isEnglish else { return text }
+        return text.replacing(/^\s*\d+(\s*[-–]\s*\d+)?\s*\.\s*/, with: "")
     }
 }
 

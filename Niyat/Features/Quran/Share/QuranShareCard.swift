@@ -2,26 +2,46 @@ import CoreTransferable
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// What goes on a share card: a verse or a dua from the Qur'an. The Arabic
-/// and English are the bundled, verified text, never retyped.
+/// What goes on a share card: a verse or a dua from the Qur'an, or a hadith.
+/// The Arabic and English are the bundled, verified text, never retyped.
 struct QuranShareContent: Identifiable, Hashable {
+    enum Kind: Hashable {
+        /// Arabic first; the English translation can be left out.
+        case quran
+        /// English first (the encyclopedia's translation); the Arabic can be left out.
+        case hadith
+    }
+
     /// What it's about (a dua's title, or the surah's name).
     let title: String
     /// Who made the dua, as told in the Qur'an (duas only).
     let context: String?
     let arabic: String
     let translation: String
-    /// "Al-Baqarah 2:201".
+    /// "Al-Baqarah 2:201", or for a hadith who recorded it and its grade.
     let reference: String
+    var kind = Kind.quran
 
-    var id: String { reference }
+    var id: String { reference + title }
 
-    /// The text, for apps that take words rather than a picture.
+    /// The text that can be left out: the translation of a verse, the Arabic of a hadith.
+    var optionalText: String { kind == .quran ? translation : arabic }
+
+    /// The text, for apps that take words rather than a picture. `includingTranslation`
+    /// adds the optional text (a verse's translation, a hadith's Arabic).
     func plainText(includingTranslation: Bool) -> String {
-        var parts = [arabic]
-        if includingTranslation, !translation.isEmpty { parts.append(translation) }
-        parts.append("— Qur'an, \(reference)")
-        return parts.joined(separator: "\n\n")
+        switch kind {
+        case .quran:
+            var parts = [arabic]
+            if includingTranslation, !translation.isEmpty { parts.append(translation) }
+            parts.append("— Qur'an, \(reference)")
+            return parts.joined(separator: "\n\n")
+        case .hadith:
+            var parts = [translation]
+            if includingTranslation, !arabic.isEmpty { parts.append(arabic) }
+            parts.append("— \(reference)\nHadeethEnc.com")
+            return parts.joined(separator: "\n\n")
+        }
     }
 }
 
@@ -40,6 +60,11 @@ extension QuranShareContent {
                                  arabic: verses.map(\.arabic).joined(separator: " "),
                                  translation: verses.map(\.translation).joined(separator: " "),
                                  reference: "\(surahName) \(dua.reference)")
+    }
+
+    static func hadith(_ hadith: Hadith) -> QuranShareContent {
+        QuranShareContent(title: hadith.title, context: nil, arabic: hadith.arabic, translation: hadith.text,
+                          reference: "\(hadith.source) · \(hadith.level.title)", kind: .hadith)
     }
 }
 
@@ -72,31 +97,26 @@ struct QuranShareCard: View {
             }
             .multilineTextAlignment(.center)
 
-            Text(content.arabic)
-                .font(.quran(size: 26))
-                .lineSpacing(12)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(Palette.highlight)
-                .environment(\.layoutDirection, .rightToLeft)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if showsTranslation, !content.translation.isEmpty {
-                Rectangle()
-                    .fill(Palette.highlight.opacity(0.3))
-                    .frame(width: 48, height: 1)
-                Text(content.translation)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.85))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+            switch content.kind {
+            case .quran:
+                arabic(font: .quran(size: 26), spacing: 12)
+                if showsTranslation, !content.translation.isEmpty {
+                    rule
+                    english
+                }
+            case .hadith:
+                english
+                if showsTranslation, !content.arabic.isEmpty {
+                    rule
+                    arabic(font: .system(size: 19), spacing: 8)
+                }
             }
 
             VStack(spacing: 4) {
                 Text(content.reference)
                     .font(.caption.weight(.bold))
                     .foregroundStyle(Palette.accent)
-                Text(showsTranslation && !content.translation.isEmpty
-                     ? "Translation: The Clear Quran · Shared from Niyat" : "Shared from Niyat")
+                Text(credit)
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.45))
             }
@@ -112,6 +132,39 @@ struct QuranShareCard: View {
             }
         }
         .environment(\.colorScheme, .dark)
+    }
+
+    private var credit: String {
+        switch content.kind {
+        case .quran:
+            showsTranslation && !content.translation.isEmpty
+                ? "Translation: The Clear Quran · Shared from Niyat" : "Shared from Niyat"
+        case .hadith: "Hadith: HadeethEnc.com · Shared from Niyat"
+        }
+    }
+
+    private var rule: some View {
+        Rectangle()
+            .fill(Palette.highlight.opacity(0.3))
+            .frame(width: 48, height: 1)
+    }
+
+    private var english: some View {
+        Text(content.translation)
+            .font(.subheadline)
+            .foregroundStyle(.white.opacity(0.85))
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func arabic(font: Font, spacing: CGFloat) -> some View {
+        Text(content.arabic)
+            .font(font)
+            .lineSpacing(spacing)
+            .multilineTextAlignment(.center)
+            .foregroundStyle(Palette.highlight)
+            .environment(\.layoutDirection, .rightToLeft)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

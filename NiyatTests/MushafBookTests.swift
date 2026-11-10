@@ -105,3 +105,18 @@ final class MushafBookTests: XCTestCase {
         XCTAssertEqual(edges.unread, 0, accuracy: 0.001)
     }
 }
+
+final class MushafShortLineTests: XCTestCase {
+    func testFullLineIsJustified() {
+        XCTAssertFalse(MushafMetrics.isShortLine(naturalWidth: 17, fontSize: 20, width: 350))
+    }
+
+    func testShortLineIsCentred() {
+        // An-Nas's last lines fill about half the width.
+        XCTAssertTrue(MushafMetrics.isShortLine(naturalWidth: 9, fontSize: 20, width: 350))
+    }
+
+    func testEmptyRowIsNotShort() {
+        XCTAssertFalse(MushafMetrics.isShortLine(naturalWidth: 0, fontSize: 20, width: 350))
+    }
+}

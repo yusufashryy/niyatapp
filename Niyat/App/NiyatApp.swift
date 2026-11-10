@@ -87,7 +87,7 @@ struct RootView: View {
 }
 
 enum AppTab: Hashable {
-    case today, quran, qibla, stats, more
+    case today, quran, hadith, stats, more
 }
 
 struct MainTabView: View {
@@ -104,16 +104,25 @@ struct MainTabView: View {
         TabView(selection: $selection) {
             Tab("Today", systemImage: "sun.horizon.fill", value: .today) { TodayView() }
             Tab("Quran", systemImage: "book.closed.fill", value: .quran) { SurahListView() }
-            Tab("Qibla", systemImage: "location.north.circle.fill", value: .qibla) { QiblaView() }
+            // Qibla lives in More; hadiths get the tab.
+            // ﷺ: hadith are the words of the Prophet ﷺ.
+            Tab(value: .hadith) {
+                NavigationStack { HadithListView() }
+            } label: {
+                Label { Text("Hadith") } icon: { Image(uiImage: SalawatIcon.tab) }
+            }
             Tab("Stats", systemImage: "chart.bar.xaxis", value: .stats) { StatsView() }
             Tab("More", systemImage: "circle.grid.2x2.fill", value: .more) { MoreView() }
         }
         // iPad: tabs at the top that can open into a sidebar.
         .tabViewStyle(.sidebarAdaptable)
+        // Read the hadiths in the background so the Hadith tab opens at once.
+        .task { await HadithLibrary.shared.load() }
         .tabBarMinimizeBehavior(.onScrollDown)
         .haptic(.selection, trigger: selection)
         .onChange(of: deepLink.pending, initial: true) { _, destination in
             if destination?.isQuran == true { selection = .quran }
+            if case .hadith? = destination { selection = .hadith }
         }
         // First launch after onboarding: a quick walkthrough.
         .onAppear {

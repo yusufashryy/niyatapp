@@ -133,6 +133,8 @@ struct SettingsView: View {
                 Text("iOS limits how many alerts an app can queue, so the more alert times you choose, the fewer days ahead are covered. Open Niyat every couple of days to keep them coming.")
             }
 
+
+            HadithNotificationSection()
             Section {
                 Stepper(value: $model.hijriAdjustment, in: -2...2) {
                     LabeledContent("Hijri date", value: HijriDate.string(for: .now, adjustmentDays: model.hijriAdjustment))

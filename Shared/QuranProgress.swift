@@ -39,9 +39,43 @@ struct QuranDay: Codable, Equatable {
     var goal: Int
     /// When the goal was reached, if it was.
     var completedAt: Date?
+    /// Seconds spent in the daily reader that day.
+    var seconds: Int = 0
 
     var count: Int { verses.count }
     var isComplete: Bool { completedAt != nil }
+
+    init(verses: Set<String> = [], letters: Int = 0, goal: Int, completedAt: Date? = nil, seconds: Int = 0) {
+        self.verses = verses
+        self.letters = letters
+        self.goal = goal
+        self.completedAt = completedAt
+        self.seconds = seconds
+    }
+
+    private enum CodingKeys: String, CodingKey { case verses, letters, goal, completedAt, seconds }
+
+    // Days saved before reading time was kept have no `seconds`.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        verses = try c.decodeIfPresent(Set<String>.self, forKey: .verses) ?? []
+        letters = try c.decodeIfPresent(Int.self, forKey: .letters) ?? 0
+        goal = try c.decode(Int.self, forKey: .goal)
+        completedAt = try c.decodeIfPresent(Date.self, forKey: .completedAt)
+        seconds = try c.decodeIfPresent(Int.self, forKey: .seconds) ?? 0
+    }
+}
+
+/// Totals over a stretch of days, for "Today", "This week" and "All time".
+struct QuranTotals: Equatable {
+    var ayat = 0
+    var letters = 0
+    var seconds = 0
+    /// Every verse read in the stretch, as "surah:verse".
+    var verses: Set<String> = []
+
+    /// The recitation-reward estimate (Tirmidhi 2910): ten per letter.
+    var hasanat: Int { letters * 10 }
 }
 
 /// Tracks the daily Qur'an goal, reading progress and streaks. Stored in the App
@@ -183,6 +217,37 @@ enum QuranProgress {
             if entry.isComplete { completed += 1 }
         }
         return (ayat, letters, completed)
+    }
+
+    /// Adds time spent reading to that day. Ignores nonsense (negative or over a day).
+    static func addReadingTime(_ seconds: Int, at date: Date = .now) {
+        guard seconds > 0, seconds < 86_400 else { return }
+        let key = dayKey(for: date)
+        var days = allDays()
+        var day = days[key] ?? QuranDay(goal: dailyGoal ?? 0)
+        day.seconds += seconds
+        days[key] = day
+        save(days)
+    }
+
+    /// Totals for the last `count` days including today, or every day when nil.
+    static func totals(days count: Int?, asOf date: Date = .now, from days: [String: QuranDay]? = nil) -> QuranTotals {
+        let days = days ?? allDays()
+        let entries: [QuranDay]
+        if let count {
+            let calendar = Calendar.current
+            entries = (0..<max(count, 0)).compactMap { offset in
+                calendar.date(byAdding: .day, value: -offset, to: date).flatMap { days[dayKey(for: $0)] }
+            }
+        } else {
+            entries = Array(days.values)
+        }
+        return entries.reduce(into: QuranTotals()) { total, day in
+            total.ayat += day.count
+            total.letters += day.letters
+            total.seconds += day.seconds
+            total.verses.formUnion(day.verses)
+        }
     }
 
     static func allTime() -> (ayat: Int, letters: Int) {

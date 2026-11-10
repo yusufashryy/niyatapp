@@ -161,6 +161,8 @@ struct MushafColors {
                                 : UIColor(red: 1.0, green: 0.23, blue: 0.19, alpha: 1)
         // Words may be squeezed or stretched a little to fill each line, as in print.
         style.stretch = squeeze...MushafMetrics.stretch.upperBound
+        // ...but a space never grows into a gap: past this, the line is centred.
+        style.maxSpaceGrowth = MushafMetrics.maxSpaceGrowth
         style.weight = weight
         return style
     }

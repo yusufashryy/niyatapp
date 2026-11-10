@@ -7,11 +7,17 @@ struct QuranShareSheet: View {
     let content: QuranShareContent
     @Environment(\.dismiss) private var dismiss
     @AppStorage("share.includesTranslation") private var includesTranslation = true
+    @AppStorage("share.includesHadithArabic") private var includesHadithArabic = true
     @State private var image: QuranShareImage?
     @State private var failed = false
     @State private var copied = false
 
-    private var showsTranslation: Bool { includesTranslation && !content.translation.isEmpty }
+    /// Whether the optional text (a verse's translation, a hadith's Arabic) is included.
+    private var includesOptional: Binding<Bool> {
+        content.kind == .quran ? $includesTranslation : $includesHadithArabic
+    }
+
+    private var showsTranslation: Bool { includesOptional.wrappedValue && !content.optionalText.isEmpty }
 
     var body: some View {
         NavigationStack {
@@ -24,8 +30,9 @@ struct QuranShareSheet: View {
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("Card preview: \(content.title), \(content.reference)")
 
-                    if !content.translation.isEmpty {
-                        Toggle("Include the translation", isOn: $includesTranslation)
+                    if !content.optionalText.isEmpty {
+                        Toggle(content.kind == .quran ? "Include the translation" : "Include the Arabic",
+                               isOn: includesOptional)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
                             .surface(cornerRadius: 18)

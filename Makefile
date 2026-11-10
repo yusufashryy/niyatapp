@@ -1,6 +1,6 @@
 # Generates Niyat.xcodeproj from project.yml. Needs XcodeGen: `brew install xcodegen`.
 
-.PHONY: setup project full open update verses athan tafsir clean
+.PHONY: setup project full open update verses athan tafsir tafsir-en hadith clean
 
 # First time: finds your team ID, writes Config/Local.xcconfig, opens Xcode.
 setup:
@@ -32,6 +32,14 @@ verses:
 # Refresh the bundled tafsirs from Quranpedia (it keeps correcting its texts).
 tafsir:
 	python3 scripts/build_tafsir.py
+
+# Refresh the English Abridged Explanation from QuranEnc (its terms ask for current copies).
+tafsir-en:
+	python3 scripts/build_tafsir_en.py
+
+# Refresh the authentic hadiths from HadeethEnc (Sahih and Hasan only).
+hadith:
+	python3 scripts/build_hadith.py
 
 # Rebuild the athan alert sounds from Aladhan's recordings (needs ffmpeg).
 athan:

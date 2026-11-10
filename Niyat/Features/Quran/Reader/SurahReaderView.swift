@@ -46,9 +46,6 @@ struct SurahReaderView: View {
     @State private var position = ScrollPosition(idType: Int.self)
     private static let bismillahID = 0
 
-    /// A verse counts as read after it has been on screen this long.
-    private let readingDwell: Duration = .seconds(3)
-
     var body: some View {
         let surah = store.surah(surahID)
         let audioAvailable = store.edition.riwayah.hasVerseAudio
@@ -95,10 +92,7 @@ struct SurahReaderView: View {
                         // No fade-in: under the Recite row a fading card stayed
                         // blank, and the text should never be hidden while you scroll.
                         .id(verse.id)
-                        .onAppear {
-                            visibleVerses.insert(verse.id)
-                            countWhenRead(verse)
-                        }
+                        .onAppear { visibleVerses.insert(verse.id) }
                         .onDisappear { visibleVerses.remove(verse.id) }
                     }
                 }
@@ -400,14 +394,6 @@ struct SurahReaderView: View {
         player.play(surah: surahID, from: verse.hafsReference.verse, verseCounts: store.hafsVerseCounts, only: true)
     }
 
-    /// Counts the verse towards today's goal if it's still on screen after a few seconds.
-    private func countWhenRead(_ verse: Verse) {
-        Task {
-            try? await Task.sleep(for: readingDwell)
-            guard visibleVerses.contains(verse.id) else { return }
-            goal.recordRead(verse)
-        }
-    }
 }
 
 private struct SurahHeader: View {

@@ -7,12 +7,12 @@ struct TafsirTarget: Identifiable, Hashable {
     var id: String { "\(surah):\(ayah)" }
 }
 
-/// The commentary on one ayah, in Al-Jalalayn or Ibn Kathir (chosen with the
-/// switch at the top; Niyat remembers the choice).
+/// The commentary on one ayah: the English Abridged Explanation, Al-Jalalayn
+/// or Ibn Kathir (chosen with the switch at the top; Niyat remembers the choice).
 struct TafsirSheet: View {
     let surah: Int
     let ayah: Int
-    @AppStorage("quran.tafsirBook") private var bookID = TafsirBook.jalalayn.rawValue
+    @AppStorage("quran.tafsirBook") private var bookID = TafsirBook.standard.rawValue
     @Environment(\.dismiss) private var dismiss
     @State private var state: LoadState = .loading
 
@@ -22,7 +22,7 @@ struct TafsirSheet: View {
         case failed(String)
     }
 
-    private var book: TafsirBook { TafsirBook(rawValue: bookID) ?? .jalalayn }
+    private var book: TafsirBook { TafsirBook(rawValue: bookID) ?? .standard }
 
     var body: some View {
         NavigationStack {
@@ -83,19 +83,29 @@ struct TafsirSheet: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Palette.accent)
             }
-            Text(entry.text)
-                .font(.system(size: 20))
-                .lineSpacing(9)
-                .foregroundStyle(.white.opacity(0.92))
-                .multilineTextAlignment(.trailing)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .environment(\.layoutDirection, .rightToLeft)
-                .textSelection(.enabled)
+            if book.isEnglish {
+                Text(book.displayText(entry.text))
+                    .font(.body)
+                    .lineSpacing(6)
+                    .foregroundStyle(.white.opacity(0.92))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            } else {
+                Text(entry.text)
+                    .font(.system(size: 20))
+                    .lineSpacing(9)
+                    .foregroundStyle(.white.opacity(0.92))
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .environment(\.layoutDirection, .rightToLeft)
+                    .textSelection(.enabled)
+            }
             VStack(alignment: .leading, spacing: 4) {
                 Text(file.name).font(.footnote.weight(.semibold))
                 Text(file.author).font(.caption)
                 Text(file.edition).font(.caption)
-                Text("Text from Quranpedia.net, version \(file.version).").font(.caption)
+                Text(book.isEnglish ? "Text from \(file.version)." : "Text from Quranpedia.net, version \(file.version).")
+                    .font(.caption)
             }
             .foregroundStyle(.secondary)
             .padding(.top, 8)

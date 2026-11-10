@@ -99,10 +99,10 @@ final class DemoTour: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap()
         pause()
 
-        // Qibla
-        openTab("Qibla")
+        // Hadith
+        openTab("Hadith")
         pause(2)
-        snapshot("08 Qibla")
+        snapshot("08 Hadith")
 
         // Stats
         openTab("Stats")

@@ -167,7 +167,7 @@ struct QuranStatsSection: View {
 }
 
 /// Explains exactly how the reward estimate is worked out.
-private struct RewardMethodSheet: View {
+struct RewardMethodSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {

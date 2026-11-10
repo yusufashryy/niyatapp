@@ -122,6 +122,21 @@ enum MushafMetrics {
     /// Widest a page gets, as a share of its height (about a printed mushaf).
     static let pageShape: CGFloat = 0.72
 
+    /// A line whose words fill less than this share of the width is centred
+    /// instead of stretched: stretching it would leave wide gaps between the
+    /// words (the last lines of short surahs, such as An-Nas).
+    static let centreBelow: CGFloat = 0.78
+    /// The most a space between words may grow on a justified line, as a
+    /// multiple of the font size (a normal space is about a quarter of it).
+    static let maxSpaceGrowth: CGFloat = 0.3
+
+    /// Whether a line of this natural width (at font size 1) is centred
+    /// rather than justified, at this font size and line width.
+    static func isShortLine(naturalWidth: CGFloat, fontSize: CGFloat, width: CGFloat) -> Bool {
+        guard naturalWidth > 0, width > 0 else { return false }
+        return naturalWidth * fontSize < width * centreBelow
+    }
+
     static func margin(for width: CGFloat, share: CGFloat = 0.04) -> CGFloat {
         max(8, (width * share).rounded())
     }

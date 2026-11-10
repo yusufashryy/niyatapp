@@ -92,3 +92,28 @@ private enum TafsirIndexFixture {
         return try! JSONDecoder().decode(TafsirFile.self, from: Data(json.utf8))
     }
 }
+
+final class EnglishTafsirTests: XCTestCase {
+    func testAbridgedEnglishCoversEveryAyah() throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: TafsirBook.abridgedEnglish.rawValue, withExtension: "tafsir"))
+        let index = TafsirIndex(try TafsirFile.decode(compressed: Data(contentsOf: url)))
+        XCTAssertEqual(index.file.entries.count, 6236)
+        XCTAssertNotNil(index.entry(surah: 1, ayah: 1))
+        XCTAssertNotNil(index.entry(surah: 114, ayah: 6))
+        XCTAssertTrue(index.entry(surah: 114, ayah: 1)?.text.contains("Lord of mankind") == true)
+    }
+
+    func testLeadingAyahNumberIsHidden() {
+        let book = TafsirBook.abridgedEnglish
+        XCTAssertEqual(book.displayText("1. Say, O Messenger"), "Say, O Messenger")
+        XCTAssertEqual(book.displayText("18.They are deaf"), "They are deaf")
+        XCTAssertEqual(book.displayText("3-4. He revealed"), "He revealed")
+        XCTAssertEqual(TafsirBook.jalalayn.displayText("1. نص"), "1. نص")
+    }
+
+    func testEnglishIsTheStandardChoice() {
+        XCTAssertEqual(TafsirBook.standard, .abridgedEnglish)
+        XCTAssertTrue(TafsirBook.abridgedEnglish.isEnglish)
+        XCTAssertFalse(TafsirBook.ibnKathir.isEnglish)
+    }
+}
