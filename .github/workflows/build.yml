@@ -54,7 +54,7 @@ jobs:
           defaults write com.apple.dt.XCBuild IgnoreFileSystemDeviceInodeChanges -bool YES
 
       - name: Reuse the last build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: build/DerivedData
           key: deriveddata-${{ runner.os }}-${{ hashFiles('project.yml', 'Config/*.yml') }}-${{ github.sha }}
